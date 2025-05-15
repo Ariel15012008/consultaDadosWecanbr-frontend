@@ -9,7 +9,6 @@ export function PublicRoute() {
   if (isAuthenticated) {
     return <Navigate to="/" replace />
   }
-  console.log('🚀 PublicRoute: ', isAuthenticated)
 
   return <Outlet />
 }

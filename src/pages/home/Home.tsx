@@ -16,7 +16,7 @@ import {
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/header";
-import avataRecepicao from "../../../public/Avatar de Recepição.png";
+import avataRecepicao from "/Avatar de Recepição.png";
 
 export default function HomePage() {
   const navigate = useNavigate();
