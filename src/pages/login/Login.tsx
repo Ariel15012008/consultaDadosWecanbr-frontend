@@ -1,61 +1,62 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useNavigate } from "react-router-dom"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
-import { Eye, EyeOff } from "lucide-react"
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useNavigate } from "react-router-dom";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
 
 const schema = z.object({
   email: z.string().email("E-mail inválido"),
   senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
-})
+});
 
-type FormData = z.infer<typeof schema>
+type FormData = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormData>({ resolver: zodResolver(schema) })
+  } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const navigate = useNavigate()
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [loginError, setLoginError] = useState("")
+  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
 
   const onSubmit = async (data: FormData) => {
-    setLoading(true)
-    setLoginError("")
+    setLoading(true);
+    setLoginError("");
 
     try {
       const response = await fetch("http://localhost:8000/user/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      })
+        credentials: "include", // ⬅️ IMPORTANTE!
+      });
 
       if (!response.ok) {
-        const res = await response.json()
-        throw new Error(res?.detail || "Erro ao fazer login")
+        const res = await response.json();
+        throw new Error(res?.detail || "Erro ao fazer login");
       }
 
-      const result = await response.json()
-      console.log("✅ Login realizado com sucesso:", result)
+      const result = await response.json();
+      console.log("✅ Login realizado com sucesso:", result);
 
       // Após login bem-sucedido, redireciona para home
-      navigate("/")
+      navigate("/");
     } catch (err: any) {
-      setLoginError(err.message || "Erro ao conectar com o servidor")
+      setLoginError(err.message || "Erro ao conectar com o servidor");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="h-screen w-screen relative overflow-hidden flex items-center justify-center p-4 bg-[#0f172a] bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300">
@@ -65,16 +66,29 @@ export default function LoginPage() {
         onSubmit={handleSubmit(onSubmit)}
         className="bg-[#1e1e2f] text-white rounded-2xl shadow-[0_0_120px_rgba(0,0,0,0.6)] p-8 w-full max-w-sm space-y-6 border border-gray-700"
       >
-        <h2 className="text-2xl font-bold text-center text-white">Acesso ao Sistema</h2>
+        <h2 className="text-2xl font-bold text-center text-white">
+          Acesso ao Sistema
+        </h2>
 
         <div>
-          <Label htmlFor="email" className="text-gray-200">Usuário (E-mail)</Label>
-          <Input id="email" type="email" {...register("email")} className="mt-1 bg-[#2a2a3d] text-white" />
-          {errors.email && <p className="text-red-400 text-sm mt-1">{errors.email.message}</p>}
+          <Label htmlFor="email" className="text-gray-200">
+            Usuário (E-mail)
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            {...register("email")}
+            className="mt-1 bg-[#2a2a3d] text-white"
+          />
+          {errors.email && (
+            <p className="text-red-400 text-sm mt-1">{errors.email.message}</p>
+          )}
         </div>
 
         <div>
-          <Label htmlFor="senha" className="text-gray-200">Senha</Label>
+          <Label htmlFor="senha" className="text-gray-200">
+            Senha
+          </Label>
           <div className="relative">
             <Input
               id="senha"
@@ -89,10 +103,14 @@ export default function LoginPage() {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </div>
           </div>
-          {errors.senha && <p className="text-red-400 text-sm mt-1">{errors.senha.message}</p>}
+          {errors.senha && (
+            <p className="text-red-400 text-sm mt-1">{errors.senha.message}</p>
+          )}
         </div>
 
-        {loginError && <p className="text-red-400 text-sm text-center">{loginError}</p>}
+        {loginError && (
+          <p className="text-red-400 text-sm text-center">{loginError}</p>
+        )}
 
         <Button
           type="submit"
@@ -105,11 +123,14 @@ export default function LoginPage() {
 
         <p className="text-sm text-center mt-4 text-gray-300">
           Ainda não tem conta?{" "}
-          <a href="/cadastro" className="text-[#7a8cff] hover:underline font-semibold">
+          <a
+            href="/cadastro"
+            className="text-[#7a8cff] hover:underline font-semibold"
+          >
             Criar agora
           </a>
         </p>
       </form>
     </div>
-  )
+  );
 }

@@ -8,26 +8,15 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff } from "lucide-react"
 
-const schema = z
-  .object({
-    nome: z.string().min(3, "Nome deve ter no mínimo 3 letras"),
-    email: z.string().email("E-mail inválido"),
-    telefone: z
-      .string()
-      .min(14, "Telefone inválido")
-      .max(15, "Telefone inválido")
-      .regex(/^(\(\d{2}\) \d{5}-\d{4})$/, "Formato esperado: (99) 99999-9999"),
-    cpf: z
-      .string()
-      .length(14, "CPF inválido. Formato esperado: 999.999.999-99")
-      .regex(/^(\d{3}\.){2}\d{3}-\d{2}$/, "CPF inválido. Formato esperado: 999.999.999-99"),
-    senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
-    confirmarSenha: z.string(),
-  })
-  .refine((data) => data.senha === data.confirmarSenha, {
-    message: "As senhas não coincidem",
-    path: ["confirmarSenha"],
-  })
+const schema = z.object({
+  nome: z.string().min(3, "Nome deve ter no mínimo 3 letras"),
+  email: z.string().email("E-mail inválido"),
+  cpf: z
+    .string()
+    .length(14, "CPF inválido. Formato esperado: 999.999.999-99")
+    .regex(/^(\d{3}\.){2}\d{3}-\d{2}$/, "CPF inválido. Formato esperado: 999.999.999-99"),
+  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+})
 
 export default function CadastroPage() {
   const {
@@ -40,10 +29,7 @@ export default function CadastroPage() {
 
   const navigate = useNavigate()
   const [cpfValue, setCpfValue] = useState("")
-  const [telefoneValue, setTelefoneValue] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-
   const senhaValue = watch("senha")
 
   const formatCPF = useCallback((value: string) => {
@@ -52,13 +38,6 @@ export default function CadastroPage() {
       .replace(/(\d{3})(\d)/, "$1.$2")
       .replace(/(\d{3})(\d)/, "$1.$2")
       .replace(/(\d{3})(\d{1,2})$/, "$1-$2")
-  }, [])
-
-  const formatTelefone = useCallback((value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 11)
-    return digits
-      .replace(/(\d{2})(\d)/, "($1) $2")
-      .replace(/(\d{5})(\d{1,4})$/, "$1-$2")
   }, [])
 
   const avaliarForcaSenha = (senha: string) => {
@@ -99,7 +78,7 @@ export default function CadastroPage() {
       }
 
       alert("✅ Cadastro realizado com sucesso!")
-      navigate("/login")
+      navigate("/")
     } catch (error) {
       console.error("Erro na requisição:", error)
       alert("❌ Falha na requisição.")
@@ -126,23 +105,6 @@ export default function CadastroPage() {
           <Label htmlFor="email" className="text-gray-200">Email</Label>
           <Input id="email" type="email" {...register("email")} className="mt-1 bg-[#2a2a3d] text-white" />
           {errors.email && <p className="text-red-400 text-sm mt-1">{errors.email.message}</p>}
-        </div>
-
-        <div>
-          <Label htmlFor="telefone" className="text-gray-200">Telefone</Label>
-          <Input
-            id="telefone"
-            value={telefoneValue}
-            {...register("telefone", {
-              onChange: (e) => {
-                const masked = formatTelefone(e.target.value)
-                setTelefoneValue(masked)
-                setValue("telefone", masked, { shouldValidate: true })
-              },
-            })}
-            className="mt-1 bg-[#2a2a3d] text-white"
-          />
-          {errors.telefone && <p className="text-red-400 text-sm mt-1">{errors.telefone.message}</p>}
         </div>
 
         <div>
@@ -177,37 +139,17 @@ export default function CadastroPage() {
             </div>
           </div>
           {senhaValue && (
-            <p className={`text-sm mt-1 ${avaliarForcaSenha(senhaValue) === "Forte"
-              ? "text-green-400"
-              : avaliarForcaSenha(senhaValue) === "Média"
-              ? "text-yellow-400"
-              : "text-red-400"
+            <p className={`text-sm mt-1 ${
+              avaliarForcaSenha(senhaValue) === "Forte"
+                ? "text-green-400"
+                : avaliarForcaSenha(senhaValue) === "Média"
+                ? "text-yellow-400"
+                : "text-red-400"
             }`}>
               Força da senha: {avaliarForcaSenha(senhaValue)}
             </p>
           )}
           {errors.senha && <p className="text-red-400 text-sm mt-1">{errors.senha.message}</p>}
-        </div>
-
-        <div>
-          <Label htmlFor="confirmarSenha" className="text-gray-200">Confirmar Senha</Label>
-          <div className="relative">
-            <Input
-              id="confirmarSenha"
-              type={showConfirmPassword ? "text" : "password"}
-              {...register("confirmarSenha")}
-              className="mt-1 pr-10 bg-[#2a2a3d] text-white"
-            />
-            <div
-              className="absolute right-2 top-2 text-white cursor-pointer transition hover:text-blue-400"
-              onClick={() => setShowConfirmPassword((prev) => !prev)}
-            >
-              {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-            </div>
-          </div>
-          {errors.confirmarSenha && (
-            <p className="text-red-400 text-sm mt-1">{errors.confirmarSenha.message}</p>
-          )}
         </div>
 
         <Button
