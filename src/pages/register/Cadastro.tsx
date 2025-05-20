@@ -51,7 +51,7 @@ export default function CadastroPage() {
 
   const onSubmit = async (data: any) => {
     try {
-      const response = await fetch("http://localhost:8000/user/register", {
+      const registerResponse = await fetch("http://localhost:8000/user/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -70,14 +70,33 @@ export default function CadastroPage() {
         }),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
+      if (!registerResponse.ok) {
+        const errorData = await registerResponse.json()
         console.error("Erro no cadastro:", errorData)
         alert("❌ Erro ao cadastrar usuário.")
         return
       }
 
-      alert("✅ Cadastro realizado com sucesso!")
+      // Chama o login automático
+      const loginResponse = await fetch("http://localhost:8000/user/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: data.email, senha: data.senha }),
+        credentials: "include",
+      })
+
+      if (!loginResponse.ok) {
+        const loginError = await loginResponse.json()
+        console.error("Erro no login automático:", loginError)
+        alert("❌ Cadastro feito, mas erro ao logar.")
+        return
+      }
+
+      const result = await loginResponse.json()
+      localStorage.setItem("access_token", result.access_token)
+      localStorage.setItem("logged_user", Date.now().toString())
+
+      alert("✅ Cadastro e login realizados com sucesso!")
       navigate("/")
     } catch (error) {
       console.error("Erro na requisição:", error)

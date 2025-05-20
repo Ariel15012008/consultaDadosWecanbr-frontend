@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,8 +28,8 @@ export default function Header() {
   const [user, setUser] = useState<{ nome: string; email: string } | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const navigate = useNavigate()
+  const didLogout = useRef(false)
 
-  // ⬇️ Nova função que verifica e renova o token se necessário
   const silentAuth = async () => {
     try {
       let res = await fetch('http://localhost:8000/user/me', {
@@ -63,28 +63,38 @@ export default function Header() {
   }
 
   useEffect(() => {
-    silentAuth()
+    if (!didLogout.current) {
+      silentAuth()
+    }
   }, [])
 
   const logout = async () => {
-    try {
-      await fetch('http://localhost:8000/auth/logout', {
-        method: 'POST',
-        credentials: 'include'
-      })
-      navigate('/login')
-      setIsAuthenticated(false)
-    } catch (error) {
-      console.error('Erro no logout:', error)
-    }
+  try {
+    // Limpa localStorage ANTES de tudo
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('logged_user')
+
+    await fetch('http://localhost:8000/user/logout', {
+      method: 'POST',
+      credentials: 'include',
+    })
+
+    setIsAuthenticated(false)
+    setUser(null)
+
+    navigate('/login', { replace: true })
+  } catch (error) {
+    console.error('Erro no logout:', error)
   }
+}
+
 
   return (
     <header className="fixed top-0 w-full bg-gradient-to-r from-blue-800 to-blue-400 text-white shadow-md z-50">
       <div className="container mx-auto flex items-center justify-between p-4">
         <Link to="/" className="flex items-center text-xl font-bold">
           <span className="bg-white text-blue-600 px-2 py-1 rounded mr-2">docRH</span>
-          <div className='text-white'>RH Portal</div>
+          <div className="text-white">RH Portal</div>
         </Link>
 
         <nav className="hidden md:flex space-x-6">
@@ -108,7 +118,6 @@ export default function Header() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center hover:bg-blue-700">
                   <IoPersonCircle className="!w-8 !h-8" />
-
                   <span>{user?.nome || 'Usuário'}</span>
                 </Button>
               </DropdownMenuTrigger>
@@ -142,13 +151,12 @@ export default function Header() {
             <div className="mt-6 space-y-4">
               {isAuthenticated && (
                 <div className="flex flex-col items-center text-center p-4 bg-blue-700 rounded-lg space-y-1">
-  <IoPersonCircle className="text-4xl mb-1" />
-  <div className="max-w-full break-words">
-    <p className="font-semibold text-white text-sm">{user?.nome}</p>
-    <p className="text-xs text-blue-200 truncate">{user?.email}</p>
-  </div>
-</div>
-
+                  <IoPersonCircle className="text-4xl mb-1" />
+                  <div className="max-w-full break-words">
+                    <p className="font-semibold text-white text-sm">{user?.nome}</p>
+                    <p className="text-xs text-blue-200 truncate">{user?.email}</p>
+                  </div>
+                </div>
               )}
 
               <Link to="/" className="flex items-center p-2 hover:text-[#31d5db] rounded-lg text-white">

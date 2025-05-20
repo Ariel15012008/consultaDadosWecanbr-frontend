@@ -47,7 +47,6 @@ export default function LoginPage() {
       }
 
       const result = await response.json()
-      console.log("✅ Login realizado com sucesso:", result)
 
       // ⬇️ Salva dados no localStorage
       localStorage.setItem("access_token", result.access_token)
