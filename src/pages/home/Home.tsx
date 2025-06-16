@@ -1,65 +1,67 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { FileText } from "lucide-react"
-import Header from "@/components/header"
-import Footer from "@/components/footer"
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { FileText } from "lucide-react";
+import Header from "@/components/header";
+import Footer from "@/components/footer";
 
 interface TemplateGED {
-  id_tipo: string
-  nome_tipo: string
-  nome_divisao: string
+  id_tipo: string;
+  nome_tipo: string;
+  nome_divisao: string;
 }
 
 interface Documento {
-  id: number
-  nome: string
+  id: number;
+  nome: string;
 }
 
 interface TemplateCombinado {
-  id_tipo: string
-  nome: string
+  id_tipo: string;
+  nome: string;
 }
 
 function Home() {
-  const [templates, setTemplates] = useState<TemplateCombinado[]>([])
-  const navigate = useNavigate()
+  const [templates, setTemplates] = useState<TemplateCombinado[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = "Painel do Trabalhador"
+    document.title = "Painel do Trabalhador";
 
     const fetchData = async () => {
       try {
         const [resTemplates, resDocs] = await Promise.all([
           fetch("http://localhost:8000/searchdocuments/templates", {
-            credentials: "include"
+            credentials: "include",
           }),
           fetch("http://localhost:8000/documents", {
-            credentials: "include"
-          })
-        ])
+            credentials: "include",
+          }),
+        ]);
 
         if (!resTemplates.ok || !resDocs.ok) {
-          throw new Error("Erro ao buscar dados")
+          throw new Error("Erro ao buscar dados");
         }
 
-        const templatesData: TemplateGED[] = await resTemplates.json()
-        const docsData: Documento[] = await resDocs.json()
+        const templatesData: TemplateGED[] = await resTemplates.json();
+        const docsData: Documento[] = await resDocs.json();
 
-        const combinados: TemplateCombinado[] = templatesData.map((template, i) => ({
-          id_tipo: template.id_tipo,
-          nome: docsData[i]?.nome || "Documento"
-        }))
+        const combinados: TemplateCombinado[] = templatesData.map(
+          (template, i) => ({
+            id_tipo: template.id_tipo,
+            nome: docsData[i]?.nome || "Documento",
+          })
+        );
 
-        setTemplates(combinados)
+        setTemplates(combinados);
       } catch (error) {
-        console.error("Erro ao carregar templates:", error)
+        console.error("Erro ao carregar templates:", error);
       }
-    }
+    };
 
-    fetchData()
-  }, [])
+    fetchData();
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden">
@@ -72,13 +74,18 @@ function Home() {
           <div className="bg-[#1e1e2f] text-white rounded-xl shadow-2xl w-full max-w-4xl p-6 mt-32 mx-auto px-4">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4 text-center sm:text-left">
               <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white flex-shrink-0">
-                <img src="Avatar de Recepição.png" alt="Avatar" className="w-full h-full object-cover" />
+                <img
+                  src="Avatar de Recepição.png"
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <div>
                 <h1 className="text-lg font-bold">SEJA BEM-VINDO AO docRH</h1>
                 <p className="text-sm text-gray-300">
-                  O docRH será o novo meio de comunicação entre você e o RH da Empresa. Através dele você poderá consultar
-                  seus recibos de pagamento, resolver dúvidas e ter acesso a documentos.
+                  O docRH será o novo meio de comunicação entre você e o RH da
+                  Empresa. Através dele você poderá consultar seus recibos de
+                  pagamento, resolver dúvidas e ter acesso a documentos.
                 </p>
               </div>
             </div>
@@ -105,7 +112,7 @@ function Home() {
         <Footer />
       </footer>
     </div>
-  )
+  );
 }
 
-export default Home
+export default Home;

@@ -107,12 +107,12 @@ function PreviewDocumento() {
     if (!document.fullscreenElement) {
       imageRef.current.requestFullscreen().then(() => {
         setFullscreen(true);
-        setZoom(true);
+        setZoom(false); // Corrigido para não ativar zoom ao entrar em fullscreen
       });
     } else {
       document.exitFullscreen().then(() => {
         setFullscreen(false);
-        setZoom(false);
+        setZoom(false); // Corrigido para garantir desativação do zoom
       });
     }
   };
