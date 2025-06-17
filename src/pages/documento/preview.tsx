@@ -13,6 +13,7 @@ import {
   ZoomOut,
   ArrowLeft,
 } from "lucide-react";
+import api from "@/utils/axiosInstance"; // ajuste o path se necessário
 
 function PreviewDocumento() {
   const location = useLocation();
@@ -30,31 +31,13 @@ function PreviewDocumento() {
     document.title = "Visualizar Documento";
 
     const fetchImage = async () => {
-      console.log("Enviando para download_image:", {
-        id_tipo: id_template,
-        id_documento,
-      });
       try {
-        const res = await fetch(
-          "http://localhost:8000/searchdocuments/download_image",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              id_tipo: Number(id_template),
-              id_documento: Number(id_documento),
-            }),
-          }
-        );
+        const res = await api.post("/searchdocuments/download_image", {
+          id_tipo: Number(id_template),
+          id_documento: Number(id_documento),
+        });
 
-        if (!res.ok) {
-          const erro = await res.text();
-          throw new Error(`Erro ${res.status}: ${erro}`);
-        }
-
-        const data = await res.json();
-        const base64 = data.image_base64;
+        const base64 = res.data.image_base64;
 
         if (!base64 || base64.length < 100 || base64.trim().startsWith("<")) {
           throw new Error("Base64 inválido recebido do backend");
@@ -78,20 +61,12 @@ function PreviewDocumento() {
 
   const handleDownload = async () => {
     try {
-      const res = await fetch(
-        "http://localhost:8000/searchdocuments/download",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            id_tipo: Number(id_template),
-            id_documento: Number(id_documento),
-          }),
-        }
-      );
-      const data = await res.json();
-      const base64 = data.base64 || data.base64_raw;
+      const res = await api.post("/searchdocuments/download", {
+        id_tipo: Number(id_template),
+        id_documento: Number(id_documento),
+      });
+
+      const base64 = res.data.base64 || res.data.base64_raw;
       const link = document.createElement("a");
       link.href = `data:application/pdf;base64,${base64}`;
       link.download = `documento_${id_documento}.pdf`;
@@ -107,12 +82,12 @@ function PreviewDocumento() {
     if (!document.fullscreenElement) {
       imageRef.current.requestFullscreen().then(() => {
         setFullscreen(true);
-        setZoom(false); // Corrigido para não ativar zoom ao entrar em fullscreen
+        setZoom(false);
       });
     } else {
       document.exitFullscreen().then(() => {
         setFullscreen(false);
-        setZoom(false); // Corrigido para garantir desativação do zoom
+        setZoom(false);
       });
     }
   };

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff } from "lucide-react"
+import api from "@/utils/axiosInstance"; // ajuste o path se necessário
 
 const schema = z.object({
   email: z.string().email("E-mail inválido"),
@@ -34,19 +35,8 @@ export default function LoginPage() {
     setLoginError("")
 
     try {
-      const response = await fetch("http://localhost:8000/user/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      })
-
-      if (!response.ok) {
-        const res = await response.json()
-        throw new Error(res?.detail || "Erro ao fazer login")
-      }
-
-      const result = await response.json()
+      const response = await api.post("/user/login", data)
+      const result = response.data
 
       // ⬇️ Salva dados no localStorage
       localStorage.setItem("access_token", result.access_token)
@@ -55,7 +45,9 @@ export default function LoginPage() {
       // Redireciona para home
       navigate("/")
     } catch (err: any) {
-      setLoginError(err.message || "Erro ao conectar com o servidor")
+      setLoginError(
+        err?.response?.data?.detail || err?.message || "Erro ao conectar com o servidor"
+      )
     } finally {
       setLoading(false)
     }

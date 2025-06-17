@@ -14,6 +14,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Button } from "@/components/ui/button";
+import api from "@/utils/axiosInstance"; // ajuste o path se necessário
 
 interface Documento {
   id_documento: string;
@@ -34,21 +35,13 @@ function DocumentList() {
 
     const fetchDocumentosFiltrados = async () => {
       try {
-        const res = await fetch(
-          "http://localhost:8000/searchdocuments/documents",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              id_template: Number(id_template),
-              campo: "tipodedoc",
-              valor: "Holerite",
-            }),
-          }
-        );
-        const data = await res.json();
-        setDocuments(data.documents || []);
+        const res = await api.post("/searchdocuments/documents", {
+          id_template: Number(id_template),
+          campo: "tipodedoc",
+          valor: "Holerite",
+        });
+
+        setDocuments(res.data.documents || []);
       } catch (error) {
         console.error("Erro ao buscar documentos:", error);
       } finally {
@@ -65,27 +58,18 @@ function DocumentList() {
   ) => {
     try {
       const extensao = nomearquivo.split(".").pop()?.toLowerCase();
-      const isImage =
-        extensao === "png" ||
-        extensao === "jpg" ||
-        extensao === "jpeg" ||
-        extensao === "gif";
-      const url = isImage
-        ? "http://localhost:8000/searchdocuments/download_image"
-        : "http://localhost:8000/searchdocuments/download";
+      const isImage = ["png", "jpg", "jpeg", "gif"].includes(extensao || "");
+      const endpoint = isImage
+        ? "/searchdocuments/download_image"
+        : "/searchdocuments/download";
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          id_tipo: Number(id_template),
-          id_documento: Number(id_documento),
-        }),
+      const res = await api.post(endpoint, {
+        id_tipo: Number(id_template),
+        id_documento: Number(id_documento),
       });
 
-      const data = await res.json();
-      const base64 = data.base64 || data.base64_raw;
+      const base64 = res.data.base64 || res.data.base64_raw;
+
       navigate("/documento/preview", {
         state: {
           base64,

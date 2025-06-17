@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff } from "lucide-react"
+import api from "@/utils/axiosInstance"; // ajuste o path se necessário
 
 const schema = z.object({
   nome: z.string().min(3, "Nome deve ter no mínimo 3 letras"),
@@ -51,54 +52,38 @@ export default function CadastroPage() {
 
   const onSubmit = async (data: any) => {
     try {
-      const registerResponse = await fetch("http://localhost:8000/user/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const registerResponse = await api.post("/user/register", {
+        pessoa: {
+          nome: data.nome,
+          empresa: 0,
+          cliente: 0,
+          cpf: data.cpf.replace(/\D/g, ""),
         },
-        body: JSON.stringify({
-          pessoa: {
-            nome: data.nome,
-            empresa: 0,
-            cliente: 0,
-            cpf: data.cpf.replace(/\D/g, ""),
-          },
-          usuario: {
-            email: data.email,
-            senha: data.senha,
-          },
-        }),
+        usuario: {
+          email: data.email,
+          senha: data.senha,
+        },
       })
 
-      if (!registerResponse.ok) {
-        const errorData = await registerResponse.json()
-        console.error("Erro no cadastro:", errorData)
+      if (registerResponse.status !== 201 && registerResponse.status !== 200) {
+        console.error("Erro no cadastro:", registerResponse.data)
         alert("❌ Erro ao cadastrar usuário.")
         return
       }
 
-      // Chama o login automático
-      const loginResponse = await fetch("http://localhost:8000/user/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: data.email, senha: data.senha }),
-        credentials: "include",
+      // Login automático
+      const loginResponse = await api.post("/user/login", {
+        email: data.email,
+        senha: data.senha,
       })
 
-      if (!loginResponse.ok) {
-        const loginError = await loginResponse.json()
-        console.error("Erro no login automático:", loginError)
-        alert("❌ Cadastro feito, mas erro ao logar.")
-        return
-      }
-
-      const result = await loginResponse.json()
+      const result = loginResponse.data
       localStorage.setItem("access_token", result.access_token)
       localStorage.setItem("logged_user", Date.now().toString())
 
       alert("✅ Cadastro e login realizados com sucesso!")
       navigate("/")
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro na requisição:", error)
       alert("❌ Falha na requisição.")
     }
