@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { FileText } from "lucide-react";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
+import api from "@/utils/axiosInstance"; // ajuste o path se necessário
 
 interface TemplateGED {
   id_tipo: string;
@@ -32,26 +33,22 @@ function Home() {
     const fetchData = async () => {
       try {
         const [resTemplates, resDocs] = await Promise.all([
-          fetch("http://localhost:8000/searchdocuments/templates", {
-            credentials: "include",
-          }),
-          fetch("http://localhost:8000/documents", {
-            credentials: "include",
-          }),
+          api.get<TemplateGED[]>("/searchdocuments/templates"),
+          api.get<Documento[]>("/documents"),
         ]);
 
-        if (!resTemplates.ok || !resDocs.ok) {
-          throw new Error("Erro ao buscar dados");
+        const templatesData = resTemplates.data;
+        const docsData = resDocs.data;
+
+        interface CombinadosMapFn {
+          (template: TemplateGED, i: number, arr: TemplateGED[]): TemplateCombinado;
         }
 
-        const templatesData: TemplateGED[] = await resTemplates.json();
-        const docsData: Documento[] = await resDocs.json();
-
-        const combinados: TemplateCombinado[] = templatesData.map(
-          (template, i) => ({
+        const combinados: TemplateCombinado[] = templatesData.map<TemplateCombinado>(
+          ((template, i) => ({
             id_tipo: template.id_tipo,
             nome: docsData[i]?.nome || "Documento",
-          })
+          })) as CombinadosMapFn
         );
 
         setTemplates(combinados);
