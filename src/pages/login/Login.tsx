@@ -12,7 +12,7 @@ import { Eye, EyeOff } from "lucide-react"
 import api from "@/utils/axiosInstance"; // ajuste o path se necessário
 
 const schema = z.object({
-  email: z.string().email("E-mail inválido"),
+  usuario: z.string().min( 9, "Usuário inválido"),
   senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
 })
 
@@ -66,17 +66,17 @@ export default function LoginPage() {
         </h2>
 
         <div>
-          <Label htmlFor="email" className="text-gray-200">
+          <Label className="text-gray-200">
             Usuário (E-mail)
           </Label>
           <Input
             id="email"
             type="email"
-            {...register("email")}
+            {...register("usuario")}
             className="mt-1 bg-[#2a2a3d] text-white"
           />
-          {errors.email && (
-            <p className="text-red-400 text-sm mt-1">{errors.email.message}</p>
+          {errors.usuario && (
+            <p className="text-red-400 text-sm mt-1">{errors.usuario.message}</p>
           )}
         </div>
 
