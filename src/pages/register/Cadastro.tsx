@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useCallback } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -7,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff } from "lucide-react"
-import api from "@/utils/axiosInstance"; // ajuste o path se necessário
+import api from "@/utils/axiosInstance"
 
 const schema = z.object({
   nome: z.string().min(3, "Nome deve ter no mínimo 3 letras"),
@@ -70,15 +72,15 @@ export default function CadastroPage() {
         return
       }
 
-      // Login automático
-      const loginResponse = await api.post("/user/login", {
-        email: data.email,
-        senha: data.senha,
-      })
-
-      const result = loginResponse.data
-      localStorage.setItem("access_token", result.access_token)
-      localStorage.setItem("logged_user", Date.now().toString())
+      // Login automático com cookie
+      await api.post(
+        "/user/login",
+        {
+          email: data.email,
+          senha: data.senha,
+        },
+        { withCredentials: true }
+      )
 
       navigate("/")
     } catch (error: any) {

@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Eye, EyeOff } from "lucide-react"
-import api from "@/utils/axiosInstance"; // ajuste o path se necessário
+import api from "@/utils/axiosInstance"
 
 const schema = z.object({
-  usuario: z.string().min( 9, "Usuário inválido"),
+  usuario: z.string().min(9, "Usuário inválido"),
   senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
 })
 
@@ -35,14 +35,7 @@ export default function LoginPage() {
     setLoginError("")
 
     try {
-      const response = await api.post("/user/login", data)
-      const result = response.data
-
-      // ⬇️ Salva dados no localStorage
-      localStorage.setItem("access_token", result.access_token)
-      localStorage.setItem("logged_user", Date.now().toString())
-
-      // Redireciona para home
+      await api.post("/user/login", data, { withCredentials: true })
       navigate("/")
     } catch (err: any) {
       setLoginError(
@@ -66,9 +59,7 @@ export default function LoginPage() {
         </h2>
 
         <div>
-          <Label className="text-gray-200">
-            Usuário (E-mail)
-          </Label>
+          <Label className="text-gray-200">Usuário (E-mail)</Label>
           <Input
             id="email"
             type="email"
@@ -81,9 +72,7 @@ export default function LoginPage() {
         </div>
 
         <div>
-          <Label htmlFor="senha" className="text-gray-200">
-            Senha
-          </Label>
+          <Label htmlFor="senha" className="text-gray-200">Senha</Label>
           <div className="relative">
             <Input
               id="senha"
