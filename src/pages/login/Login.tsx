@@ -59,9 +59,9 @@ export default function LoginPage() {
         </h2>
 
         <div>
-          <Label className="text-gray-200">Usuário (E-mail)</Label>
+          <Label className="text-gray-200">Usuário</Label>
           <Input
-            id="email"
+            id="usuario"
             type="text"
             {...register("usuario")}
             className="mt-1 bg-[#2a2a3d] text-white"

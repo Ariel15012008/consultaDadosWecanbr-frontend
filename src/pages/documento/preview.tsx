@@ -5,10 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { Button } from "@/components/ui/button";
-import {
-  Download,
-  ArrowLeft,
-} from "lucide-react";
+import { Download, ArrowLeft } from "lucide-react";
 import api from "@/utils/axiosInstance";
 
 function PreviewDocumento() {
@@ -18,9 +15,15 @@ function PreviewDocumento() {
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [pdfUrl, setPdfUrl] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     document.title = "Visualizar Documento";
+
+    // Detectar se é mobile
+    if (typeof window !== "undefined") {
+      setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+    }
 
     const fetchPdf = async () => {
       try {
@@ -30,9 +33,7 @@ function PreviewDocumento() {
         });
 
         const base64 = res.data.base64 || res.data.base64_raw;
-        const blob = await fetch(`data:application/pdf;base64,${base64}`).then(
-          (r) => r.blob()
-        );
+        const blob = await fetch(`data:application/pdf;base64,${base64}`).then((r) => r.blob());
         const url = URL.createObjectURL(blob);
         setPdfUrl(url);
       } catch (error) {
@@ -86,19 +87,32 @@ function PreviewDocumento() {
 
           {pdfUrl ? (
             <>
-              <iframe
-                ref={iframeRef}
-                src={pdfUrl}
-                className="w-full h-[80vh] border rounded-lg shadow-inner"
-              />
-              <div className="flex justify-center mt-6">
-                <Button
-                  onClick={handleDownload}
-                  className="bg-green-600 hover:bg-green-500"
-                >
-                  <Download className="w-4 h-4 mr-2" /> Baixar PDF Original
-                </Button>
-              </div>
+              {isMobile ? (
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => window.open(pdfUrl, "_blank")}
+                    className="bg-blue-600 hover:bg-blue-500"
+                  >
+                    Abrir Documento
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <iframe
+                    ref={iframeRef}
+                    src={pdfUrl}
+                    className="w-full h-[80vh] border rounded-lg shadow-inner"
+                  />
+                  <div className="flex justify-center mt-6">
+                    <Button
+                      onClick={handleDownload}
+                      className="bg-green-600 hover:bg-green-500"
+                    >
+                      <Download className="w-4 h-4 mr-2" /> Baixar PDF Original
+                    </Button>
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <p className="text-center text-gray-300">Carregando documento...</p>
