@@ -80,7 +80,7 @@ export default function Header() {
     <header className="fixed top-0 w-full bg-gradient-to-r from-blue-800 to-blue-400 text-white shadow-md z-50">
       <div className="container mx-auto flex items-center justify-between pt-4 pb-4 pl-1">
         <Link to="/" className="flex items-center text-xl font-bold whitespace-nowrap gap-2">
-          <span className="bg-white text-blue-600 px-2 py-1 rounded">docRH</span>
+          <span className="bg-white text-blue-600 px-2 py-1 rounded">superRH</span>
           <span className="text-white">RH Portal</span>
         </Link>
 

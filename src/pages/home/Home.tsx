@@ -78,9 +78,9 @@ function Home() {
                 />
               </div>
               <div>
-                <h1 className="text-lg font-bold">SEJA BEM-VINDO AO docRH</h1>
+                <h1 className="text-lg font-bold">SEJA BEM-VINDO AO superRH</h1>
                 <p className="text-sm text-gray-300">
-                  O docRH será um novo meio de comunicação entre você e o RH da
+                  O superRH será um novo meio de comunicação entre você e o RH da
                   Empresa. Através dele você poderá consultar seus recibos de
                   pagamento, resolver dúvidas e ter acesso a documentos.
                 </p>
