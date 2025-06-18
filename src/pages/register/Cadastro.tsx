@@ -67,7 +67,6 @@ export default function CadastroPage() {
 
       if (registerResponse.status !== 201 && registerResponse.status !== 200) {
         console.error("Erro no cadastro:", registerResponse.data)
-        alert("❌ Erro ao cadastrar usuário.")
         return
       }
 
@@ -81,11 +80,9 @@ export default function CadastroPage() {
       localStorage.setItem("access_token", result.access_token)
       localStorage.setItem("logged_user", Date.now().toString())
 
-      alert("✅ Cadastro e login realizados com sucesso!")
       navigate("/")
     } catch (error: any) {
       console.error("Erro na requisição:", error)
-      alert("❌ Falha na requisição.")
     }
   }
 
