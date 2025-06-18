@@ -14,12 +14,11 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Button } from "@/components/ui/button";
-import api from "@/utils/axiosInstance"; // ajuste o path se necessário
+import api from "@/utils/axiosInstance";
 
 interface Documento {
   id_documento: string;
-  nomearquivo: string;
-  datacriacao: string;
+  anomes: string;
 }
 
 function DocumentList() {
@@ -54,14 +53,10 @@ function DocumentList() {
 
   const handleVisualizar = async (
     id_documento: string,
-    nomearquivo: string
+    anomes: string
   ) => {
     try {
-      const extensao = nomearquivo.split(".").pop()?.toLowerCase();
-      const isImage = ["png", "jpg", "jpeg", "gif"].includes(extensao || "");
-      const endpoint = isImage
-        ? "/searchdocuments/download_image"
-        : "/searchdocuments/download";
+      const endpoint = "/searchdocuments/download";
 
       const res = await api.post(endpoint, {
         id_tipo: Number(id_template),
@@ -73,7 +68,7 @@ function DocumentList() {
       navigate("/documento/preview", {
         state: {
           base64,
-          tipo: isImage ? "image" : "pdf",
+          tipo: "pdf",
           id_template,
           id_documento,
         },
@@ -149,17 +144,13 @@ function DocumentList() {
                   <thead className="text-xs uppercase text-gray-300 bg-[#2c2c40]">
                     <tr>
                       <th className="px-4 py-3 text-left">Arquivo</th>
-                      <th className="px-4 py-3 text-center">Criação</th>
                       <th className="px-4 py-3 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {documentosVisiveis.length === 0 ? (
                       <tr>
-                        <td
-                          colSpan={3}
-                          className="text-center py-4 text-gray-400"
-                        >
+                        <td colSpan={2} className="text-center py-4 text-gray-400">
                           Nenhum documento encontrado.
                         </td>
                       </tr>
@@ -169,19 +160,11 @@ function DocumentList() {
                           key={doc.id_documento}
                           className="border-t border-gray-700 hover:bg-gray-800"
                         >
-                          <td className="px-4 py-2 text-left">
-                            {doc.nomearquivo}
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            {doc.datacriacao}
-                          </td>
+                          <td className="px-4 py-2 text-left">{doc.anomes}</td>
                           <td className="px-4 py-2 text-right">
                             <button
                               onClick={() =>
-                                handleVisualizar(
-                                  doc.id_documento,
-                                  doc.nomearquivo
-                                )
+                                handleVisualizar(doc.id_documento, doc.anomes)
                               }
                               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
                             >
