@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
 import { FaWhatsapp, FaInstagram, FaFacebookF } from "react-icons/fa";
 
 export default function Footer() {
