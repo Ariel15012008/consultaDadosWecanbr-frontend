@@ -7,55 +7,43 @@ import Footer from "@/components/footer";
 import { Button } from "@/components/ui/button";
 import {
   Download,
-  Maximize2,
-  Minimize2,
-  ZoomIn,
-  ZoomOut,
   ArrowLeft,
 } from "lucide-react";
-import api from "@/utils/axiosInstance"; // ajuste o path se necessário
+import api from "@/utils/axiosInstance";
 
 function PreviewDocumento() {
   const location = useLocation();
   const id_template = location.state?.id_template;
   const id_documento = location.state?.id_documento;
   const navigate = useNavigate();
-  const [imageUrl, setImageUrl] = useState("");
-  const imageRef = useRef<HTMLImageElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [zoom, setZoom] = useState(false);
-  const [zoomPosition, setZoomPosition] = useState({ x: 0, y: 0 });
-  const [showZoomIcon, setShowZoomIcon] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [pdfUrl, setPdfUrl] = useState("");
 
   useEffect(() => {
     document.title = "Visualizar Documento";
 
-    const fetchImage = async () => {
+    const fetchPdf = async () => {
       try {
-        const res = await api.post("/searchdocuments/download_image", {
+        const res = await api.post("/searchdocuments/download", {
           id_tipo: Number(id_template),
           id_documento: Number(id_documento),
         });
 
-        const base64 = res.data.image_base64;
-
-        if (!base64 || base64.length < 100 || base64.trim().startsWith("<")) {
-          throw new Error("Base64 inválido recebido do backend");
-        }
-
-        const blob = await fetch(`data:image/jpeg;base64,${base64}`).then((r) =>
-          r.blob()
+        const base64 = res.data.base64 || res.data.base64_raw;
+        const blob = await fetch(`data:application/pdf;base64,${base64}`).then(
+          (r) => r.blob()
         );
         const url = URL.createObjectURL(blob);
-        setImageUrl(url);
+        setPdfUrl(url);
       } catch (error) {
-        console.error("Erro ao carregar imagem:", error);
+        console.error("Erro ao carregar PDF:", error);
       }
     };
 
-    fetchImage();
+    fetchPdf();
+
     return () => {
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     };
   }, [id_template, id_documento]);
 
@@ -74,39 +62,6 @@ function PreviewDocumento() {
     } catch (error) {
       console.error("Erro ao fazer download do PDF:", error);
     }
-  };
-
-  const handleFullscreenToggle = () => {
-    if (!imageRef.current) return;
-
-    if (!document.fullscreenElement) {
-      imageRef.current.requestFullscreen().then(() => {
-        setFullscreen(true);
-        setZoom(false);
-      });
-    } else {
-      document.exitFullscreen().then(() => {
-        setFullscreen(false);
-        setZoom(false);
-      });
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!imageRef.current) return;
-
-    const rect = imageRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    setZoomPosition({
-      x: (x / rect.width) * 100,
-      y: (y / rect.height) * 100,
-    });
-  };
-
-  const toggleZoom = () => {
-    setZoom(!zoom);
   };
 
   return (
@@ -129,65 +84,21 @@ function PreviewDocumento() {
             Visualização do Documento
           </h2>
 
-          {imageUrl ? (
+          {pdfUrl ? (
             <>
-              <div
-                className="relative mb-4 flex flex-col items-center"
-                onMouseEnter={() => setShowZoomIcon(true)}
-                onMouseLeave={() => setShowZoomIcon(false)}
-              >
-                <div className="relative overflow-hidden">
-                  <img
-                    ref={imageRef}
-                    src={imageUrl}
-                    alt="Documento"
-                    className={`w-full max-h-[80vh] object-contain cursor-zoom-in transition-transform duration-300 ${
-                      zoom ? "scale-150" : "scale-100"
-                    }`}
-                    style={{
-                      transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`,
-                    }}
-                    onMouseMove={handleMouseMove}
-                    onClick={toggleZoom}
-                  />
-                  {showZoomIcon && !zoom && !fullscreen && (
-                    <div className="absolute top-2 right-2 bg-black bg-opacity-50 p-2 rounded-full">
-                      <ZoomIn className="w-6 h-6 text-white" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-4 mt-4">
-                  <Button
-                    onClick={handleFullscreenToggle}
-                    className="bg-blue-600 hover:bg-blue-500"
-                  >
-                    {fullscreen ? (
-                      <>
-                        <Minimize2 className="w-4 h-4 mr-2" /> Sair da tela
-                        cheia
-                      </>
-                    ) : (
-                      <>
-                        <Maximize2 className="w-4 h-4 mr-2" /> Tela cheia
-                      </>
-                    )}
-                  </Button>
-                  {zoom && (
-                    <Button
-                      onClick={() => setZoom(false)}
-                      className="bg-purple-600 hover:bg-purple-500"
-                    >
-                      <ZoomOut className="w-4 h-4 mr-2" /> Reduzir zoom
-                    </Button>
-                  )}
-                </div>
+              <iframe
+                ref={iframeRef}
+                src={pdfUrl}
+                className="w-full h-[80vh] border rounded-lg shadow-inner"
+              />
+              <div className="flex justify-center mt-6">
+                <Button
+                  onClick={handleDownload}
+                  className="bg-green-600 hover:bg-green-500"
+                >
+                  <Download className="w-4 h-4 mr-2" /> Baixar PDF Original
+                </Button>
               </div>
-              <Button
-                onClick={handleDownload}
-                className="bg-green-600 hover:bg-green-500"
-              >
-                <Download className="w-4 h-4 mr-2" /> Baixar PDF Original
-              </Button>
             </>
           ) : (
             <p className="text-center text-gray-300">Carregando documento...</p>
