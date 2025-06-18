@@ -8,7 +8,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
         {/* Branding */}
         <div className="flex flex-col justify-center items-center">
-          <h2 className="text-2xl font-bold mb-3">docRH</h2>
+          <h2 className="text-2xl font-bold mb-3">superRH</h2>
           <p className="text-sm text-blue-100 leading-relaxed">
             Conectando colaboradores ao RH com tecnologia, transparência e
             agilidade.
@@ -24,33 +24,6 @@ export default function Footer() {
               <FaFacebookF className="w-5 h-5" />
             </a>
           </div>
-        </div>
-
-        {/* Links rápidos */}
-        <div className="flex flex-col justify-center items-center">
-          <h3 className="text-xl font-semibold mb-3">Links Rápidos</h3>
-          <ul className="space-y-2 text-sm">
-            <li>
-              <Link to="/meu-salario" className="hover:text-blue-300">
-                Meu Salário
-              </Link>
-            </li>
-            <li>
-              <Link to="/beneficios" className="hover:text-blue-300">
-                Benefícios
-              </Link>
-            </li>
-            <li>
-              <Link to="/documentos" className="hover:text-blue-300">
-                Documentos
-              </Link>
-            </li>
-            <li>
-              <Link to="/contato" className="hover:text-blue-300">
-                Contato RH
-              </Link>
-            </li>
-          </ul>
         </div>
 
         {/* Newsletter */}
@@ -74,7 +47,7 @@ export default function Footer() {
 
       <div className="border-t border-blue-700 mt-10 pt-4 text-center">
         <p className="text-sm text-blue-200">
-          © {new Date().getFullYear()} docRH. Todos os direitos reservados.
+          © {new Date().getFullYear()} superRH. Todos os direitos reservados.
         </p>
       </div>
     </footer>

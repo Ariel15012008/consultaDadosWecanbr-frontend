@@ -18,8 +18,6 @@ import { BiLogOut, BiUser } from "react-icons/bi";
 import { IoPersonCircle } from "react-icons/io5";
 import { RxHamburgerMenu } from "react-icons/rx";
 import {
-  HiCalendar,
-  HiInformationCircle,
   HiMail,
   HiHome,
 } from "react-icons/hi";
@@ -81,18 +79,11 @@ export default function Header() {
       <div className="container mx-auto flex items-center justify-between pt-4 pb-4 pl-1">
         <Link to="/" className="flex items-center text-xl font-bold whitespace-nowrap gap-2">
           <span className="bg-white text-blue-600 px-2 py-1 rounded">superRH</span>
-          <span className="text-white">RH Portal</span>
         </Link>
 
         <nav className="hidden md:flex space-x-4">
           <Link to="/" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50 ml-4">
             <HiHome className="mr-1" /> Início
-          </Link>
-          <Link to="/meu-salario" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
-            <HiCalendar className="mr-1" /> Salário
-          </Link>
-          <Link to="/beneficios" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
-            <HiInformationCircle className="mr-1" /> Benefícios
           </Link>
           <Link to="/contato" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
             <HiMail className="mr-1" /> Contato
@@ -147,12 +138,6 @@ export default function Header() {
               )}
               <Link to="/" className="flex items-center p-2 hover:text-[#31d5db] rounded-lg text-white">
                 <HiHome className="mr-2" /> Início
-              </Link>
-              <Link to="/meu-salario" className="flex items-center p-2 rounded-lg text-white hover:text-[#31d5db]">
-                <HiCalendar className="mr-2" /> Salário
-              </Link>
-              <Link to="/beneficios" className="flex items-center p-2 rounded-lg text-white hover:text-[#31d5db]">
-                <HiInformationCircle className="mr-2" /> Benefícios
               </Link>
               <Link to="/contato" className="flex items-center p-2 rounded-lg text-white hover:text-[#31d5db]">
                 <HiMail className="mr-2" /> Contato

@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { FileText } from "lucide-react";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
-import api from "@/utils/axiosInstance"; // ajuste o path se necessário
+import api from "@/utils/axiosInstance";
 
 interface TemplateGED {
   id_tipo: string;
@@ -40,16 +40,10 @@ function Home() {
         const templatesData = resTemplates.data;
         const docsData = resDocs.data;
 
-        interface CombinadosMapFn {
-          (template: TemplateGED, i: number, arr: TemplateGED[]): TemplateCombinado;
-        }
-
-        const combinados: TemplateCombinado[] = templatesData.map<TemplateCombinado>(
-          ((template, i) => ({
-            id_tipo: template.id_tipo,
-            nome: docsData[i]?.nome || "Documento",
-          })) as CombinadosMapFn
-        );
+        const combinados: TemplateCombinado[] = templatesData.map((template, i) => ({
+          id_tipo: template.id_tipo,
+          nome: docsData[i]?.nome || "Documento",
+        }));
 
         setTemplates(combinados);
       } catch (error) {
@@ -66,30 +60,8 @@ function Home() {
 
       <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 z-0" />
 
-      <main className="relative z-10 flex flex-col items-center flex-grow w-full">
-        <div className="p-4">
-          <div className="bg-[#1e1e2f] text-white rounded-xl shadow-2xl w-full max-w-4xl p-6 mt-32 mx-auto px-4">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4 text-center sm:text-left">
-              <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white flex-shrink-0">
-                <img
-                  src="Avatar de Recepição.png"
-                  alt="Avatar"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold">SEJA BEM-VINDO AO superRH</h1>
-                <p className="text-sm text-gray-300">
-                  O superRH será um novo meio de comunicação entre você e o RH da
-                  Empresa. Através dele você poderá consultar seus recibos de
-                  pagamento, resolver dúvidas e ter acesso a documentos.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-10 w-full max-w-6xl mx-auto px-4 pb-10">
+      <main className="relative z-10 flex flex-col items-center flex-grow w-full pt-32">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-6xl mx-auto px-4 pb-10">
           {templates.map(({ id_tipo, nome }) => (
             <div
               key={id_tipo}
