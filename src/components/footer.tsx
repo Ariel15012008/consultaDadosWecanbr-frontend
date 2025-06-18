@@ -6,7 +6,7 @@ export default function Footer() {
     <footer className="bg-blue-800 text-white py-8 px-6 sm:px-10">
       <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
         {/* Branding */}
-        <div className="flex flex-col justify-center items-center">
+        <div className="flex flex-col justify-between items-center">
           <h2 className="text-2xl font-bold mb-3">superRH</h2>
           <p className="text-sm text-blue-100 leading-relaxed">
             Conectando colaboradores ao RH com tecnologia, transparência e
