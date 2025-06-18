@@ -142,7 +142,7 @@ function DocumentList() {
                 <table className="w-full text-sm text-left text-white">
                   <thead className="text-xs uppercase text-gray-300 bg-[#2c2c40]">
                     <tr>
-                      <th className="px-4 py-3 text-left">Arquivo</th>
+                      <th className="px-4 py-3 text-left">Ano/mês</th>
                       <th className="px-4 py-3 text-right">Ações</th>
                     </tr>
                   </thead>
