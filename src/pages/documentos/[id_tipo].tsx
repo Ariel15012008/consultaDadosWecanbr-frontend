@@ -53,7 +53,6 @@ function DocumentList() {
 
   const handleVisualizar = async (
     id_documento: string,
-    anomes: string
   ) => {
     try {
       const endpoint = "/searchdocuments/download";
@@ -164,7 +163,7 @@ function DocumentList() {
                           <td className="px-4 py-2 text-right">
                             <button
                               onClick={() =>
-                                handleVisualizar(doc.id_documento, doc.anomes)
+                                handleVisualizar(doc.id_documento)
                               }
                               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
                             >
