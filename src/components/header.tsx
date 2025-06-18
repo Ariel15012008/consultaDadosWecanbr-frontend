@@ -81,7 +81,7 @@ export default function Header() {
           <span className="bg-white text-blue-600 px-2 py-1 rounded">superRH</span>
         </Link>
 
-        <nav className="hidden md:flex space-x-4">
+        <nav className="hidden md:flex space-x-4 pl-10">
           <Link to="/" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50 ml-4">
             <HiHome className="mr-1" /> Início
           </Link>
