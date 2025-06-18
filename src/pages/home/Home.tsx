@@ -31,34 +31,34 @@ function Home() {
   useEffect(() => {
     document.title = "Painel do Trabalhador";
 
-    const token = localStorage.getItem("access_token");
-    const authenticated = !!token;
-    setIsAuthenticated(authenticated);
+    const verificarSessao = async () => {
+      try {
+        // Verifica se o usuário está autenticado
+        await api.get("/user/me", { withCredentials: true });
+        setIsAuthenticated(true);
 
-    if (authenticated) {
-      const fetchData = async () => {
-        try {
-          const [resTemplates, resDocs] = await Promise.all([
-            api.get<TemplateGED[]>("/searchdocuments/templates"),
-            api.get<Documento[]>("/documents"),
-          ]);
+        // Busca os templates e documentos
+        const [resTemplates, resDocs] = await Promise.all([
+          api.get<TemplateGED[]>("/searchdocuments/templates", { withCredentials: true }),
+          api.get<Documento[]>("/documents", { withCredentials: true }),
+        ]);
 
-          const templatesData = resTemplates.data;
-          const docsData = resDocs.data;
+        const templatesData = resTemplates.data;
+        const docsData = resDocs.data;
 
-          const combinados: TemplateCombinado[] = templatesData.map((template, i) => ({
-            id_tipo: template.id_tipo,
-            nome: docsData[i]?.nome || "Documento",
-          }));
+        const combinados: TemplateCombinado[] = templatesData.map((template, i) => ({
+          id_tipo: template.id_tipo,
+          nome: docsData[i]?.nome || "Documento",
+        }));
 
-          setTemplates(combinados);
-        } catch (error) {
-          console.error("Erro ao carregar templates:", error);
-        }
-      };
+        setTemplates(combinados);
+      } catch (error) {
+        setIsAuthenticated(false);
+        console.warn("Usuário não autenticado:", error);
+      }
+    };
 
-      fetchData();
-    }
+    verificarSessao();
   }, []);
 
   return (
