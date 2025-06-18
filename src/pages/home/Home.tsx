@@ -25,16 +25,17 @@ interface TemplateCombinado {
 
 function Home() {
   const [templates, setTemplates] = useState<TemplateCombinado[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     document.title = "Painel do Trabalhador";
 
     const token = localStorage.getItem("access_token");
-    setIsAuthenticated(!!token);
+    const authenticated = !!token;
+    setIsAuthenticated(authenticated);
 
-    if (token) {
+    if (authenticated) {
       const fetchData = async () => {
         try {
           const [resTemplates, resDocs] = await Promise.all([
@@ -66,7 +67,7 @@ function Home() {
       <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 z-0" />
 
       <main className="relative z-10 flex flex-col items-center flex-grow w-full pt-32">
-        {!isAuthenticated ? (
+        {isAuthenticated === null ? null : !isAuthenticated ? (
           <div className="p-4 w-full">
             <div className="bg-[#1e1e2f] text-white rounded-xl shadow-2xl w-full max-w-4xl p-6 mx-auto">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4 text-center sm:text-left">
