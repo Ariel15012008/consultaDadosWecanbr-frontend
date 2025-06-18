@@ -20,9 +20,13 @@ function PreviewDocumento() {
   useEffect(() => {
     document.title = "Visualizar Documento";
 
-    // Detectar se é mobile
+    const checkViewport = () => {
+      setIsMobile(window.innerWidth <= 425);
+    };
+
     if (typeof window !== "undefined") {
-      setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+      checkViewport(); // chama uma vez ao montar
+      window.addEventListener("resize", checkViewport);
     }
 
     const fetchPdf = async () => {
@@ -45,6 +49,7 @@ function PreviewDocumento() {
 
     return () => {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      window.removeEventListener("resize", checkViewport);
     };
   }, [id_template, id_documento]);
 
@@ -88,7 +93,7 @@ function PreviewDocumento() {
           {pdfUrl ? (
             <>
               {isMobile ? (
-                <div className="flex justify-center">
+                <div className="flex justify-center mb-6">
                   <Button
                     onClick={() => window.open(pdfUrl, "_blank")}
                     className="bg-blue-600 hover:bg-blue-500"
@@ -97,22 +102,21 @@ function PreviewDocumento() {
                   </Button>
                 </div>
               ) : (
-                <>
-                  <iframe
-                    ref={iframeRef}
-                    src={pdfUrl}
-                    className="w-full h-[80vh] border rounded-lg shadow-inner"
-                  />
-                  <div className="flex justify-center mt-6">
-                    <Button
-                      onClick={handleDownload}
-                      className="bg-green-600 hover:bg-green-500"
-                    >
-                      <Download className="w-4 h-4 mr-2" /> Baixar PDF Original
-                    </Button>
-                  </div>
-                </>
+                <iframe
+                  ref={iframeRef}
+                  src={pdfUrl}
+                  className="w-full h-[80vh] border rounded-lg shadow-inner mb-6"
+                />
               )}
+
+              <div className="flex justify-center">
+                <Button
+                  onClick={handleDownload}
+                  className="bg-green-600 hover:bg-green-500"
+                >
+                  <Download className="w-4 h-4 mr-2" /> Baixar PDF Original
+                </Button>
+              </div>
             </>
           ) : (
             <p className="text-center text-gray-300">Carregando documento...</p>
