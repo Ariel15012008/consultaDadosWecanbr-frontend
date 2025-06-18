@@ -62,7 +62,7 @@ export default function LoginPage() {
           <Label className="text-gray-200">Usuário (E-mail)</Label>
           <Input
             id="email"
-            type="email"
+            type="text"
             {...register("usuario")}
             className="mt-1 bg-[#2a2a3d] text-white"
           />
