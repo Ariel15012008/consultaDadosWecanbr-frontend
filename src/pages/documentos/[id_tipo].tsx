@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom"; // ✅ incluído
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { ArrowLeft } from "lucide-react";
@@ -23,6 +23,7 @@ interface Documento {
 
 function DocumentList() {
   const { id_template } = useParams();
+  const location = useLocation(); // ✅ uso correto
   const valor = new URLSearchParams(location.search).get("valor") || "";
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Documento[]>([]);
@@ -50,7 +51,7 @@ function DocumentList() {
     };
 
     fetchDocumentosFiltrados();
-  }, [id_template]);
+  }, [id_template, valor]);
 
   const handleVisualizar = async (id_documento: string) => {
     try {
@@ -67,7 +68,7 @@ function DocumentList() {
           tipo: "pdf",
           id_template,
           id_documento,
-          valor, // ✅ envia o nome do documento
+          valor,
         },
       });
     } catch (error) {
