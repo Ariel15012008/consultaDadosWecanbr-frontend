@@ -43,14 +43,6 @@ export default function CadastroPage() {
       .replace(/(\d{3})(\d{1,2})$/, "$1-$2")
   }, [])
 
-  const avaliarForcaSenha = (senha: string) => {
-    if (!senha) return ""
-    const forte = /(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}/
-    const media = /(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{6,}/
-    if (forte.test(senha)) return "Forte"
-    if (media.test(senha)) return "Média"
-    return "Fraca"
-  }
 
   const onSubmit = async (data: any) => {
     try {
@@ -141,17 +133,6 @@ export default function CadastroPage() {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </div>
           </div>
-          {senhaValue && (
-            <p className={`text-sm mt-1 ${
-              avaliarForcaSenha(senhaValue) === "Forte"
-                ? "text-green-400"
-                : avaliarForcaSenha(senhaValue) === "Média"
-                ? "text-yellow-400"
-                : "text-red-400"
-            }`}>
-              Força da senha: {avaliarForcaSenha(senhaValue)}
-            </p>
-          )}
           {errors.senha && <p className="text-red-400 text-sm mt-1">{errors.senha.message}</p>}
         </div>
 
