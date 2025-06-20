@@ -12,6 +12,7 @@ function PreviewDocumento() {
   const location = useLocation();
   const id_template = location.state?.id_template;
   const id_documento = location.state?.id_documento;
+  const valor = location.state?.valor || ""; // <- pega o valor do nome do documento
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [pdfUrl, setPdfUrl] = useState("");
@@ -25,7 +26,7 @@ function PreviewDocumento() {
     };
 
     if (typeof window !== "undefined") {
-      checkViewport(); // chama uma vez ao montar
+      checkViewport();
       window.addEventListener("resize", checkViewport);
     }
 
@@ -76,7 +77,7 @@ function PreviewDocumento() {
       <div className="relative z-10 px-4 md:px-28 mt-28 md:mt-28">
         <Button
           variant="ghost"
-          onClick={() => navigate(`/documentos/${id_template}`)}
+          onClick={() => navigate(`/documentos/${id_template}?valor=${encodeURIComponent(valor)}`)}
           className="text-white flex items-center gap-2 text-sm md:text-base"
         >
           <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
