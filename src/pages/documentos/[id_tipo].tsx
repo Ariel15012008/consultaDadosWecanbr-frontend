@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom"; // ✅ Corrigido
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { ArrowLeft } from "lucide-react";
@@ -23,10 +23,9 @@ interface Documento {
 
 function DocumentList() {
   const { id_template } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const location = useLocation(); // ✅ Hook correto do React Router
   const valor = new URLSearchParams(location.search).get("valor") || "";
-
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<Documento[]>([]);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [porPagina] = useState(10);
@@ -38,7 +37,7 @@ function DocumentList() {
     const fetchDocumentosFiltrados = async () => {
       try {
         const res = await api.post("/searchdocuments/documents", {
-          id_tipo: Number(id_template),
+          id_tipo: Number(id_template), // <-- Corrigido campo para id_tipo
           campo: "tipodedoc",
           valor,
         });
@@ -69,7 +68,7 @@ function DocumentList() {
           tipo: "pdf",
           id_template,
           id_documento,
-          valor, // <- valor do nome do documento, enviado ao Preview
+          valor,
         },
       });
     } catch (error) {
