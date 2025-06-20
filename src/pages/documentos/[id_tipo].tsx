@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom"; // ✅ Corrigido
+import { useNavigate, useParams } from "react-router-dom";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { ArrowLeft } from "lucide-react";
@@ -23,7 +23,6 @@ interface Documento {
 
 function DocumentList() {
   const { id_template } = useParams();
-  const location = useLocation(); // ✅ Hook correto do React Router
   const valor = new URLSearchParams(location.search).get("valor") || "";
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Documento[]>([]);
@@ -37,7 +36,7 @@ function DocumentList() {
     const fetchDocumentosFiltrados = async () => {
       try {
         const res = await api.post("/searchdocuments/documents", {
-          id_tipo: Number(id_template), // <-- Corrigido campo para id_tipo
+          id_template: Number(id_template),
           campo: "tipodedoc",
           valor,
         });
@@ -51,11 +50,15 @@ function DocumentList() {
     };
 
     fetchDocumentosFiltrados();
-  }, [id_template, valor]);
+  }, [id_template]);
 
-  const handleVisualizar = async (id_documento: string) => {
+  const handleVisualizar = async (
+    id_documento: string,
+  ) => {
     try {
-      const res = await api.post("/searchdocuments/download", {
+      const endpoint = "/searchdocuments/download";
+
+      const res = await api.post(endpoint, {
         id_tipo: Number(id_template),
         id_documento: Number(id_documento),
       });
@@ -68,7 +71,6 @@ function DocumentList() {
           tipo: "pdf",
           id_template,
           id_documento,
-          valor,
         },
       });
     } catch (error) {
@@ -161,7 +163,9 @@ function DocumentList() {
                           <td className="px-4 py-2 text-left">{doc.anomes}</td>
                           <td className="px-4 py-2 text-right">
                             <button
-                              onClick={() => handleVisualizar(doc.id_documento)}
+                              onClick={() =>
+                                handleVisualizar(doc.id_documento)
+                              }
                               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
                             >
                               Visualizar
@@ -180,9 +184,13 @@ function DocumentList() {
                     <PaginationContent>
                       <PaginationItem>
                         <PaginationPrevious
-                          onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                          onClick={() =>
+                            setPaginaAtual((p) => Math.max(1, p - 1))
+                          }
                           className={
-                            paginaAtual === 1 ? "pointer-events-none opacity-50" : ""
+                            paginaAtual === 1
+                              ? "pointer-events-none opacity-50"
+                              : ""
                           }
                         />
                       </PaginationItem>
@@ -202,9 +210,15 @@ function DocumentList() {
                       ))}
                       <PaginationItem>
                         <PaginationNext
-                          onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
+                          onClick={() =>
+                            setPaginaAtual((p) =>
+                              Math.min(totalPaginas, p + 1)
+                            )
+                          }
                           className={
-                            paginaAtual === totalPaginas ? "pointer-events-none opacity-50" : ""
+                            paginaAtual === totalPaginas
+                              ? "pointer-events-none opacity-50"
+                              : ""
                           }
                         />
                       </PaginationItem>
