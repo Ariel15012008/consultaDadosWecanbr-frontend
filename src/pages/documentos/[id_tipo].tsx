@@ -50,15 +50,11 @@ function DocumentList() {
     };
 
     fetchDocumentosFiltrados();
-  }, [id_template]);
+  }, [id_template, valor]);
 
-  const handleVisualizar = async (
-    id_documento: string,
-  ) => {
+  const handleVisualizar = async (id_documento: string) => {
     try {
-      const endpoint = "/searchdocuments/download";
-
-      const res = await api.post(endpoint, {
+      const res = await api.post("/searchdocuments/download", {
         id_tipo: Number(id_template),
         id_documento: Number(id_documento),
       });
@@ -71,6 +67,7 @@ function DocumentList() {
           tipo: "pdf",
           id_template,
           id_documento,
+          valor, // <-- importante para o botão voltar
         },
       });
     } catch (error) {
@@ -163,9 +160,7 @@ function DocumentList() {
                           <td className="px-4 py-2 text-left">{doc.anomes}</td>
                           <td className="px-4 py-2 text-right">
                             <button
-                              onClick={() =>
-                                handleVisualizar(doc.id_documento)
-                              }
+                              onClick={() => handleVisualizar(doc.id_documento)}
                               className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
                             >
                               Visualizar
@@ -184,14 +179,8 @@ function DocumentList() {
                     <PaginationContent>
                       <PaginationItem>
                         <PaginationPrevious
-                          onClick={() =>
-                            setPaginaAtual((p) => Math.max(1, p - 1))
-                          }
-                          className={
-                            paginaAtual === 1
-                              ? "pointer-events-none opacity-50"
-                              : ""
-                          }
+                          onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                          className={paginaAtual === 1 ? "pointer-events-none opacity-50" : ""}
                         />
                       </PaginationItem>
                       {gerarPaginas().map((p, i) => (
@@ -211,9 +200,7 @@ function DocumentList() {
                       <PaginationItem>
                         <PaginationNext
                           onClick={() =>
-                            setPaginaAtual((p) =>
-                              Math.min(totalPaginas, p + 1)
-                            )
+                            setPaginaAtual((p) => Math.min(totalPaginas, p + 1))
                           }
                           className={
                             paginaAtual === totalPaginas

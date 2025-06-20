@@ -12,7 +12,7 @@ function PreviewDocumento() {
   const location = useLocation();
   const id_template = location.state?.id_template;
   const id_documento = location.state?.id_documento;
-  const valor = location.state?.valor || ""; // <- pega o valor do nome do documento
+  const valor = location.state?.valor || "";
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [pdfUrl, setPdfUrl] = useState("");
