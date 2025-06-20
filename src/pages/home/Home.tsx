@@ -7,13 +7,24 @@ import Header from "@/components/header";
 import Footer from "@/components/footer";
 import api from "@/utils/axiosInstance";
 
+interface TemplateGED {
+  id_tipo: string;
+  nome_tipo: string;
+  nome_divisao: string;
+}
+
 interface Documento {
   id: number;
   nome: string;
 }
 
+interface TemplateCombinado {
+  id_tipo: string;
+  nome: string;
+}
+
 function Home() {
-  const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [templates, setTemplates] = useState<TemplateCombinado[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
@@ -22,13 +33,28 @@ function Home() {
 
     const verificarSessao = async () => {
       try {
-        // Verifica se o usuário está autenticado
         await api.get("/user/me", { withCredentials: true });
         setIsAuthenticated(true);
 
-        // Busca os documentos disponíveis
-        const resDocs = await api.get<Documento[]>("/documents", { withCredentials: true });
-        setDocumentos(resDocs.data);
+        // Busca templates e documentos
+        const [resTemplates, resDocs] = await Promise.all([
+          api.get<TemplateGED[]>("/searchdocuments/templates", { withCredentials: true }),
+          api.get<Documento[]>("/documents", { withCredentials: true }),
+        ]);
+
+        const templatesData = resTemplates.data;
+        const docsData = resDocs.data;
+
+        // Faz o match pelo ID
+        const combinados: TemplateCombinado[] = templatesData.map((template) => {
+          const doc = docsData.find((d) => d.id.toString() === template.id_tipo);
+          return {
+            id_tipo: template.id_tipo,
+            nome: doc?.nome || "Documento",
+          };
+        });
+
+        setTemplates(combinados);
       } catch (error) {
         setIsAuthenticated(false);
         console.warn("Usuário não autenticado:", error);
@@ -68,10 +94,10 @@ function Home() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-6xl mx-auto px-4 pb-10">
-            {documentos.map(({ id, nome }) => (
+            {templates.map(({ id_tipo, nome }) => (
               <div
-                key={id}
-                onClick={() => navigate(`/documentos/${id}`)}
+                key={id_tipo}
+                onClick={() => navigate(`/documentos/${id_tipo}`)}
                 className="bg-[#1e1e2f] text-white rounded-lg cursor-pointer hover:shadow-xl transition-all hover:translate-x-1"
               >
                 <div className="flex flex-col items-center justify-center p-6">
