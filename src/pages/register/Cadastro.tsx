@@ -26,14 +26,12 @@ export default function CadastroPage() {
     register,
     handleSubmit,
     setValue,
-    watch,
     formState: { errors },
   } = useForm({ resolver: zodResolver(schema) })
 
   const navigate = useNavigate()
   const [cpfValue, setCpfValue] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const senhaValue = watch("senha")
 
   const formatCPF = useCallback((value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 11)
