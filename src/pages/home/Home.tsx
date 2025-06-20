@@ -7,24 +7,13 @@ import Header from "@/components/header";
 import Footer from "@/components/footer";
 import api from "@/utils/axiosInstance";
 
-interface TemplateGED {
-  id_tipo: string;
-  nome_tipo: string;
-  nome_divisao: string;
-}
-
 interface Documento {
   id: number;
   nome: string;
 }
 
-interface TemplateCombinado {
-  id_tipo: string;
-  nome: string;
-}
-
 function Home() {
-  const [templates, setTemplates] = useState<TemplateCombinado[]>([]);
+  const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
@@ -37,21 +26,9 @@ function Home() {
         await api.get("/user/me", { withCredentials: true });
         setIsAuthenticated(true);
 
-        // Busca os templates e documentos
-        const [resTemplates, resDocs] = await Promise.all([
-          api.get<TemplateGED[]>("/searchdocuments/templates", { withCredentials: true }),
-          api.get<Documento[]>("/documents", { withCredentials: true }),
-        ]);
-
-        const templatesData = resTemplates.data;
-        const docsData = resDocs.data;
-
-        const combinados: TemplateCombinado[] = templatesData.map((template, i) => ({
-          id_tipo: template.id_tipo,
-          nome: docsData[i]?.nome || "Documento",
-        }));
-
-        setTemplates(combinados);
+        // Busca os documentos disponíveis
+        const resDocs = await api.get<Documento[]>("/documents", { withCredentials: true });
+        setDocumentos(resDocs.data);
       } catch (error) {
         setIsAuthenticated(false);
         console.warn("Usuário não autenticado:", error);
@@ -91,10 +68,10 @@ function Home() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-6xl mx-auto px-4 pb-10">
-            {templates.map(({ id_tipo, nome }) => (
+            {documentos.map(({ id, nome }) => (
               <div
-                key={id_tipo}
-                onClick={() => navigate(`/documentos/${id_tipo}`)}
+                key={id}
+                onClick={() => navigate(`/documentos/${id}`)}
                 className="bg-[#1e1e2f] text-white rounded-lg cursor-pointer hover:shadow-xl transition-all hover:translate-x-1"
               >
                 <div className="flex flex-col items-center justify-center p-6">
