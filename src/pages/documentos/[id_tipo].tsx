@@ -23,6 +23,7 @@ interface Documento {
 
 function DocumentList() {
   const { id_template } = useParams();
+  const valor = new URLSearchParams(location.search).get("valor") || "";
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Documento[]>([]);
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -37,7 +38,7 @@ function DocumentList() {
         const res = await api.post("/searchdocuments/documents", {
           id_template: Number(id_template),
           campo: "tipodedoc",
-          valor: "Holerite",
+          valor,
         });
 
         setDocuments(res.data.documents || []);
