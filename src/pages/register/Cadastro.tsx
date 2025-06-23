@@ -18,7 +18,7 @@ const schema = z.object({
     .string()
     .length(14, "CPF inválido. Formato esperado: 999.999.999-99")
     .regex(/^(\d{3}\.){2}\d{3}-\d{2}$/, "CPF inválido. Formato esperado: 999.999.999-99"),
-  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+  senha: z.string().min(1, "Senha deve ter no mínimo 6 caracteres"),
 })
 
 export default function CadastroPage() {
