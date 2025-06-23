@@ -1,18 +1,18 @@
 import { useEffect } from "react"
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom"
 import api from "@/utils/axiosInstance"
+import Cookies from "js-cookie"
 
 export function ProtectedRoute() {
   const navigate = useNavigate()
   const location = useLocation()
   const pathname = location.pathname
 
-  const loggedUser = localStorage.getItem("logged_user")
-  const token = localStorage.getItem("access_token")
+  const loggedUser = Cookies.get("logged_user")
   const now = Date.now()
   const twoMinutes = 2 * 60 * 1000
 
-  const isAuthenticated = !!loggedUser && !!token
+  const isAuthenticated = !!loggedUser //&& !!token
 
   useEffect(() => {
     const verificarToken = async () => {

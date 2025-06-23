@@ -27,12 +27,12 @@ function Home() {
 
     const verificarSessao = async () => {
       try {
-        await api.get("/user/me", { withCredentials: true });
+        await api.get("/user/me");
         setIsAuthenticated(true);
 
         const [resDocs, resTemplates] = await Promise.all([
-          api.get<Documento[]>("/documents", { withCredentials: true }),
-          api.get<TemplateGED[]>("/searchdocuments/templates", { withCredentials: true }),
+          api.get<Documento[]>("/documents"),
+          api.get<TemplateGED[]>("/searchdocuments/templates"),
         ]);
 
         setDocumentos(resDocs.data);
