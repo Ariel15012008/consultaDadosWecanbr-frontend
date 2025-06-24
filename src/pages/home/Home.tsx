@@ -20,6 +20,7 @@ function Home() {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [idTemplate, setIdTemplate] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [loadingDocs, setLoadingDocs] = useState<boolean>(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,6 +30,7 @@ function Home() {
       try {
         await api.get("/user/me");
         setIsAuthenticated(true);
+        setLoadingDocs(true);
 
         const [resDocs, resTemplates] = await Promise.all([
           api.get<Documento[]>("/documents"),
@@ -36,10 +38,12 @@ function Home() {
         ]);
 
         setDocumentos(resDocs.data);
-        setIdTemplate(resTemplates.data[0]?.id_tipo || null); // pega o primeiro template
+        setIdTemplate(resTemplates.data[0]?.id_tipo || null);
       } catch (error) {
         setIsAuthenticated(false);
         console.warn("Usuário não autenticado:", error);
+      } finally {
+        setLoadingDocs(false);
       }
     };
 
@@ -52,7 +56,9 @@ function Home() {
       <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 z-0" />
 
       <main className="relative z-10 flex flex-col items-center flex-grow w-full pt-32">
-        {isAuthenticated === null ? null : !isAuthenticated ? (
+        {isAuthenticated === null ? (
+          <p className="text-white mt-10 text-2xl font-bold">Carregando dados...</p>
+        ) : !isAuthenticated ? (
           <div className="p-4 w-full">
             <div className="bg-[#1e1e2f] text-white rounded-xl shadow-2xl w-full max-w-4xl p-6 mx-auto">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4 text-center sm:text-left">
@@ -74,12 +80,16 @@ function Home() {
               </div>
             </div>
           </div>
+        ) : loadingDocs ? (
+          <p className="text-white text-center mt-10 text-2xl font-bold">Carregando documentos...</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-6xl mx-auto px-4 pb-10">
             {documentos.map(({ id, nome }) => (
               <div
                 key={id}
-                onClick={() => navigate(`/documentos/${idTemplate}?valor=${encodeURIComponent(nome)}`)}
+                onClick={() =>
+                  navigate(`/documentos/${idTemplate}?valor=${encodeURIComponent(nome)}`)
+                }
                 className="bg-[#1e1e2f] text-white rounded-lg cursor-pointer hover:shadow-xl transition-all hover:translate-x-1"
               >
                 <div className="flex flex-col items-center justify-center p-6">

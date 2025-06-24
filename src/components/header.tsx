@@ -17,17 +17,15 @@ import {
 import { BiLogOut, BiUser } from "react-icons/bi";
 import { IoPersonCircle } from "react-icons/io5";
 import { RxHamburgerMenu } from "react-icons/rx";
-import {
-  HiMail,
-  HiHome,
-} from "react-icons/hi";
-import api from "@/utils/axiosInstance"; // ajuste o caminho conforme seu projeto
+import { HiMail, HiHome } from "react-icons/hi";
+import api from "@/utils/axiosInstance";
 
 export default function Header() {
   const [user, setUser] = useState<{ nome: string; email: string } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const navigate = useNavigate();
+  const [loadingUserInfo, setLoadingUserInfo] = useState(true);
   const didLogout = useRef(false);
+  const navigate = useNavigate();
 
   const silentAuth = async () => {
     try {
@@ -50,6 +48,8 @@ export default function Header() {
       console.error("Erro na autenticação:", error);
       setUser(null);
       setIsAuthenticated(false);
+    } finally {
+      setLoadingUserInfo(false);
     }
   };
 
@@ -131,8 +131,14 @@ export default function Header() {
                 <div className="flex flex-col items-center text-center p-4 bg-blue-700 rounded-lg space-y-1">
                   <IoPersonCircle className="text-4xl mb-1" />
                   <div className="max-w-full break-words">
-                    <p className="font-semibold text-white text-sm">{user?.nome}</p>
-                    <p className="text-xs text-blue-200 truncate">{user?.email}</p>
+                    {loadingUserInfo ? (
+                      <p className="text-white text-sm">Carregando...</p>
+                    ) : (
+                      <>
+                        <p className="font-semibold text-white text-sm">{user?.nome}</p>
+                        <p className="text-xs text-blue-200 truncate">{user?.email}</p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
