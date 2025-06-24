@@ -67,7 +67,7 @@ function DocumentList() {
           tipo: "pdf",
           id_template,
           id_documento,
-          valor, // <-- importante para o botão voltar
+          valor,
         },
       });
     } catch (error) {
@@ -86,8 +86,8 @@ function DocumentList() {
     if (totalPaginas <= 5) {
       for (let i = 1; i <= totalPaginas; i++) paginas.push(i);
     } else {
-      if (paginaAtual <= 3) {
-        paginas.push(1, 2, 3, 4, "...", totalPaginas);
+      if (paginaAtual <= 2) {
+        paginas.push(1, 2, 3, "...", totalPaginas);
       } else if (paginaAtual >= totalPaginas - 2) {
         paginas.push(
           1,
@@ -174,9 +174,9 @@ function DocumentList() {
               </div>
 
               {totalPaginas > 1 && (
-                <div className="flex justify-center mt-6">
+                <div className="flex justify-center mt-6 w-full overflow-x-auto px-2">
                   <Pagination>
-                    <PaginationContent>
+                    <PaginationContent className="flex flex-wrap justify-center gap-1">
                       <PaginationItem>
                         <PaginationPrevious
                           onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
@@ -186,7 +186,7 @@ function DocumentList() {
                       {gerarPaginas().map((p, i) => (
                         <PaginationItem key={i}>
                           {typeof p === "string" ? (
-                            <span className="px-3 py-1">{p}</span>
+                            <span className="px-3 py-1 text-white">{p}</span>
                           ) : (
                             <PaginationLink
                               isActive={paginaAtual === p}
