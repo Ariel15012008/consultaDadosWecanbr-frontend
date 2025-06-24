@@ -31,11 +31,6 @@ export default function Header() {
     try {
       let res = await api.get("/user/me");
 
-      if (res.status === 401) {
-        await api.post("/user/refresh");
-        res = await api.get("/user/me");
-      }
-
       if (res.status === 200) {
         const data = res.data;
         setUser({ nome: data.nome, email: data.email });
