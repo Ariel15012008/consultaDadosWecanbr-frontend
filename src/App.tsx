@@ -6,7 +6,8 @@ import IdTemplate from "@/pages/documentos/[id_tipo]"
 import PreviewPDF from "@/pages/documento/preview"
 import { ProtectedRoute } from './lib/ProtectedRoute'
 import { PublicRoute } from './lib/PublicRoute'
-
+import ForgotPasswordPage from "@/pages/password/ForgotPasswordPage"
+import ResetPasswordPage from "@/pages/resetPassword/ResetPasswordPage"
 
 function App() {
   return (
@@ -15,6 +16,8 @@ function App() {
       <Route element={<PublicRoute />}>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Cadastro />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Route>
 
       {/* ROTA PROTEGIDA */}
@@ -26,4 +29,5 @@ function App() {
     </Routes>
   )
 }
+
 export default App
