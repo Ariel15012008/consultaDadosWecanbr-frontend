@@ -1,50 +1,52 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useNavigate } from "react-router-dom"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
-import { Eye, EyeOff } from "lucide-react"
-import api from "@/utils/axiosInstance"
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useNavigate } from "react-router-dom";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
+import api from "@/utils/axiosInstance";
 
 const schema = z.object({
   usuario: z.string().min(9, "Usuário inválido"),
   senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
-})
+});
 
-type FormData = z.infer<typeof schema>
+type FormData = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormData>({ resolver: zodResolver(schema) })
+  } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const navigate = useNavigate()
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [loginError, setLoginError] = useState("")
+  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
 
   const onSubmit = async (data: FormData) => {
-    setLoading(true)
-    setLoginError("")
+    setLoading(true);
+    setLoginError("");
 
     try {
-      await api.post("/user/login", data, { withCredentials: true })
-      navigate("/")
+      await api.post("/user/login", data, { withCredentials: true });
+      navigate("/");
     } catch (err: any) {
       setLoginError(
-        err?.response?.data?.detail || err?.message || "Erro ao conectar com o servidor"
-      )
+        err?.response?.data?.detail ||
+          err?.message ||
+          "Erro ao conectar com o servidor"
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="h-screen w-screen relative overflow-hidden flex items-center justify-center p-4 bg-[#0f172a] bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300">
@@ -67,12 +69,16 @@ export default function LoginPage() {
             className="mt-1 bg-[#2a2a3d] text-white"
           />
           {errors.usuario && (
-            <p className="text-red-400 text-sm mt-1">{errors.usuario.message}</p>
+            <p className="text-red-400 text-sm mt-1">
+              {errors.usuario.message}
+            </p>
           )}
         </div>
 
         <div>
-          <Label htmlFor="senha" className="text-gray-200">Senha</Label>
+          <Label htmlFor="senha" className="text-gray-200">
+            Senha
+          </Label>
           <div className="relative">
             <Input
               id="senha"
@@ -87,6 +93,12 @@ export default function LoginPage() {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </div>
           </div>
+          <a
+            href="/forgot-password"
+            className=" text-sm text-gray-200 mt-1 flex justify-end hover:text-white hover:underline cursor-pointer "
+          >
+            Esqueceu sua senha?
+          </a>
           {errors.senha && (
             <p className="text-red-400 text-sm mt-1">{errors.senha.message}</p>
           )}
@@ -116,5 +128,5 @@ export default function LoginPage() {
         </p>
       </form>
     </div>
-  )
+  );
 }
