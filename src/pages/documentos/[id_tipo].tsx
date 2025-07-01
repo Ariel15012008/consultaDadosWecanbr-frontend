@@ -1,5 +1,3 @@
-// DocumentList.tsx (adaptado ao padrão visual do superRH com CustomMonthPicker e grid dinâmico)
-
 "use client";
 
 import { useEffect, useState } from "react";
