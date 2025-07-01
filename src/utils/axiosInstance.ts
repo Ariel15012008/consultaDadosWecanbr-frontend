@@ -7,7 +7,7 @@ const VITE_API_URL_DEV: string = "http://localhost:8000/";
 const VITE_API_URL_PROD: string = "https://docrh.onrender.com/";
 
 const url =
-  VITE_API_ENVIRONMENT == "prod" ? VITE_API_URL_PROD : VITE_API_URL_DEV;
+  VITE_API_ENVIRONMENT == "dev" ? VITE_API_URL_PROD : VITE_API_URL_DEV;
 
 const api = axios.create({
   baseURL: url,
