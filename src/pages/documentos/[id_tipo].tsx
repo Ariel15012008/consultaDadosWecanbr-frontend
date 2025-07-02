@@ -28,6 +28,7 @@ function DocumentList() {
 
   const isGestor = user?.gestor === true;
 
+  // Buscar o usuário atual e definir matrícula se não for gestor
   useEffect(() => {
     const fetchUser = async () => {
       const res = await api.get("/user/me");
@@ -36,6 +37,30 @@ function DocumentList() {
     };
     fetchUser();
   }, []);
+
+  // Buscar os últimos documentos ao abrir a página
+  useEffect(() => {
+  const fetchUltimosDocumentos = async () => {
+    try {
+      const res = await api.post("/documents/ultimos", {
+        id_template: Number(id_template),
+        
+        cp: [
+          { nome: "tipodedoc", valor: tipodedoc || "Holerites" },
+          { nome: "matricula", valor: "111027" }
+        ],
+        campo_anomes: "anomes"
+      });
+
+      setDocuments(res.data.documentos || []);
+    } catch (error) {
+      console.error("Erro ao buscar últimos documentos:", error);
+
+    }
+  };
+
+  fetchUltimosDocumentos();
+}, [id_template, tipodedoc]);
 
   const handleSearch = async () => {
     if (!anomes) return;
@@ -73,7 +98,7 @@ function DocumentList() {
           <h2 className="text-xl font-bold mb-6 text-center">Buscar Documentos: {tipodedoc}</h2>
 
           <div
-            className={`w-fit mx-auto grid gap-4 mb-6 grid-cols-1 ${
+            className={`w-fit mx-auto grid gap-4 mb-6 grid-cols-1  ${
               isGestor ? "sm:grid-cols-3" : "sm:grid-cols-2"
             }`}
           >

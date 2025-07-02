@@ -75,7 +75,7 @@ export default function CustomMonthPicker({
           <ChevronDown className="h-4 w-4 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 bg-[#2c2c40] border-gray-600 " align="start">
+      <PopoverContent className="w-80 bg-[#2c2c40] border-gray-600" align="start">
         <div className="space-y-4">
           <div className="text-sm font-medium text-white">Selecionar Período</div>
 
