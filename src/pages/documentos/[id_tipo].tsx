@@ -26,8 +26,6 @@ function DocumentList() {
   const [documents, setDocuments] = useState<Documento[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const isGestor = user?.gestor === true;
-
   // Buscar o usuário atual e definir matrícula se não for gestor
   useEffect(() => {
     const fetchUser = async () => {
@@ -38,29 +36,33 @@ function DocumentList() {
     fetchUser();
   }, []);
 
-  // Buscar os últimos documentos ao abrir a página
+  // Buscar os últimos documentos apenas se NÃO for gestor
   useEffect(() => {
-  const fetchUltimosDocumentos = async () => {
-    try {
-      const res = await api.post("/documents/ultimos", {
-        id_template: Number(id_template),
-        
-        cp: [
-          { nome: "tipodedoc", valor: tipodedoc || "Holerites" },
-          { nome: "matricula", valor: "111027" }
-        ],
-        campo_anomes: "anomes"
-      });
+    const fetchUltimosDocumentos = async () => {
+      try {
+        const cp = [
+          { nome: "tipodedoc", valor: tipodedoc },
+          { nome: "matricula", valor: user?.matricula }
+        ];
 
-      setDocuments(res.data.documentos || []);
-    } catch (error) {
-      console.error("Erro ao buscar últimos documentos:", error);
+        const res = await api.post("/documents/ultimos", {
+          id_template: Number(id_template),
+          cp,
+          campo_anomes: "anomes"
+        });
 
+        setDocuments(res.data.documentos || []);
+      } catch (error) {
+        console.error("Erro ao buscar últimos documentos:", error);
+      }
+    };
+
+    if (user && user.gestor === false) {
+      fetchUltimosDocumentos();
     }
-  };
+  }, [id_template, tipodedoc, user]);
 
-  fetchUltimosDocumentos();
-}, [id_template, tipodedoc]);
+  const isGestor = user?.gestor === true;
 
   const handleSearch = async () => {
     if (!anomes) return;
@@ -70,7 +72,7 @@ function DocumentList() {
       const cp = [
         { nome: "tipodedoc", valor: tipodedoc },
         ...(isGestor && matricula ? [{ nome: "matricula", valor: matricula }] : !isGestor ? [{ nome: "matricula", valor: user?.matricula }] : []),
-        ...(anomes ? [{ nome: "anomes", valor: anomes }] : [])
+        { nome: "anomes", valor: anomes }
       ];
       const res = await api.post("/searchdocuments/documents", {
         id_template: Number(id_template),
