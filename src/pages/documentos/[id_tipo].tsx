@@ -38,29 +38,40 @@ function DocumentList() {
 
   // Buscar os últimos documentos apenas se NÃO for gestor
   useEffect(() => {
-    const fetchUltimosDocumentos = async () => {
-      try {
-        const cp = [
-          { nome: "tipodedoc", valor: tipodedoc },
-          { nome: "matricula", valor: user?.matricula }
-        ];
+  const fetchUltimosDocumentos = async () => {
+    const cp = [
+      { nome: "tipodedoc", valor: tipodedoc },
+      { nome: "matricula", valor: user?.matricula }
+    ];
 
-        const res = await api.post("/documents/ultimos", {
-          id_template: Number(id_template),
-          cp,
-          campo_anomes: "anomes"
-        });
+    const request = api.post("/documents/ultimos", {
+      id_template: Number(id_template),
+      cp,
+      campo_anomes: "anomes"
+    });
 
-        setDocuments(res.data.documentos || []);
-      } catch (error) {
-        console.error("Erro ao buscar últimos documentos:", error);
+    const timeout = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 2000)
+    );
+
+    try {
+      const result = await Promise.race([request, timeout]);
+
+      if (result && "data" in result) {
+        setDocuments(result.data.documentos || []);
+      } else {
+        console.warn("⚠️ Timeout atingido. Requisição lenta, ignorada.");
       }
-    };
-
-    if (user && user.gestor === false) {
-      fetchUltimosDocumentos();
+    } catch (error) {
+      console.error("Erro ao buscar últimos documentos:", error);
     }
-  }, [id_template, tipodedoc, user]);
+  };
+
+  if (user && user.gestor === false) {
+    fetchUltimosDocumentos();
+  }
+}, [id_template, tipodedoc, user]);
+
 
   const isGestor = user?.gestor === true;
 
