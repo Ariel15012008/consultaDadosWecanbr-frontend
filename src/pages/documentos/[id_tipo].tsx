@@ -8,6 +8,14 @@ import api from "@/utils/axiosInstance";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 interface Documento {
   id_documento: string;
@@ -26,7 +34,31 @@ function DocumentList() {
   const [documents, setDocuments] = useState<Documento[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Buscar o usuário atual e definir matrícula se não for gestor
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [porPagina] = useState(10);
+
+  const totalPaginas = Math.ceil(documents.length / porPagina);
+  const documentosVisiveis = documents.slice(
+    (paginaAtual - 1) * porPagina,
+    paginaAtual * porPagina
+  );
+
+  const gerarPaginas = () => {
+    const paginas: (number | string)[] = [];
+    if (totalPaginas <= 5) {
+      for (let i = 1; i <= totalPaginas; i++) paginas.push(i);
+    } else {
+      if (paginaAtual <= 2) {
+        paginas.push(1, 2, 3, "...", totalPaginas);
+      } else if (paginaAtual >= totalPaginas - 2) {
+        paginas.push(1, "...", totalPaginas - 2, totalPaginas - 1, totalPaginas);
+      } else {
+        paginas.push(1, "...", paginaAtual - 1, paginaAtual, paginaAtual + 1, "...", totalPaginas);
+      }
+    }
+    return paginas;
+  };
+
   useEffect(() => {
     const fetchUser = async () => {
       const res = await api.get("/user/me");
@@ -36,42 +68,40 @@ function DocumentList() {
     fetchUser();
   }, []);
 
-  // Buscar os últimos documentos apenas se NÃO for gestor
   useEffect(() => {
-  const fetchUltimosDocumentos = async () => {
-    const cp = [
-      { nome: "tipodedoc", valor: tipodedoc },
-      { nome: "matricula", valor: user?.matricula }
-    ];
+    const fetchUltimosDocumentos = async () => {
+      const cp = [
+        { nome: "tipodedoc", valor: tipodedoc },
+        { nome: "matricula", valor: user?.matricula }
+      ];
 
-    const request = api.post("/documents/ultimos", {
-      id_template: Number(id_template),
-      cp,
-      campo_anomes: "anomes"
-    });
+      const request = api.post("/documents/ultimos", {
+        id_template: Number(id_template),
+        cp,
+        campo_anomes: "anomes"
+      });
 
-    const timeout = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 2000)
-    );
+      const timeout = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), 2000)
+      );
 
-    try {
-      const result = await Promise.race([request, timeout]);
+      try {
+        const result = await Promise.race([request, timeout]);
 
-      if (result && "data" in result) {
-        setDocuments(result.data.documentos || []);
-      } else {
-        console.warn("⚠️ Timeout atingido. Requisição lenta, ignorada.");
+        if (result && "data" in result) {
+          setDocuments(result.data.documentos || []);
+        } else {
+          console.warn("⚠️ Timeout atingido. Requisição lenta, ignorada.");
+        }
+      } catch (error) {
+        console.error("Erro ao buscar últimos documentos:", error);
       }
-    } catch (error) {
-      console.error("Erro ao buscar últimos documentos:", error);
+    };
+
+    if (user && user.gestor === false) {
+      fetchUltimosDocumentos();
     }
-  };
-
-  if (user && user.gestor === false) {
-    fetchUltimosDocumentos();
-  }
-}, [id_template, tipodedoc, user]);
-
+  }, [id_template, tipodedoc, user]);
 
   const isGestor = user?.gestor === true;
 
@@ -82,14 +112,22 @@ function DocumentList() {
     try {
       const cp = [
         { nome: "tipodedoc", valor: tipodedoc },
-        ...(isGestor && matricula ? [{ nome: "matricula", valor: matricula }] : !isGestor ? [{ nome: "matricula", valor: user?.matricula }] : []),
+        ...(isGestor && matricula
+          ? [{ nome: "matricula", valor: matricula }]
+          : !isGestor
+          ? [{ nome: "matricula", valor: user?.matricula }]
+          : []),
         { nome: "anomes", valor: anomes }
       ];
-      const res = await api.post("/searchdocuments/documents", {
+
+      const res = await api.post("/documents/ultimos", {
         id_template: Number(id_template),
         cp,
+        campo_anomes: "anomes",
       });
-      setDocuments(res.data.documents || []);
+
+      setDocuments(res.data.documentos || []);
+      setPaginaAtual(1);
     } catch (err) {
       console.error("Erro ao buscar documentos:", err);
     } finally {
@@ -110,11 +148,7 @@ function DocumentList() {
 
           <h2 className="text-xl font-bold mb-6 text-center">Buscar Documentos: {tipodedoc}</h2>
 
-          <div
-            className={`w-fit mx-auto grid gap-4 mb-6 grid-cols-1  ${
-              isGestor ? "sm:grid-cols-3" : "sm:grid-cols-2"
-            }`}
-          >
+          <div className={`w-fit mx-auto grid gap-4 mb-6 grid-cols-1 ${isGestor ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
             {isGestor && (
               <input
                 type="text"
@@ -139,50 +173,85 @@ function DocumentList() {
           {isLoading ? (
             <p className="text-center">Carregando documentos...</p>
           ) : (
-            <div className="overflow-x-auto border border-gray-600 rounded">
-              <table className="w-full text-sm text-left text-white">
-                <thead className="text-xs uppercase text-gray-300 bg-[#2c2c40]">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Ano/mês</th>
-                    <th className="px-4 py-3 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {documents.length === 0 ? (
+            <>
+              <div className="overflow-x-auto border border-gray-600 rounded">
+                <table className="w-full text-sm text-left text-white">
+                  <thead className="text-xs uppercase text-gray-300 bg-[#2c2c40]">
                     <tr>
-                      <td colSpan={2} className="text-center py-4 text-gray-400">
-                        Nenhum documento encontrado.
-                      </td>
+                      <th className="px-4 py-3 text-left">Ano/mês</th>
+                      <th className="px-4 py-3 text-right">Ações</th>
                     </tr>
-                  ) : (
-                    documents.map((doc) => (
-                      <tr
-                        key={doc.id_documento}
-                        className="border-t border-gray-700 hover:bg-gray-800"
-                      >
-                        <td className="px-4 py-2 text-left">{doc.anomes}</td>
-                        <td className="px-4 py-2 text-right">
-                          <Button
-                            onClick={() =>
-                              navigate("/documento/preview", {
-                                state: {
-                                  id_template,
-                                  id_documento: doc.id_documento,
-                                  valor: tipodedoc,
-                                },
-                              })
-                            }
-                            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm"
-                          >
-                            Visualizar
-                          </Button>
+                  </thead>
+                  <tbody>
+                    {documentosVisiveis.length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="text-center py-4 text-gray-400">
+                          Nenhum documento encontrado.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ) : (
+                      documentosVisiveis.map((doc) => (
+                        <tr key={doc.id_documento} className="border-t border-gray-700 hover:bg-gray-800">
+                          <td className="px-4 py-2 text-left">{doc.anomes}</td>
+                          <td className="px-4 py-2 text-right">
+                            <Button
+                              onClick={() =>
+                                navigate("/documento/preview", {
+                                  state: {
+                                    id_template,
+                                    id_documento: doc.id_documento,
+                                    valor: tipodedoc,
+                                  },
+                                })
+                              }
+                              className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm"
+                            >
+                              Visualizar
+                            </Button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalPaginas > 1 && (
+                <div className="flex justify-center mt-6 w-full overflow-x-auto px-2">
+                  <Pagination>
+                    <PaginationContent className="flex flex-wrap justify-center gap-1">
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                          className={`hover:bg-gray-700 cursor-pointer ${paginaAtual === 1 ? "pointer-events-none opacity-50" : ""}`}
+                        />
+                      </PaginationItem>
+                      {gerarPaginas().map((p, i) => (
+                        <PaginationItem key={i}>
+                          {typeof p === "string" ? (
+                            <span className="px-3 py-1 text-white">{p}</span>
+                          ) : (
+                            <PaginationLink
+                              isActive={paginaAtual === p}
+                              onClick={() => setPaginaAtual(p)}
+                              className="hover:bg-gray-700 cursor-pointer"
+                            >
+                              {p}
+                            </PaginationLink>
+                          )}
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
+                          className={`hover:bg-gray-700 cursor-pointer ${paginaAtual === totalPaginas ? "pointer-events-none opacity-50" : ""}`}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>
