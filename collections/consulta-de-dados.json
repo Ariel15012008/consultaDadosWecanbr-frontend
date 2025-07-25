@@ -1,0 +1,57 @@
+{
+  "info": {
+    "_postman_id": "077ffa4c-c72b-4928-a303-d4d0fd11a886",
+    "name": "consulta de dados",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "c7689a35-32d2-410a-b9b1-38423ef2865c"
+  },
+  "item": [
+    {
+      "name": "New Request",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8000/documents/holerite/montar",
+          "host": [
+            "http:"
+          ],
+          "path": [
+            "127.0.0.1:8000",
+            "documents",
+            "holerite",
+            "montar"
+          ],
+          "query": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"matricula\": \"11700\",\n  \"competencia\": \"202504\",\n  \"lote\": \"365134\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": []
+    },
+    {
+      "name": "rota",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "https://example.com",
+          "protocol": "http",
+          "host": [
+            "example",
+            "com"
+          ]
+        },
+        "header": [],
+        "body": {}
+      }
+    }
+  ]
+}

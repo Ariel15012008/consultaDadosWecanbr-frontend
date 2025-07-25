@@ -23,7 +23,8 @@ function App() {
       {/* ROTA PROTEGIDA */}
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Home />} />
-        <Route path="/documentos/:id_template" element={<IdTemplate />} />
+        <Route path="/documentos" element={<IdTemplate />} />
+        {/* <Route path="/documentos/:id_template" element={<IdTemplate />} /> */}
         <Route path="/documento/preview" element={<PreviewPDF />} />
       </Route>
     </Routes>

@@ -88,17 +88,17 @@ export default function Header() {
         <div className="hidden md:flex items-center">
           {isAuthenticated ? (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+              <DropdownMenuTrigger asChild className="hover:cursor-pointer">
                 <Button variant="ghost" className="flex items-center hover:bg-blue-700">
                   <IoPersonCircle className="!w-8 !h-8" />
                   <span>{user?.nome || "Usuário"}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-white border border-blue-100">
-                <DropdownMenuItem onClick={() => navigate("/perfil")}>
-                  <BiUser className="mr-2" /> Perfil
+              <DropdownMenuContent className="w-56 bg-white border border-blue-100 hover:cursor-pointer h">
+                <DropdownMenuItem className="hover:cursor-pointer hover:bg-gray-200" onClick={() => navigate("/perfil")}>
+                  <BiUser className="mr-2 " /> Perfil
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={logout} className="text-red-600">
+                <DropdownMenuItem onClick={logout} className="text-red-600 hover:cursor-pointer hover:bg-gray-200">
                   <BiLogOut className="mr-2" /> Sair
                 </DropdownMenuItem>
               </DropdownMenuContent>

@@ -1,3 +1,4 @@
+// src/pages/Home.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -16,7 +17,7 @@ interface TemplateGED {
   id_tipo: string;
 }
 
-function Home() {
+export default function Home() {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [idTemplate, setIdTemplate] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -87,10 +88,14 @@ function Home() {
             {documentos.map(({ id, nome }) => (
               <div
                 key={id}
-                onClick={() =>
-                  navigate(`/documentos/${idTemplate}?valor=${encodeURIComponent(nome)}`)
-                }
                 className="bg-[#1e1e2f] text-white rounded-lg cursor-pointer hover:shadow-xl transition-all hover:translate-x-1"
+                onClick={() => {
+                  // ANTIGO: navegava com idTemplate e nome
+                  // navigate(`/documentos/${idTemplate}?valor=${encodeURIComponent(nome)}`);
+
+                  // NOVO: abre a tela de pesquisar holerite sem parâmetros na URL
+                  navigate("/documentos");
+                }}
               >
                 <div className="flex flex-col items-center justify-center p-6">
                   <FileText size={40} className="mb-2" />
@@ -106,7 +111,5 @@ function Home() {
         <Footer />
       </footer>
     </div>
-  );
+);
 }
-
-export default Home;
