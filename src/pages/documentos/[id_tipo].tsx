@@ -21,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 // --- Tipos ---
 interface DocumentoSummary {
   id_documento: string; // equivale a 'lote'
-  anomes: string;       // competência no formato 'YYYYMM'
+  anomes: string; // competência no formato 'YYYYMM'
 }
 interface Cabecalho {
   empresa: string;
@@ -110,9 +110,9 @@ export default function DocumentList() {
   function formatCompetencia(input: string): string {
     if (input.includes("/")) {
       const [mm, yyyy] = input.split("/");
-      return `${yyyy}${mm.padStart(2, '0')}`;
+      return `${yyyy}${mm.padStart(2, "0")}`;
     }
-    if (input.includes("-")) return input.split('-').join('');
+    if (input.includes("-")) return input.split("-").join("");
     return input;
   }
 
@@ -124,7 +124,7 @@ export default function DocumentList() {
       const payload = { matricula, competencia: formatCompetencia(anomes) };
       const res = await api.post<any[]>("/documents/holerite/buscar", payload);
       // Mapeia todos os resultados, mesmo que haja múltiplos para o mesmo mês
-      const mapped: DocumentoSummary[] = res.data.map(item => ({
+      const mapped: DocumentoSummary[] = res.data.map((item) => ({
         id_documento: String(item.lote),
         anomes: item.competencia,
       }));
@@ -140,7 +140,11 @@ export default function DocumentList() {
   // Monta holerite completo e navega para Preview
   const visualizarHolerite = async (doc: DocumentoSummary) => {
     try {
-      const payload = { matricula, competencia: doc.anomes, lote: doc.id_documento };
+      const payload = {
+        matricula,
+        competencia: doc.anomes,
+        lote: doc.id_documento,
+      };
       const res = await api.post<{
         cabecalho: Cabecalho;
         eventos: Evento[];
@@ -159,22 +163,40 @@ export default function DocumentList() {
       <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 z-0" />
       <main className="relative z-10 flex flex-col flex-grow items-center pt-32 px-4 pb-10">
         <div className="w-full max-w-6xl bg-[#1e1e2f] text-white rounded-xl shadow-2xl p-6">
-          <Button variant="ghost" onClick={() => navigate("/")} className="mb-4 text-white hover:text-gray-300">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/")}
+            className="mb-4 text-white hover:text-gray-300"
+          >
             <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
           </Button>
-          <h2 className="text-xl font-bold mb-6 text-center">Buscar Holerite</h2>
-          <div className={`w-fit mx-auto grid gap-4 ${user?.gestor ? "sm:grid-cols-3" : "sm:grid-cols-2"} mb-6`}>
+          <h2 className="text-xl font-bold mb-6 text-center">
+            Buscar Holerite
+          </h2>
+          <div
+            className={`w-fit mx-auto grid gap-4 ${
+              user?.gestor ? "sm:grid-cols-3" : "sm:grid-cols-2"
+            } mb-6`}
+          >
             {user?.gestor && (
               <input
                 type="text"
                 placeholder="Matrícula"
                 className="bg-[#2c2c40] text-white border p-2 rounded"
                 value={matricula}
-                onChange={e => setMatricula(e.target.value)}
+                onChange={(e) => setMatricula(e.target.value)}
               />
             )}
-            <CustomMonthPicker value={anomes} onChange={setAnomes} placeholder="Selecionar período" />
-            <Button onClick={handleSearch} disabled={isLoading || !anomes} className="bg-green-600 hover:bg-green-500">
+            <CustomMonthPicker
+              value={anomes}
+              onChange={setAnomes}
+              placeholder="Selecionar período"
+            />
+            <Button
+              onClick={handleSearch}
+              disabled={isLoading || !anomes}
+              className="bg-green-600 hover:bg-green-500"
+            >
               {isLoading ? "Buscando..." : "Buscar"}
             </Button>
           </div>
@@ -182,22 +204,40 @@ export default function DocumentList() {
             <p className="text-center">Carregando documentos...</p>
           ) : (
             <div className="overflow-x-auto border border-gray-600 rounded">
-              <table className="w-full text-sm text-left text-white">
+              <table className="w-full text-sm text-left text-white table-fixed">
                 <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
                   <tr>
-                    <th className="px-4 py-3 text-left">Ano/mês</th>
-                    <th className="px-4 py-3 text-right">Ações</th>
+                    <th className="px-4 py-3 w-1/3 text-left">Ano/mês</th>
+                    <th className="px-4 py-3 w-1/3 text-center">Lote</th>
+                    <th className="px-4 py-3 w-1/3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {documentosVisiveis.length === 0 ? (
-                    <tr><td colSpan={2} className="text-center py-4 text-gray-400">Nenhum documento encontrado.</td></tr>
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="text-center py-4 text-gray-400"
+                      >
+                        Nenhum documento encontrado.
+                      </td>
+                    </tr>
                   ) : (
-                    documentosVisiveis.map(doc => (
-                      <tr key={doc.id_documento} className="border-t border-gray-700 hover:bg-gray-800">
+                    documentosVisiveis.map((doc) => (
+                      <tr
+                        key={doc.id_documento}
+                        className="border-t border-gray-700 hover:bg-gray-800"
+                      >
                         <td className="px-4 py-2 text-left">{doc.anomes}</td>
+                        <td className="px-4 py-2 text-center">
+                          {doc.id_documento}
+                        </td>{" "}
+                        {/* Lote centralizado */}
                         <td className="px-4 py-2 text-right">
-                          <Button onClick={() => visualizarHolerite(doc)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm">
+                          <Button
+                            onClick={() => visualizarHolerite(doc)}
+                            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm"
+                          >
                             Visualizar
                           </Button>
                         </td>
@@ -213,17 +253,39 @@ export default function DocumentList() {
               <Pagination>
                 <PaginationContent className="flex flex-wrap justify-center gap-1">
                   <PaginationItem>
-                    <PaginationPrevious onClick={() => setPaginaAtual(p => Math.max(1, p - 1))} className={paginaAtual===1?"pointer-events-none opacity-50":"hover:bg-gray-700 cursor-pointer"} />
+                    <PaginationPrevious
+                      onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                      className={
+                        paginaAtual === 1
+                          ? "pointer-events-none opacity-50"
+                          : "hover:bg-gray-700 cursor-pointer"
+                      }
+                    />
                   </PaginationItem>
-                  {Array.from({ length: totalPaginas }, (_, i) => i + 1).map(p => (
-                    <PaginationItem key={p}>
-                      <PaginationLink isActive={paginaAtual===p} onClick={() => setPaginaAtual(p)} className="hover:bg-gray-700 cursor-pointer">
-                        {p}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
+                  {Array.from({ length: totalPaginas }, (_, i) => i + 1).map(
+                    (p) => (
+                      <PaginationItem key={p}>
+                        <PaginationLink
+                          isActive={paginaAtual === p}
+                          onClick={() => setPaginaAtual(p)}
+                          className="hover:bg-gray-700 cursor-pointer"
+                        >
+                          {p}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  )}
                   <PaginationItem>
-                    <PaginationNext onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))} className={paginaAtual===totalPaginas?"pointer-events-none opacity-50":"hover:bg-gray-700 cursor-pointer"} />
+                    <PaginationNext
+                      onClick={() =>
+                        setPaginaAtual((p) => Math.min(totalPaginas, p + 1))
+                      }
+                      className={
+                        paginaAtual === totalPaginas
+                          ? "pointer-events-none opacity-50"
+                          : "hover:bg-gray-700 cursor-pointer"
+                      }
+                    />
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
