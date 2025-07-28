@@ -207,7 +207,7 @@ export default function DocumentList() {
               <table className="w-full text-sm text-left text-white">
         <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
           <tr>
-            <th className="px-4 py-3 text-left min-w-[90px]">Ano/mês</th>
+            <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
             <th className="py-3 text-center min-w-[100px]">Lote</th>
             <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
           </tr>
