@@ -204,48 +204,42 @@ export default function DocumentList() {
             <p className="text-center">Carregando documentos...</p>
           ) : (
             <div className="overflow-x-auto border border-gray-600 rounded">
-              <table className="w-full text-sm text-left text-white table-fixed">
-                <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
-                  <tr>
-                    <th className="px-4 py-3 w-1/3 text-left">Ano/mês</th>
-                    <th className="px-4 py-3 w-1/3 text-center">Lote</th>
-                    <th className="px-4 py-3 w-1/3 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {documentosVisiveis.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={3}
-                        className="text-center py-4 text-gray-400"
-                      >
-                        Nenhum documento encontrado.
-                      </td>
-                    </tr>
-                  ) : (
-                    documentosVisiveis.map((doc) => (
-                      <tr
-                        key={doc.id_documento}
-                        className="border-t border-gray-700 hover:bg-gray-800"
-                      >
-                        <td className="px-4 py-2 text-left">{doc.anomes}</td>
-                        <td className="px-4 py-2 text-center">
-                          {doc.id_documento}
-                        </td>{" "}
-                        {/* Lote centralizado */}
-                        <td className="px-4 py-2 text-right">
-                          <Button
-                            onClick={() => visualizarHolerite(doc)}
-                            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm"
-                          >
-                            Visualizar
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+              <table className="w-full text-sm text-left text-white">
+        <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
+          <tr>
+            <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
+            <th className="py-3 text-center min-w-[100px]">Lote</th>
+            <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {documentosVisiveis.length === 0 ? (
+            <tr>
+              <td colSpan={3} className="text-center py-4 text-gray-400">
+                Nenhum documento encontrado.
+              </td>
+            </tr>
+          ) : (
+            documentosVisiveis.map((doc) => (
+              <tr
+                key={doc.id_documento}
+                className="border-t border-gray-700 hover:bg-gray-800 transition-colors"
+              >
+                <td className="px-4 py-2 text-left">{doc.anomes}</td>
+                <td className="px-4 py-2 text-center">{doc.id_documento}</td>
+                <td className="px-4 py-2 text-right">
+                  <Button
+                    onClick={() => visualizarHolerite(doc)}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors"
+                  >
+                    Visualizar
+                  </Button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
             </div>
           )}
           {totalPaginas > 1 && (
