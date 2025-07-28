@@ -19,7 +19,7 @@ interface TemplateGED {
 
 export default function Home() {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
-  const [idTemplate, setIdTemplate] = useState<string | null>(null);
+  // Removido idTemplate pois não está sendo utilizado
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [loadingDocs, setLoadingDocs] = useState<boolean>(false);
   const navigate = useNavigate();
@@ -33,13 +33,13 @@ export default function Home() {
         setIsAuthenticated(true);
         setLoadingDocs(true);
 
-        const [resDocs, resTemplates] = await Promise.all([
+        const [resDocs] = await Promise.all([
           api.get<Documento[]>("/documents"),
           api.get<TemplateGED[]>("/searchdocuments/templates"),
         ]);
 
         setDocumentos(resDocs.data);
-        setIdTemplate(resTemplates.data[0]?.id_tipo || null);
+        // Removido setIdTemplate pois não está sendo utilizado
       } catch (error) {
         setIsAuthenticated(false);
         console.warn("Usuário não autenticado:", error);
