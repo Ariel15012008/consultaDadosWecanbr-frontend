@@ -4,7 +4,6 @@ import Cookies from "js-cookie";
 import api from "@/utils/axiosInstance";
 
 export function PublicRoute() {
-  const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
 
