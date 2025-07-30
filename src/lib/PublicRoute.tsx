@@ -1,28 +1,14 @@
-import { useEffect, useState } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
-import api from "@/utils/axiosInstance";
+import { Navigate, Outlet } from 'react-router-dom'
+import Cookies from "js-cookie"
 
 export function PublicRoute() {
-  const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const loggedUser = Cookies.get("logged_user")
 
-  useEffect(() => {
-    const verificarAutenticacao = async () => {
-      try {
-        await api.get("/user/me"); // 🔐 Confirma se está logado
-        setIsAuthenticated(true);
-      } catch {
-        setIsAuthenticated(false); // ❌ Não logado
-      }
-    };
-
-    verificarAutenticacao();
-  }, [location.pathname]);
-
+  const isAuthenticated = !!loggedUser
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/" replace />
   }
 
-  return <Outlet />;
+  return <Outlet />
 }
