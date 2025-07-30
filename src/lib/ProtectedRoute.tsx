@@ -1,62 +1,38 @@
-import { useEffect } from "react"
-import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom"
-import api from "@/utils/axiosInstance"
-import Cookies from "js-cookie"
+import { useEffect, useState } from "react";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
+import api from "@/utils/axiosInstance";
 
 export function ProtectedRoute() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const pathname = location.pathname
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
 
-  const loggedUser = Cookies.get("logged_user")
-  const now = Date.now()
-  const twoMinutes = 2 * 60 * 1000
-
-  const isAuthenticated = !!loggedUser //&& !!token
+  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     const verificarToken = async () => {
-      if (loggedUser) {
-        const loggedTime = parseInt(loggedUser)
-        const timeDiff = now - loggedTime
-
-        if (timeDiff > twoMinutes) {
-          try {
-            // Tenta renovar o token
-            await api.post("/user/refresh")
-            localStorage.setItem("logged_user", Date.now().toString())
-          } catch (err) {
-            // Se falhar, desloga e redireciona
-            localStorage.removeItem("access_token")
-            localStorage.removeItem("logged_user")
-            navigate("/login", { replace: true })
-            return
-          }
-        }
-
-        const publicRoutes = ["/login", "/register", "/password", "/resetPassword"]
-        if (publicRoutes.includes(pathname)) {
-          navigate("/home", { replace: true })
-        }
-
-        if (pathname.startsWith("/resetPassword")) {
-          const urlParams = new URLSearchParams(location.search)
-          if (!urlParams.get("token")) {
-            navigate("/password", { replace: true })
-          }
-        }
+      try {
+        await api.get("/user/me"); // 🔐 Valida diretamente com backend
+        setIsAuthenticated(true);
+      } catch (error) {
+        setIsAuthenticated(false);
+        navigate("/login", { replace: true }); // ❌ Token inválido, redireciona
+      } finally {
+        setLoading(false);
       }
-    }
+    };
 
-    verificarToken()
-  }, [loggedUser, pathname, navigate, location.search, now])
+    verificarToken();
+  }, [pathname, navigate]);
 
-  if (
-    ["/home", "/resetPassword", "/resetPassword/*"].includes(pathname) &&
-    !isAuthenticated
-  ) {
-    return <Navigate to="/login" replace />
+  if (loading) {
+    return <div className="text-center p-4">Carregando...</div>;
   }
 
-  return <Outlet />
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Outlet />;
 }
