@@ -19,8 +19,17 @@ import { IoPersonCircle } from "react-icons/io5";
 import { RxHamburgerMenu } from "react-icons/rx";
 import { HiMail, HiHome } from "react-icons/hi";
 import api from "@/utils/axiosInstance";
+import React from "react";
 
-export default function Header() {
+// Extende a interface Window para incluir __MEMO_LOGGED_USER__
+declare global {
+  interface Window {
+    __MEMO_LOGGED_USER__?: string | null;
+  }
+}
+
+// Componente principal
+function Header() {
   const [user, setUser] = useState<{ nome: string; email: string } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loadingUserInfo, setLoadingUserInfo] = useState(true);
@@ -163,3 +172,11 @@ export default function Header() {
     </header>
   );
 }
+
+// ⛔️ Evita re-renderização se `logged_user` não mudou
+export default React.memo(Header, () => {
+  const current = localStorage.getItem("logged_user");
+  if (window.__MEMO_LOGGED_USER__ === current) return true;
+  window.__MEMO_LOGGED_USER__ = current;
+  return false;
+});
