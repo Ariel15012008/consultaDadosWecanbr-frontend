@@ -1,69 +1,62 @@
-import { useEffect, useState } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
-import api from "@/utils/axiosInstance";
-import Cookies from "js-cookie";
+import { useEffect } from "react"
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom"
+import api from "@/utils/axiosInstance"
+import Cookies from "js-cookie"
 
 export function ProtectedRoute() {
-  const location = useLocation();
+  const navigate = useNavigate()
+  const location = useLocation()
+  const pathname = location.pathname
 
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const loggedUser = Cookies.get("logged_user")
+  const now = Date.now()
+  const twoMinutes = 2 * 60 * 1000
+
+  const isAuthenticated = !!loggedUser //&& !!token
 
   useEffect(() => {
     const verificarToken = async () => {
-      const waitForCookie = () =>
-        new Promise<string | undefined>((resolve) => {
-          const interval = setInterval(() => {
-            const value = Cookies.get("logged_user");
-            if (value) {
-              clearInterval(interval);
-              resolve(value);
-            }
-          }, 50);
-          setTimeout(() => {
-            clearInterval(interval);
-            resolve(undefined);
-          }, 2000); // espera no máximo 2 segundos
-        });
-
-      const loggedUser = await waitForCookie();
-      const now = Date.now();
-      const twoMinutes = 2 * 60 * 1000;
-
       if (loggedUser) {
-        const loggedTime = parseInt(loggedUser);
-        const timeDiff = now - loggedTime;
+        const loggedTime = parseInt(loggedUser)
+        const timeDiff = now - loggedTime
 
         if (timeDiff > twoMinutes) {
           try {
-            await api.post("/user/refresh");
-            localStorage.setItem("logged_user", Date.now().toString());
-            setIsAuthenticated(true);
+            // Tenta renovar o token
+            await api.post("/user/refresh")
+            localStorage.setItem("logged_user", Date.now().toString())
           } catch (err) {
-            localStorage.removeItem("access_token");
-            localStorage.removeItem("logged_user");
-            setIsAuthenticated(false);
+            // Se falhar, desloga e redireciona
+            localStorage.removeItem("access_token")
+            localStorage.removeItem("logged_user")
+            navigate("/login", { replace: true })
+            return
           }
-        } else {
-          setIsAuthenticated(true);
         }
-      } else {
-        setIsAuthenticated(false);
+
+        const publicRoutes = ["/login", "/register", "/password", "/resetPassword"]
+        if (publicRoutes.includes(pathname)) {
+          navigate("/home", { replace: true })
+        }
+
+        if (pathname.startsWith("/resetPassword")) {
+          const urlParams = new URLSearchParams(location.search)
+          if (!urlParams.get("token")) {
+            navigate("/password", { replace: true })
+          }
+        }
       }
+    }
 
-      setLoading(false);
-    };
+    verificarToken()
+  }, [loggedUser, pathname, navigate, location.search, now])
 
-    verificarToken();
-  }, [location.pathname]);
-
-  if (loading) {
-    return <div className="text-center p-4">Carregando...</div>;
+  if (
+    ["/home", "/resetPassword", "/resetPassword/*"].includes(pathname) &&
+    !isAuthenticated
+  ) {
+    return <Navigate to="/login" replace />
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <Outlet />;
+  return <Outlet />
 }
