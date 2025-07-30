@@ -47,8 +47,6 @@ export function ProtectedRoute() {
         }
       } else {
         setIsAuthenticated(false);
-        navigate("/login", { replace: true });
-        return;
       }
 
       setLoading(false);
