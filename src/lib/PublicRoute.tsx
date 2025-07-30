@@ -7,7 +7,6 @@ export function PublicRoute() {
   const location = useLocation();
   const pathname = location.pathname;
 
-  const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -36,16 +35,10 @@ export function PublicRoute() {
       } else {
         setIsAuthenticated(false);
       }
-
-      setLoading(false);
     };
 
     verificarToken();
   }, [pathname]);
-
-  if (loading) {
-    return <div className="text-center p-4">Carregando...</div>;
-  }
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
