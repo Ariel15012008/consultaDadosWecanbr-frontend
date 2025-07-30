@@ -127,7 +127,7 @@ export default function Header() {
                   <IoPersonCircle className="text-4xl mb-1" />
                   <div className="max-w-full break-words">
                     {loadingUserInfo ? (
-                      <p className="text-white text-sm">Carregando olaaaaaa...</p>
+                      <p className="text-white text-sm">Carregando ...</p>
                     ) : (
                       <>
                         <p className="font-semibold text-white text-sm">{user?.nome}</p>
