@@ -66,6 +66,8 @@ export default function DocumentList() {
   const [documents, setDocuments] = useState<DocumentoSummary[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
   const porPagina = 10;
 
   const totalPaginas = Math.ceil(documents.length / porPagina);
@@ -99,9 +101,15 @@ export default function DocumentList() {
   // Carrega dados do usuário
   useEffect(() => {
     const fetchUser = async () => {
-      const res = await api.get("/user/me");
-      setUser(res.data);
-      if (!res.data.gestor) setMatricula(String(res.data.matricula));
+      try {
+        const res = await api.get("/user/me");
+        setUser(res.data);
+        if (!res.data.gestor) setMatricula(String(res.data.matricula));
+      } catch (err) {
+        console.error("Erro ao buscar usuário:", err);
+      } finally {
+        setLoadingUser(false); // Finaliza carregamento
+      }
     };
     fetchUser();
   }, []);
@@ -139,6 +147,7 @@ export default function DocumentList() {
 
   // Monta holerite completo e navega para Preview
   const visualizarHolerite = async (doc: DocumentoSummary) => {
+    setLoadingPreviewId(doc.id_documento);
     try {
       const payload = {
         matricula,
@@ -154,8 +163,18 @@ export default function DocumentList() {
       navigate("/documento/preview", { state: res.data });
     } catch (err) {
       console.error("Erro ao visualizar holerite:", err);
+    } finally {
+      setLoadingPreviewId(null); // ⬅ Libera o botão
     }
   };
+
+  if (loadingUser) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 text-white text-xl font-bold">
+        Carregando
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden">
@@ -205,41 +224,53 @@ export default function DocumentList() {
           ) : (
             <div className="overflow-x-auto border border-gray-600 rounded">
               <table className="w-full text-sm text-left text-white">
-        <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
-          <tr>
-            <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
-            <th className="py-3 text-center min-w-[100px]">Lote</th>
-            <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {documentosVisiveis.length === 0 ? (
-            <tr>
-              <td colSpan={3} className="text-center py-4 text-gray-400">
-                Nenhum documento encontrado.
-              </td>
-            </tr>
-          ) : (
-            documentosVisiveis.map((doc) => (
-              <tr
-                key={doc.id_documento}
-                className="border-t border-gray-700 hover:bg-gray-800 transition-colors"
-              >
-                <td className="px-4 py-2 text-left">{doc.anomes}</td>
-                <td className="px-4 py-2 text-center">{doc.id_documento}</td>
-                <td className="px-4 py-2 text-right">
-                  <Button
-                    onClick={() => visualizarHolerite(doc)}
-                    className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors"
-                  >
-                    Visualizar
-                  </Button>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+                <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
+                  <tr>
+                    <th className="px-4 py-3 text-left min-w-[120px]">
+                      Ano/mês
+                    </th>
+                    <th className="py-3 text-center min-w-[100px]">Lote</th>
+                    <th className="px-10 py-3 text-right min-w-[100px]">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documentosVisiveis.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="text-center py-4 text-gray-400"
+                      >
+                        Nenhum documento encontrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    documentosVisiveis.map((doc) => (
+                      <tr
+                        key={doc.id_documento}
+                        className="border-t border-gray-700 hover:bg-gray-800 transition-colors"
+                      >
+                        <td className="px-4 py-2 text-left">{doc.anomes}</td>
+                        <td className="px-4 py-2 text-center">
+                          {doc.id_documento}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <Button
+                            onClick={() => visualizarHolerite(doc)}
+                            disabled={loadingPreviewId === doc.id_documento}
+                            className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {loadingPreviewId === doc.id_documento
+                              ? "Abrindo..."
+                              : "Visualizar"}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
           {totalPaginas > 1 && (

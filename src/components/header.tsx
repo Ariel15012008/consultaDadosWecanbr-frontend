@@ -14,7 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { BiLogOut, BiUser } from "react-icons/bi";
+import { BiLogOut } from "react-icons/bi"; {/* BiUser */ }
 import { IoPersonCircle } from "react-icons/io5";
 import { RxHamburgerMenu } from "react-icons/rx";
 import { HiMail, HiHome } from "react-icons/hi";
@@ -72,17 +72,17 @@ export default function Header() {
   return (
     <header className="fixed top-0 w-full bg-gradient-to-r from-blue-800 to-blue-400 text-white shadow-md z-50">
       <div className="container mx-auto flex items-center justify-between pt-4 pb-4 pl-1">
-        <Link to="/" className="flex items-center text-xl font-bold whitespace-nowrap gap-2">
-          <span className="bg-white text-blue-600 px-2 py-1 rounded">superRH</span>
+        <Link to="/" className="flex items-center text-xl font-bold whitespace-nowrap gap-2 cursor-default">
+          <span className="bg-white text-blue-600 px-2 py-1 rounded">SuperRH</span>
         </Link>
 
         <nav className="hidden md:flex space-x-4 pl-10">
           <Link to="/" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50 ml-4">
             <HiHome className="mr-1" /> Início
           </Link>
-          <Link to="/contato" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
+          {/* <Link to="/contato" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
             <HiMail className="mr-1" /> Contato
-          </Link>
+          </Link> */}
         </nav>
 
         <div className="hidden md:flex items-center">
@@ -95,9 +95,9 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56 bg-white border border-blue-100 hover:cursor-pointer h">
-                <DropdownMenuItem className="hover:cursor-pointer hover:bg-gray-200" onClick={() => navigate("/perfil")}>
+                {/* <DropdownMenuItem className="hover:cursor-pointer hover:bg-gray-200" onClick={() => navigate("/perfil")}>
                   <BiUser className="mr-2 " /> Perfil
-                </DropdownMenuItem>
+                </DropdownMenuItem> */}
                 <DropdownMenuItem onClick={logout} className="text-red-600 hover:cursor-pointer hover:bg-gray-200">
                   <BiLogOut className="mr-2" /> Sair
                 </DropdownMenuItem>
@@ -127,7 +127,7 @@ export default function Header() {
                   <IoPersonCircle className="text-4xl mb-1" />
                   <div className="max-w-full break-words">
                     {loadingUserInfo ? (
-                      <p className="text-white text-sm">Carregando ...</p>
+                      <p className="text-white text-sm">Carregando</p>
                     ) : (
                       <>
                         <p className="font-semibold text-white text-sm">{user?.nome}</p>

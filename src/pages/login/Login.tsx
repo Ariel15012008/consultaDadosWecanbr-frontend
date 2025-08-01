@@ -38,11 +38,17 @@ export default function LoginPage() {
       await api.post("/user/login", data, { withCredentials: true });
       navigate("/");
     } catch (err: any) {
-      setLoginError(
-        err?.response?.data?.detail ||
-          err?.message ||
-          "Erro ao conectar com o servidor"
-      );
+      if (err?.message === "Network Error") {
+        setLoginError(
+          "Não foi possível conectar ao servidor. Verifique sua conexão."
+        );
+      } else {
+        setLoginError(
+          err?.response?.data?.detail ||
+            err?.message ||
+            "Erro ao conectar com o servidor"
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -93,12 +99,12 @@ export default function LoginPage() {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </div>
           </div>
-          <a
+          {/* <a
             href="/forgot-password"
             className=" text-sm text-gray-200 mt-1 flex justify-end hover:text-white hover:underline cursor-pointer "
           >
             Esqueceu sua senha?
-          </a>
+          </a> */}
           {errors.senha && (
             <p className="text-red-400 text-sm mt-1">{errors.senha.message}</p>
           )}
