@@ -5,50 +5,58 @@ import Cookies from "js-cookie"
 
 export function ProtectedRoute() {
   const navigate = useNavigate()
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const pathname = location.pathname
 
-  const loggedUser      = Cookies.get("logged_user")
-  const now             = Date.now()
-  const twoMinutes      = 2 * 60 * 1000
-  const isAuthenticated = !!loggedUser
+  const loggedUser = Cookies.get("logged_user")
+  const now = Date.now()
+  const twoMinutes = 2 * 60 * 1000
 
-  // 1) Se existir cookie, tenta refresh automático a cada 2 minutos
+  const isAuthenticated = !!loggedUser //&& !!token
+
   useEffect(() => {
-    if (!loggedUser) return
-
     const verificarToken = async () => {
-      const loggedTime = parseInt(loggedUser, 10)
-      const elapsed    = now - loggedTime
+      if (loggedUser) {
+        const loggedTime = parseInt(loggedUser)
+        const timeDiff = now - loggedTime
 
-      if (elapsed > twoMinutes) {
-        try {
-          await api.post("/user/refresh")
-          Cookies.set("logged_user", Date.now().toString())
-        } catch {
-          // refresh falhou → limpa e manda para /login
-          Cookies.remove("access_token")
-          Cookies.remove("logged_user")
-          navigate("/login", { replace: true })
-          return
+        if (timeDiff > twoMinutes) {
+          try {
+            // Tenta renovar o token
+            await api.post("/user/refresh")
+            localStorage.setItem("logged_user", Date.now().toString())
+          } catch (err) {
+            // Se falhar, desloga e redireciona
+            localStorage.removeItem("access_token")
+            localStorage.removeItem("logged_user")
+            navigate("/login", { replace: true })
+            return
+          }
+        }
+
+        const publicRoutes = ["/login", "/register", "/password", "/resetPassword"]
+        if (publicRoutes.includes(pathname)) {
+          navigate("/home", { replace: true })
+        }
+
+        if (pathname.startsWith("/resetPassword")) {
+          const urlParams = new URLSearchParams(location.search)
+          if (!urlParams.get("token")) {
+            navigate("/password", { replace: true })
+          }
         }
       }
     }
 
     verificarToken()
-  }, [loggedUser, navigate, now])
+  }, [loggedUser, pathname, navigate, location.search, now])
 
-  // 2) Defina aqui apenas as rotas protegidas
-  const protectedExact   = ["/documentos"]
-  const protectedPrefix  = ["/documento/preview"]
-  const needsAuth =
-    protectedExact.includes(pathname) ||
-    protectedPrefix.some(pref => pathname.startsWith(pref))
-
-  // 3) Se for rota protegida e não estiver logado, manda pra /login
-  if (needsAuth && !isAuthenticated) {
+  if (
+    ["/home", "/resetPassword", "/resetPassword/*"].includes(pathname) &&
+    !isAuthenticated
+  ) {
     return <Navigate to="/login" replace />
   }
 
-  // 4) Caso contrário, renderiza a rota filha normalmente
   return <Outlet />
 }
