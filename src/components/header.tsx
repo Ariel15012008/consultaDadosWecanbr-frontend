@@ -36,7 +36,7 @@ export default function Header() {
         </Link>
 
         <nav className="hidden md:flex space-x-4 pl-10">
-          <Link to="/" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50 ">
+          <Link to="/" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50 ml-10 ">
             <HiHome className="mr-1" /> Início
           </Link>
           {/* <Link to="/contato" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
