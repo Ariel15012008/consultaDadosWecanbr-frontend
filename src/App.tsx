@@ -20,11 +20,11 @@ function App() {
         <Route path="/register" element={<Cadastro />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/" element={<Home />} />
       </Route>
 
       {/* ROTA PROTEGIDA */}
       <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<Home />} />
         <Route path="/documentos" element={<IdTemplate />} />
         {/* <Route path="/documentos/:id_template" element={<IdTemplate />} /> */}
         <Route path="/documento/preview" element={<PreviewPDF />} />
