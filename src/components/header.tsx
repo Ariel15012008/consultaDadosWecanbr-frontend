@@ -32,11 +32,11 @@ export default function Header() {
     <header className="fixed top-0 w-full bg-gradient-to-r from-blue-800 to-blue-400 text-white shadow-md z-50">
       <div className="container mx-auto flex items-center justify-between pt-4 pb-4 pl-1">
         <Link to="/" className="flex items-center text-xl font-bold whitespace-nowrap gap-2 cursor-default">
-          <span className="bg-white text-blue-600 px-2 py-1 rounded">SuperRH</span>
+          <span className="bg-white ml-4 text-blue-600 px-2 py-1 rounded">SuperRH</span>
         </Link>
 
         <nav className="hidden md:flex space-x-4 pl-10">
-          <Link to="/" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50 ml-4">
+          <Link to="/" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50 ">
             <HiHome className="mr-1" /> Início
           </Link>
           {/* <Link to="/contato" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
@@ -47,8 +47,8 @@ export default function Header() {
         <div className="hidden md:flex items-center">
           {isAuthenticated ? (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild className="hover:cursor-pointer">
-                <Button variant="ghost" className="flex items-center hover:bg-blue-700">
+              <DropdownMenuTrigger asChild className="hover:cursor-pointer mr-4">
+                <Button variant="ghost" className="flex items-center  hover:bg-blue-700">
                   <IoPersonCircle className="!w-8 !h-8" />
                   <span>{user?.nome || "Usuário"}</span>
                 </Button>
