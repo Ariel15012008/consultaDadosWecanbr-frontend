@@ -8,9 +8,11 @@ import { ProtectedRoute } from './lib/ProtectedRoute'
 import { PublicRoute } from './lib/PublicRoute'
 import ForgotPasswordPage from "@/pages/password/ForgotPasswordPage"
 import ResetPasswordPage from "@/pages/resetPassword/ResetPasswordPage"
+import { UserProvider } from "@/contexts/UserContext";
 
 function App() {
   return (
+    <UserProvider>
     <Routes>
       {/* ROTA PÚBLICA com verificação */}
       <Route element={<PublicRoute />}>
@@ -28,6 +30,7 @@ function App() {
         <Route path="/documento/preview" element={<PreviewPDF />} />
       </Route>
     </Routes>
+    </UserProvider>
   )
 }
 

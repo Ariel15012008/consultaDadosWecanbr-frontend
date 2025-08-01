@@ -17,6 +17,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useNavigate } from "react-router-dom";
+import { useUser } from "@/contexts/UserContext";
 
 // --- Tipos ---
 interface DocumentoSummary {
@@ -60,13 +61,13 @@ interface Rodape {
 
 export default function DocumentList() {
   const navigate = useNavigate();
+  const { user, isLoading: userLoading } = useUser(); // Usando o contexto
+  
   const [matricula, setMatricula] = useState<string>("");
   const [anomes, setAnomes] = useState<string>("");
-  const [user, setUser] = useState<any>(null);
   const [documents, setDocuments] = useState<DocumentoSummary[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
-  const [loadingUser, setLoadingUser] = useState(true);
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
   const porPagina = 10;
 
@@ -76,6 +77,7 @@ export default function DocumentList() {
     paginaAtual * porPagina
   );
 
+  // Define a matrícula quando o usuário não é gestor
   // --- Antiga lógica: buscar últimos documentos via /documents/ultimos ---
   /*
   useEffect(() => {
@@ -98,21 +100,11 @@ export default function DocumentList() {
   }, [id_template, tipodedoc, user]);
   */
 
-  // Carrega dados do usuário
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await api.get("/user/me");
-        setUser(res.data);
-        if (!res.data.gestor) setMatricula(String(res.data.matricula));
-      } catch (err) {
-        console.error("Erro ao buscar usuário:", err);
-      } finally {
-        setLoadingUser(false); // Finaliza carregamento
-      }
-    };
-    fetchUser();
-  }, []);
+    if (user && !user.gestor) {
+      setMatricula(String(user.matricula));
+    }
+  }, [user]);
 
   // Formata "MM/YYYY" ou "YYYY-MM" → "YYYYMM"
   function formatCompetencia(input: string): string {
@@ -124,14 +116,13 @@ export default function DocumentList() {
     return input;
   }
 
-  // Busca sumário de holerite via /documents/holerite/buscar (exibe todos, inclusive duplicados de mesmo mês)
+  // Busca sumário de holerite via /documents/holerite/buscar
   const handleSearch = async () => {
     if (!anomes) return;
     setIsLoading(true);
     try {
       const payload = { matricula, competencia: formatCompetencia(anomes) };
       const res = await api.post<any[]>("/documents/holerite/buscar", payload);
-      // Mapeia todos os resultados, mesmo que haja múltiplos para o mesmo mês
       const mapped: DocumentoSummary[] = res.data.map((item) => ({
         id_documento: String(item.lote),
         anomes: item.competencia,
@@ -164,11 +155,12 @@ export default function DocumentList() {
     } catch (err) {
       console.error("Erro ao visualizar holerite:", err);
     } finally {
-      setLoadingPreviewId(null); // ⬅ Libera o botão
+      setLoadingPreviewId(null);
     }
   };
 
-  if (loadingUser) {
+  // Exibe loading apenas enquanto carrega dados do usuário
+  if (userLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 text-white text-xl font-bold">
         Carregando

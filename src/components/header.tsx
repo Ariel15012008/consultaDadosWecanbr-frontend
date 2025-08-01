@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,59 +13,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { BiLogOut } from "react-icons/bi"; {/* BiUser */ }
+import { BiLogOut } from "react-icons/bi";
 import { IoPersonCircle } from "react-icons/io5";
 import { RxHamburgerMenu } from "react-icons/rx";
 import { HiMail, HiHome } from "react-icons/hi";
-import api from "@/utils/axiosInstance";
+import { useUser } from "@/contexts/UserContext";
 
 export default function Header() {
-  const [user, setUser] = useState<{ nome: string; email: string } | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loadingUserInfo, setLoadingUserInfo] = useState(true);
-  const didLogout = useRef(false);
+  const { user, isAuthenticated, isLoading, logout } = useUser();
   const navigate = useNavigate();
 
-  const silentAuth = async () => {
-    try {
-      let res = await api.get("/user/me");
-
-      if (res.status === 200) {
-        const data = res.data;
-        setUser({ nome: data.nome, email: data.email });
-        setIsAuthenticated(true);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
-      }
-    } catch (error) {
-      console.error("Erro na autenticação:", error);
-      setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setLoadingUserInfo(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!didLogout.current) {
-      silentAuth();
-    }
-  }, []);
-
-  const logout = async () => {
-    try {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("logged_user");
-
-      await api.post("/user/logout");
-
-      setIsAuthenticated(false);
-      setUser(null);
-      navigate("/login", { replace: true });
-    } catch (error) {
-      console.error("Erro no logout:", error);
-    }
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -94,11 +53,12 @@ export default function Header() {
                   <span>{user?.nome || "Usuário"}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-white border border-blue-100 hover:cursor-pointer h">
+              <DropdownMenuContent className="w-56 bg-white border border-blue-100 hover:cursor-pointer">
                 {/* <DropdownMenuItem className="hover:cursor-pointer hover:bg-gray-200" onClick={() => navigate("/perfil")}>
                   <BiUser className="mr-2 " /> Perfil
                 </DropdownMenuItem> */}
-                <DropdownMenuItem onClick={logout} className="text-red-600 hover:cursor-pointer hover:bg-gray-200">
+                <DropdownMenuItem onClick={handleLogout} className="text-red-600 hover:cursor-pointer hover:bg-gray-200">
+                  
                   <BiLogOut className="mr-2" /> Sair
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -126,7 +86,7 @@ export default function Header() {
                 <div className="flex flex-col items-center text-center p-4 bg-blue-700 rounded-lg space-y-1">
                   <IoPersonCircle className="text-4xl mb-1" />
                   <div className="max-w-full break-words">
-                    {loadingUserInfo ? (
+                    {isLoading ? (
                       <p className="text-white text-sm">Carregando</p>
                     ) : (
                       <>
@@ -145,7 +105,7 @@ export default function Header() {
               </Link>
 
               {isAuthenticated ? (
-                <button onClick={logout} className="w-full flex items-center p-2 text-red-300 rounded-lg">
+                <button onClick={handleLogout} className="w-full flex items-center p-2 text-red-300 rounded-lg">
                   <BiLogOut className="mr-2" /> Sair
                 </button>
               ) : (

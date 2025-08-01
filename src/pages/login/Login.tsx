@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
 import api from "@/utils/axiosInstance";
+import { useUser } from "@/contexts/UserContext";
 
 const schema = z.object({
   usuario: z.string().min(9, "Usuário inválido"),
@@ -26,6 +27,7 @@ export default function LoginPage() {
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const navigate = useNavigate();
+  const { refreshUser } = useUser(); // Usando o contexto para atualizar os dados
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -36,6 +38,10 @@ export default function LoginPage() {
 
     try {
       await api.post("/user/login", data, { withCredentials: true });
+      
+      // Atualiza os dados do usuário no contexto após login bem-sucedido
+      await refreshUser();
+      
       navigate("/");
     } catch (err: any) {
       if (err?.message === "Network Error") {

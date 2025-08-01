@@ -7,6 +7,7 @@ import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Download } from "lucide-react";
+import { useUser } from "@/contexts/UserContext";
 
 interface Cabecalho {
   empresa: string;
@@ -70,6 +71,7 @@ function fmtRef(value: number): string {
 export default function PreviewDocumento() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isLoading: userLoading } = useUser(); // Usando o contexto
   const [isDownloading, setIsDownloading] = useState(false);
 
   const state = location.state as {
@@ -79,6 +81,45 @@ export default function PreviewDocumento() {
     rodape?: Rodape;
   } | null;
 
+  useEffect(() => {
+    document.title = "Recibo de Pagamento de Salário";
+  }, []);
+
+  const handleDownload = async () => {
+    if (!state?.pdf_base64) {
+      alert("PDF não disponível.");
+      return;
+    }
+
+    try {
+      setIsDownloading(true);
+      const link = document.createElement("a");
+      link.href = `data:application/pdf;base64,${state.pdf_base64}`;
+      link.download = `holerite_${state.cabecalho?.matricula}_${state.cabecalho?.competencia}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        setIsDownloading(false);
+      }, 100);
+    } catch (e) {
+      console.error("Erro ao baixar PDF:", e);
+      alert("Erro ao baixar o PDF.");
+      setIsDownloading(false);
+    }
+  };
+
+  // Exibe loading enquanto carrega dados do usuário
+  if (userLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 text-white text-xl font-bold">
+        Carregando
+      </div>
+    );
+  }
+
+  // Verifica se tem dados do holerite
   if (!state || !state.cabecalho || !state.eventos || !state.rodape) {
     return (
       <div className="flex flex-col min-h-screen">
@@ -101,35 +142,6 @@ export default function PreviewDocumento() {
   }
 
   const { cabecalho, eventos, rodape } = state;
-
-  useEffect(() => {
-    document.title = "Recibo de Pagamento de Salário";
-  }, []);
-
-  const handleDownload = async () => {
-    if (!state?.pdf_base64) {
-      alert("PDF não disponível.");
-      return;
-    }
-
-    try {
-      setIsDownloading(true);
-      const link = document.createElement("a");
-      link.href = `data:application/pdf;base64,${state.pdf_base64}`;
-      link.download = `holerite_${cabecalho.matricula}_${cabecalho.competencia}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
-        setIsDownloading(false);
-      }, 100);
-    } catch (e) {
-      console.error("Erro ao baixar PDF:", e);
-      alert("Erro ao baixar o PDF.");
-      setIsDownloading(false);
-    }
-  };
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
