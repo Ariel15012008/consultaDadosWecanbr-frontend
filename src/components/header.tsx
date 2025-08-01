@@ -64,7 +64,7 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button onClick={() => navigate("/login")} className="bg-white text-blue-600 hover:bg-blue-50">
+            <Button onClick={() => navigate("/login")} className="bg-white text-blue-600 hover:bg-blue-50 mr-4">
               Entrar
             </Button>
           )}
