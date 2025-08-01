@@ -129,7 +129,8 @@ export default function LoginPage() {
           {loading ? "Entrando..." : "Entrar"}
         </Button>
 
-        <p className="text-sm text-center mt-4 text-gray-300">
+
+        {/* <p className="text-sm text-center mt-4 text-gray-300">
           Ainda não tem conta?{" "}
           <a
             href="/register"
@@ -137,7 +138,7 @@ export default function LoginPage() {
           >
             Criar agora
           </a>
-        </p>
+        </p> */}
       </form>
     </div>
   );

@@ -114,7 +114,7 @@ export default function PreviewDocumento() {
   if (userLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 text-white text-xl font-bold">
-        Carregando
+        Carregando...
       </div>
     );
   }
