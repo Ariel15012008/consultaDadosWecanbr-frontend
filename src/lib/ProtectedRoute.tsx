@@ -1,61 +1,21 @@
-import { useEffect } from "react"
-import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom"
-import api from "@/utils/axiosInstance"
+// src/lib/ProtectedRoute.tsx
+
+import { Navigate, Outlet, useLocation } from "react-router-dom"
 import Cookies from "js-cookie"
 
 export function ProtectedRoute() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const pathname = location.pathname
+  const { pathname } = useLocation()
 
-  const loggedUser = Cookies.get("logged_user")
-  const now = Date.now()
-  const twoMinutes = 2 * 60 * 1000
+  // Quais rotas exigem autenticação
+  const needsAuth =
+    pathname === "/documentos" ||
+    pathname.startsWith("/documento/preview")
 
-  const isAuthenticated = !!loggedUser //&& !!token
+  // Leia o cookie correto
+  const isAuthenticated = Boolean(Cookies.get("logged_user"))
 
-  useEffect(() => {
-    const verificarToken = async () => {
-      if (loggedUser) {
-        const loggedTime = parseInt(loggedUser)
-        const timeDiff = now - loggedTime
-
-        if (timeDiff > twoMinutes) {
-          try {
-            // Tenta renovar o token
-            await api.post("/user/refresh")
-            localStorage.setItem("logged_user", Date.now().toString())
-          } catch (err) {
-            // Se falhar, desloga e redireciona
-            localStorage.removeItem("access_token")
-            localStorage.removeItem("logged_user")
-            navigate("/login", { replace: true })
-            return
-          }
-        }
-
-        const publicRoutes = ["/login", "/register", "/password", "/resetPassword"]
-        if (publicRoutes.includes(pathname)) {
-          navigate("/home", { replace: true })
-        }
-
-        if (pathname.startsWith("/resetPassword")) {
-          const urlParams = new URLSearchParams(location.search)
-          if (!urlParams.get("token")) {
-            navigate("/password", { replace: true })
-          }
-        }
-      }
-    }
-
-    verificarToken()
-  }, [loggedUser, pathname, navigate, location.search, now])
-
-  if (
-    ["/home", "/resetPassword", "/resetPassword/*"].includes(pathname) &&
-    !isAuthenticated
-  ) {
-    return <Navigate to="/login" replace />
+  if (needsAuth && !isAuthenticated) {
+    return <Navigate to="/" replace />
   }
 
   return <Outlet />

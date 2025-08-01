@@ -1,5 +1,15 @@
 // src/contexts/UserContext.tsx
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
+import { useNavigate } from "react-router-dom";
+import Cookies from "js-cookie";
 import api from "@/utils/axiosInstance";
 
 interface User {
@@ -24,19 +34,25 @@ interface UserProviderProps {
 }
 
 export function UserProvider({ children }: UserProviderProps) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
+  // Intervalo de expiração (2 minutos)
+  const twoMinutes = 2 * 60 * 1000;
+
+  // Autenticação silenciosa (usado em mount e refresh)
   const silentAuth = async () => {
+    setIsLoading(true);
     try {
       const res = await api.get("/user/me");
-      
       if (res.status === 200) {
-        const data = res.data;
-        setUser(data);
+        setUser(res.data);
         setIsAuthenticated(true);
+        // Atualiza timestamp de autenticação
+        Cookies.set("logged_user", Date.now().toString());
       } else {
         setUser(null);
         setIsAuthenticated(false);
@@ -50,30 +66,51 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
+  // Função para forçar refresh de usuário
   const refreshUser = async () => {
-    setIsLoading(true);
     await silentAuth();
   };
 
+  // Logout limpa cookies e redireciona para landing
   const logout = async () => {
     try {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("logged_user");
-      
+      Cookies.remove("access_token");
+      Cookies.remove("logged_user");
       await api.post("/user/logout");
-      
       setIsAuthenticated(false);
       setUser(null);
       didLogout.current = true;
+      window.history.replaceState(null, "", "/");
+      navigate("/", { replace: true });
     } catch (error) {
       console.error("Erro no logout:", error);
     }
   };
 
+  // Autentica ao montar, se ainda não deslogado
   useEffect(() => {
     if (!didLogout.current) {
       silentAuth();
     }
+  }, []);
+
+  // Efeito de verificação de expiração e refresh automático
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const timestamp = Cookies.get("logged_user");
+      if (!timestamp) return;
+      const loggedTime = parseInt(timestamp, 10);
+      if (Date.now() - loggedTime > twoMinutes) {
+        try {
+          await api.post("/user/refresh");
+          Cookies.set("logged_user", Date.now().toString());
+        } catch {
+          await logout();
+        }
+      }
+    }, 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const value: UserContextType = {
