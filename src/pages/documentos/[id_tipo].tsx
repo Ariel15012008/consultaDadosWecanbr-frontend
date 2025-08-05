@@ -16,15 +16,16 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
 
-// --- Tipos ---
-interface DocumentoSummary {
-  id_documento: string; // equivale a 'lote'
-  anomes: string; // competência no formato 'YYYYMM'
+// --- Tipos para Holerite (mantidos como estavam) ---
+interface DocumentoHolerite {
+  id_documento: string;
+  anomes: string;
 }
-interface Cabecalho {
+
+interface CabecalhoHolerite {
   empresa: string;
   filial: string;
   empresa_nome: string;
@@ -39,14 +40,16 @@ interface Cabecalho {
   competencia: string;
   lote: number;
 }
-interface Evento {
+
+interface EventoHolerite {
   evento: number;
   evento_nome: string;
   referencia: number;
   valor: number;
   tipo: string;
 }
-interface Rodape {
+
+interface RodapeHolerite {
   total_vencimentos: number;
   total_descontos: number;
   valor_liquido: number;
@@ -59,18 +62,50 @@ interface Rodape {
   dep_irf: number;
 }
 
+// --- Tipos para Documentos Genéricos ---
+interface DocumentoGenerico {
+  id_documento: string;
+  situacao: string;
+  nomearquivo: string;
+  versao1: string;
+  versao2: string;
+  tamanho: string;
+  datacriacao: string;
+  cliente: string;
+  colaborador: string;
+  regional: string;
+  cr: string;
+  anomes: string;
+  tipodedoc: string;
+  status: string;
+  observacao: string;
+  datadepagamento: string;
+  matricula: string;
+  _norm_anomes: string;
+}
+
+// União dos tipos de documento
+type DocumentoUnion = DocumentoHolerite | DocumentoGenerico;
+
 export default function DocumentList() {
   const navigate = useNavigate();
-  const { user, isLoading: userLoading } = useUser(); // Usando o contexto
+  const { user, isLoading: userLoading } = useUser();
+  const [searchParams] = useSearchParams();
+  
+  // Parâmetros da URL
+  const tipoDocumento = searchParams.get("tipo") || "holerite";
+  const templateId = searchParams.get("template") || "3";
+  const nomeDocumento = searchParams.get("documento") || "";
   
   const [matricula, setMatricula] = useState<string>("");
   const [anomes, setAnomes] = useState<string>("");
-  const [documents, setDocuments] = useState<DocumentoSummary[]>([]);
+  const [documents, setDocuments] = useState<DocumentoUnion[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
+  
   const porPagina = 10;
-
   const totalPaginas = Math.ceil(documents.length / porPagina);
   const documentosVisiveis = documents.slice(
     (paginaAtual - 1) * porPagina,
@@ -78,28 +113,6 @@ export default function DocumentList() {
   );
 
   // Define a matrícula quando o usuário não é gestor
-  // --- Antiga lógica: buscar últimos documentos via /documents/ultimos ---
-  /*
-  useEffect(() => {
-    const fetchUltimos = async () => {
-      const cp = [
-        { nome: "tipodedoc", valor: tipodedoc },
-        ...(user?.gestor === false
-          ? [{ nome: "matricula", valor: user.matricula }]
-          : [{ nome: "matricula", valor: matricula }]),
-        { nome: "anomes", valor: anomes },
-      ];
-      const res = await api.post("/documents/ultimos", {
-        id_template: Number(id_template),
-        cp,
-        campo_anomes: "anomes",
-      });
-      setDocuments(res.data.documentos || []);
-    };
-    if (user) fetchUltimos();
-  }, [id_template, tipodedoc, user]);
-  */
-
   useEffect(() => {
     if (user && !user.gestor) {
       setMatricula(String(user.matricula));
@@ -116,50 +129,151 @@ export default function DocumentList() {
     return input;
   }
 
-  // Busca sumário de holerite via /documents/holerite/buscar
+  // Busca documentos - lógica híbrida
   const handleSearch = async () => {
     if (!anomes) return;
     setIsLoading(true);
+    setError(null);
+    
     try {
-      const payload = { matricula, competencia: formatCompetencia(anomes) };
-      const res = await api.post<any[]>("/documents/holerite/buscar", payload);
-      const mapped: DocumentoSummary[] = res.data.map((item) => ({
-        id_documento: String(item.lote),
-        anomes: item.competencia,
-      }));
-      setDocuments(mapped);
+      if (tipoDocumento === "holerite") {
+        // ========== FLUXO HOLERITE (mantém como estava) ==========
+        const payload = { matricula, competencia: formatCompetencia(anomes) };
+        const res = await api.post<any[]>("/documents/holerite/buscar", payload);
+        const mapped: DocumentoHolerite[] = res.data.map((item) => ({
+          id_documento: String(item.lote),
+          anomes: item.competencia,
+        }));
+        setDocuments(mapped);
+      } else {
+        // ========== FLUXO GENÉRICO (novo) ==========
+        const cp = [
+          { nome: "tipodedoc", valor: nomeDocumento },
+          { nome: "matricula", valor: matricula },
+        ];
+        
+        const payload = {
+          id_template: Number(templateId),
+          cp,
+          campo_anomes: "anomes"
+        };
+        
+        const res = await api.post<{
+          total_bruto: number;
+          ultimos_6_meses: string[];
+          total_encontrado: number;
+          documentos: DocumentoGenerico[];
+        }>("/documents/search", payload);
+        
+        setDocuments(res.data.documentos || []);
+      }
+      
       setPaginaAtual(1);
-    } catch (err) {
-      console.error("Erro ao buscar holerite:", err);
+    } catch (err: any) {
+      console.error("Erro ao buscar documentos:", err);
+      setError(err.response?.data?.message || "Erro ao buscar documentos");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Monta holerite completo e navega para Preview
-  const visualizarHolerite = async (doc: DocumentoSummary) => {
+  // Visualizar documento - lógica híbrida
+  const visualizarDocumento = async (doc: DocumentoUnion) => {
     setLoadingPreviewId(doc.id_documento);
+    
     try {
-      const payload = {
-        matricula,
-        competencia: doc.anomes,
-        lote: doc.id_documento,
-      };
-      const res = await api.post<{
-        cabecalho: Cabecalho;
-        eventos: Evento[];
-        rodape: Rodape;
-        pdf_base64: string;
-      }>("/documents/holerite/montar", payload);
-      navigate("/documento/preview", { state: res.data });
-    } catch (err) {
-      console.error("Erro ao visualizar holerite:", err);
+      if (tipoDocumento === "holerite") {
+        // ========== FLUXO HOLERITE (mantém como estava) ==========
+        const docHolerite = doc as DocumentoHolerite;
+        const payload = {
+          matricula,
+          competencia: docHolerite.anomes,
+          lote: docHolerite.id_documento,
+        };
+        
+        const res = await api.post<{
+          cabecalho: CabecalhoHolerite;
+          eventos: EventoHolerite[];
+          rodape: RodapeHolerite;
+          pdf_base64: string;
+        }>("/documents/holerite/montar", payload);
+        
+        navigate("/documento/preview", { state: res.data });
+      } else {
+        // ========== FLUXO GENÉRICO (novo) ==========
+        const docGenerico = doc as DocumentoGenerico;
+        const payload = {
+          id_tipo: Number(templateId),
+          id_documento: Number(docGenerico.id_documento)
+        };
+        
+        const res = await api.post<{
+          erro: boolean;
+          base64_raw?: string;
+          base64?: string;
+        }>("/searchdocuments/download", payload);
+        
+        // Navega para preview com dados genéricos
+        navigate("/documento/preview", { 
+          state: { 
+            pdf_base64: res.data.base64_raw || res.data.base64,
+            documento_info: docGenerico,
+            tipo: "generico"
+          } 
+        });
+      }
+    } catch (err: any) {
+      console.error("Erro ao visualizar documento:", err);
+      setError(err.response?.data?.message || "Erro ao visualizar documento");
     } finally {
       setLoadingPreviewId(null);
     }
   };
 
-  // Exibe loading apenas enquanto carrega dados do usuário
+  // Renderiza informações do documento na tabela
+  const renderDocumentInfo = (doc: DocumentoUnion) => {
+    if (tipoDocumento === "holerite") {
+      const docHolerite = doc as DocumentoHolerite;
+      return (
+        <>
+          <td className="px-4 py-2 text-left">{docHolerite.anomes}</td>
+          <td className="px-4 py-2 text-center">{docHolerite.id_documento}</td>
+        </>
+      );
+    } else {
+      const docGenerico = doc as DocumentoGenerico;
+      return (
+        <>
+          <td className="px-4 py-2 text-left">{docGenerico._norm_anomes}</td>
+          <td className="px-4 py-2 text-center">{docGenerico.nomearquivo}</td>
+          <td className="px-4 py-2 text-center">{docGenerico.tamanho} KB</td>
+        </>
+      );
+    }
+  };
+
+  // Renderiza cabeçalho da tabela
+  const renderTableHeader = () => {
+    if (tipoDocumento === "holerite") {
+      return (
+        <>
+          <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
+          <th className="py-3 text-center min-w-[100px]">Lote</th>
+          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+        </>
+      );
+    } else {
+      return (
+        <>
+          <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
+          <th className="py-3 text-center min-w-[200px]">Nome do Arquivo</th>
+          <th className="py-3 text-center min-w-[100px]">Tamanho</th>
+          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+        </>
+      );
+    }
+  };
+
   if (userLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 text-white text-xl font-bold">
@@ -181,14 +295,21 @@ export default function DocumentList() {
           >
             <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
           </Button>
+          
           <h2 className="text-xl font-bold mb-6 text-center">
-            Buscar Holerite
+            {tipoDocumento === "holerite" ? "Buscar Holerite" : `Buscar ${nomeDocumento}`}
           </h2>
-          <div
-            className={`w-fit mx-auto grid gap-4 ${
-              user?.gestor ? "sm:grid-cols-3" : "sm:grid-cols-2"
-            } mb-6`}
-          >
+          
+          {error && (
+            <div className="bg-red-500 text-white p-4 rounded mb-4 flex justify-between items-center">
+              <span>{error}</span>
+              <button onClick={() => setError(null)}>×</button>
+            </div>
+          )}
+          
+          <div className={`w-fit mx-auto grid gap-4 ${
+            user?.gestor ? "sm:grid-cols-3" : "sm:grid-cols-2"
+          } mb-6`}>
             {user?.gestor && (
               <input
                 type="text"
@@ -211,6 +332,7 @@ export default function DocumentList() {
               {isLoading ? "Buscando..." : "Buscar"}
             </Button>
           </div>
+          
           {isLoading ? (
             <p className="text-center">Carregando documentos...</p>
           ) : (
@@ -218,20 +340,14 @@ export default function DocumentList() {
               <table className="w-full text-sm text-left text-white">
                 <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
                   <tr>
-                    <th className="px-4 py-3 text-left min-w-[120px]">
-                      Ano/mês
-                    </th>
-                    <th className="py-3 text-center min-w-[100px]">Lote</th>
-                    <th className="px-10 py-3 text-right min-w-[100px]">
-                      Ações
-                    </th>
+                    {renderTableHeader()}
                   </tr>
                 </thead>
                 <tbody>
                   {documentosVisiveis.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={tipoDocumento === "holerite" ? 3 : 4}
                         className="text-center py-4 text-gray-400"
                       >
                         Nenhum documento encontrado.
@@ -243,13 +359,10 @@ export default function DocumentList() {
                         key={doc.id_documento}
                         className="border-t border-gray-700 hover:bg-gray-800 transition-colors"
                       >
-                        <td className="px-4 py-2 text-left">{doc.anomes}</td>
-                        <td className="px-4 py-2 text-center">
-                          {doc.id_documento}
-                        </td>
+                        {renderDocumentInfo(doc)}
                         <td className="px-4 py-2 text-right">
                           <Button
-                            onClick={() => visualizarHolerite(doc)}
+                            onClick={() => visualizarDocumento(doc)}
                             disabled={loadingPreviewId === doc.id_documento}
                             className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -265,6 +378,7 @@ export default function DocumentList() {
               </table>
             </div>
           )}
+          
           {totalPaginas > 1 && (
             <div className="flex justify-center mt-6 w-full overflow-x-auto px-2">
               <Pagination>

@@ -40,8 +40,8 @@ export function UserProvider({ children }: UserProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
-  // Intervalo de expiração (2 minutos)
-  const twoMinutes = 2 * 60 * 1000;
+  // Intervalo de expiração (30 dias)
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
   // Autenticação silenciosa (usado em mount e refresh)
   const silentAuth = async () => {
@@ -100,7 +100,8 @@ export function UserProvider({ children }: UserProviderProps) {
       const timestamp = Cookies.get("logged_user");
       if (!timestamp) return;
       const loggedTime = parseInt(timestamp, 10);
-      if (Date.now() - loggedTime > twoMinutes) {
+      // Usa 30 dias em milissegundos para expirar
+      if (Date.now() - loggedTime > thirtyDays) {
         try {
           await api.post("/user/refresh");
           Cookies.set("logged_user", Date.now().toString());

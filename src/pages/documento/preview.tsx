@@ -6,9 +6,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 
+// Tipos para Holerite (mantidos como estavam)
 interface Cabecalho {
   empresa: string;
   filial: string;
@@ -46,7 +47,29 @@ interface Rodape {
   dep_irf: number;
 }
 
-// Utilitários
+// Tipos para documentos genéricos
+interface DocumentoGenerico {
+  id_documento: string;
+  situacao: string;
+  nomearquivo: string;
+  versao1: string;
+  versao2: string;
+  tamanho: string;
+  datacriacao: string;
+  cliente: string;
+  colaborador: string;
+  regional: string;
+  cr: string;
+  anomes: string;
+  tipodedoc: string;
+  status: string;
+  observacao: string;
+  datadepagamento: string;
+  matricula: string;
+  _norm_anomes: string;
+}
+
+// Utilitários para holerite (mantidos como estavam)
 function padLeft(value: string | number, width: number): string {
   return String(value).trim().padStart(width, "0");
 }
@@ -60,30 +83,112 @@ function fmtNum(value: number): string {
 
 function truncate(text: string | undefined | null, maxLen: number): string {
   const safeText = text ?? "";
-  return safeText.length <= maxLen ? safeText : safeText.slice(0, maxLen - 3) + "...";
+  return safeText.length <= maxLen
+    ? safeText
+    : safeText.slice(0, maxLen - 3) + "...";
 }
 
-// Adiciona função para formatar referência
 function fmtRef(value: number): string {
-  return value === 0 ? "" : value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return value === 0
+    ? ""
+    : value.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
 }
 
 export default function PreviewDocumento() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isLoading: userLoading } = useUser(); // Usando o contexto
+  const { isLoading: userLoading } = useUser();
   const [isDownloading, setIsDownloading] = useState(false);
+  
+  // Estados para o zoom
+  const [zoom, setZoom] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const state = location.state as {
-    pdf_base64: any;
+    pdf_base64: string;
     cabecalho?: Cabecalho;
     eventos?: Evento[];
     rodape?: Rodape;
+    documento_info?: DocumentoGenerico;
+    tipo?: "holerite" | "generico";
   } | null;
 
   useEffect(() => {
-    document.title = "Recibo de Pagamento de Salário";
-  }, []);
+    if (state?.tipo === "generico" && state?.documento_info) {
+      document.title = `${state.documento_info.tipodedoc} - ${state.documento_info._norm_anomes}`;
+    } else {
+      document.title = "Recibo de Pagamento de Salário";
+    }
+  }, [state]);
+
+  // Funções do zoom
+  const handleZoomIn = () => {
+    setZoom(prev => Math.min(prev + 0.25, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoom(prev => Math.max(prev - 0.25, 0.5));
+  };
+
+  const handleReset = () => {
+    setZoom(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoom > 1) {
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX - position.x,
+        y: e.clientY - position.y
+      });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && zoom > 1) {
+      setPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Para touch devices
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (zoom > 1 && e.touches.length === 1) {
+      setIsDragging(true);
+      const touch = e.touches[0];
+      setDragStart({
+        x: touch.clientX - position.x,
+        y: touch.clientY - position.y
+      });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isDragging && zoom > 1 && e.touches.length === 1) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      setPosition({
+        x: touch.clientX - dragStart.x,
+        y: touch.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
 
   const handleDownload = async () => {
     if (!state?.pdf_base64) {
@@ -93,14 +198,35 @@ export default function PreviewDocumento() {
 
     try {
       setIsDownloading(true);
+
+      // Converter base64 para blob
+      const byteCharacters = atob(state.pdf_base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: "application/pdf" });
+
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = `data:application/pdf;base64,${state.pdf_base64}`;
-      link.download = `holerite_${state.cabecalho?.matricula}_${state.cabecalho?.competencia}.pdf`;
+      link.href = url;
+
+      // Nome do arquivo baseado no tipo
+      if (state.tipo === "generico" && state.documento_info) {
+        link.download = `${state.documento_info.nomearquivo}`;
+      } else if (state.cabecalho) {
+        link.download = `holerite_${state.cabecalho.matricula}_${state.cabecalho.competencia}.pdf`;
+      } else {
+        link.download = "documento.pdf";
+      }
+
       document.body.appendChild(link);
       link.click();
+
       setTimeout(() => {
         document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
+        URL.revokeObjectURL(url);
         setIsDownloading(false);
       }, 100);
     } catch (e) {
@@ -110,7 +236,6 @@ export default function PreviewDocumento() {
     }
   };
 
-  // Exibe loading enquanto carrega dados do usuário
   if (userLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 text-white text-xl font-bold">
@@ -119,8 +244,130 @@ export default function PreviewDocumento() {
     );
   }
 
-  // Verifica se tem dados do holerite
-  if (!state || !state.cabecalho || !state.eventos || !state.rodape) {
+  if (!state || !state.pdf_base64) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-grow p-4 md:p-8 bg-[#1e1e2f] text-white text-center">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(-1)}
+            className="mb-4 flex items-center gap-2"
+          >
+            <ArrowLeft /> Voltar
+          </Button>
+          <p className="text-lg">
+            Dados do documento não encontrados. Volte e tente novamente.
+          </p>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // ========== RENDERIZAÇÃO PARA DOCUMENTOS GENÉRICOS ==========
+  if (state.tipo === "generico" && state.documento_info) {
+    return (
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
+        <Header />
+        <main className="flex-grow p-8 pt-24">
+          <div className="flex flex-col md:flex-row justify-between items-start rounded-lg">
+            <Button
+              variant="ghost"
+              onClick={() => navigate(-1)}
+              className="mb-4 flex items-center gap-2 text-white "
+            >
+              <ArrowLeft /> Voltar
+            </Button>
+          </div>
+
+          {/* Controles de Zoom - Apenas para Mobile */}
+          <div className="flex gap-1 sm:gap-2 mb-4 justify-center md:hidden px-2">
+            <button
+              onClick={handleZoomOut}
+              className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded hover:bg-white/30 transition-colors text-white text-xs sm:text-sm"
+              disabled={zoom <= 0.5}
+            >
+              <ZoomOut size={14} className="sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Zoom -</span>
+              <span className="xs:hidden">-</span>
+            </button>
+            
+            <span className="flex items-center px-2 sm:px-3 py-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded font-mono text-xs sm:text-sm text-white min-w-[50px] sm:min-w-[60px] justify-center">
+              {Math.round(zoom * 100)}%
+            </span>
+            
+            <button
+              onClick={handleZoomIn}
+              className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded hover:bg-white/30 transition-colors text-white text-xs sm:text-sm"
+              disabled={zoom >= 3}
+            >
+              <ZoomIn size={14} className="sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Zoom +</span>
+              <span className="xs:hidden">+</span>
+            </button>
+            
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-1 px-2 sm:px-3 py-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded hover:bg-white/30 transition-colors text-white text-xs sm:text-sm"
+            >
+              <RotateCcw size={14} className="sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Reset</span>
+              <span className="xs:hidden">↻</span>
+            </button>
+          </div>
+
+          {/* Container do PDF com Zoom */}
+          <div 
+            className="relative overflow-hidden border rounded-lg bg-white mx-auto md:overflow-visible"
+            style={{
+              width: '100%',
+              maxWidth: '900px',
+              height: '600px',
+              cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <iframe
+              src={`data:application/pdf;base64,${state.pdf_base64}`}
+              className="w-full h-full border-0 transition-transform duration-200 ease-out select-none"
+              style={{
+                transform: `scale(${zoom}) translate(${position.x / zoom}px, ${position.y / zoom}px)`,
+                transformOrigin: 'center center'
+              }}
+              title="Visualizador de PDF"
+            />
+          </div>
+
+          {/* Dica para mobile */}
+          <div className="mt-2 text-xs text-white/80 text-center md:hidden">
+            Use os botões acima para dar zoom. Quando ampliado, arraste para navegar.
+          </div>
+
+          <div className="flex justify-center items-center pb-8 pt-4">
+            <Button
+              onClick={handleDownload}
+              className="bg-green-600 hover:bg-green-500 w-full sm:w-44 h-10"
+              disabled={isDownloading}
+            >
+              <Download className="mr-2 w-4 h-4" />
+              {isDownloading ? "Baixando..." : "Baixar Documento"}
+            </Button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // ========== RENDERIZAÇÃO PARA HOLERITE (mantida como estava) ==========
+  if (!state.cabecalho || !state.eventos || !state.rodape) {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
@@ -146,20 +393,29 @@ export default function PreviewDocumento() {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
       <Header />
-      <main className="flex-grow  p-8  pt-24 bg-white">
+      <main className="flex-grow p-8 pt-24 bg-white">
+        <Button
+          variant="ghost"
+          onClick={() => navigate(-1)}
+          className="mb-4 flex items-center gap-2 text-white "
+        >
+          <ArrowLeft /> Voltar
+        </Button>
         <div className="mb-6 flex flex-col md:flex-row justify-between items-start">
           <div className="flex flex-col">
             <h1 className="text-lg md:text-xl font-bold">
               Recibo de Pagamento de Salário
             </h1>
             <div className="text-sm md:text-base">
-              <strong>Empresa:</strong> {padLeft(cabecalho.empresa, 3)} - {cabecalho.filial} {cabecalho.empresa_nome}
+              <strong>Empresa:</strong> {padLeft(cabecalho.empresa, 3)} -{" "}
+              {cabecalho.filial} {cabecalho.empresa_nome}
               <div className="block md:hidden text-xs pr-4 whitespace-nowrap overflow-x-auto">
                 <strong>Nº Inscrição:</strong> {cabecalho.empresa_cnpj}
               </div>
             </div>
             <div className="text-sm md:text-base mt-2">
-              <strong>Cliente:</strong> {cabecalho.cliente} {cabecalho.cliente_nome}
+              <strong>Cliente:</strong> {cabecalho.cliente}{" "}
+              {cabecalho.cliente_nome}
               <div className="block md:hidden text-xs whitespace-nowrap overflow-x-auto">
                 <strong>Nº Inscrição:</strong> {cabecalho.cliente_cnpj}
               </div>
@@ -177,19 +433,24 @@ export default function PreviewDocumento() {
 
         <div className="mb-6 text-xs md:text-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
           <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Código</strong> {padLeft(cabecalho.matricula, 6)}
+            <strong className="pb-1 md:pb-2">Código</strong>{" "}
+            {padLeft(cabecalho.matricula, 6)}
           </div>
           <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Nome do Funcionário</strong> {truncate(cabecalho.nome, 30)}
+            <strong className="pb-1 md:pb-2">Nome do Funcionário</strong>{" "}
+            {truncate(cabecalho.nome, 30)}
           </div>
           <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Função</strong> {cabecalho.funcao_nome}
+            <strong className="pb-1 md:pb-2">Função</strong>{" "}
+            {cabecalho.funcao_nome}
           </div>
           <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Admissão</strong> {cabecalho.admissao}
+            <strong className="pb-1 md:pb-2">Admissão</strong>{" "}
+            {cabecalho.admissao}
           </div>
           <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Competência</strong> {cabecalho.competencia}
+            <strong className="pb-1 md:pb-2">Competência</strong>{" "}
+            {cabecalho.competencia}
           </div>
         </div>
 
@@ -200,9 +461,15 @@ export default function PreviewDocumento() {
             <thead>
               <tr className="bg-gray-100">
                 <th className="p-1 md:p-2 text-left border-r-[1px]">Cód.</th>
-                <th className="p-1 md:p-2 text-center border-r-[1px]">Descrição</th>
-                <th className="p-1 md:p-2 text-center border-r-[1px]">Referência</th>
-                <th className="p-1 md:p-2 text-center border-r-[1px]">Vencimentos</th>
+                <th className="p-1 md:p-2 text-center border-r-[1px]">
+                  Descrição
+                </th>
+                <th className="p-1 md:p-2 text-center border-r-[1px]">
+                  Referência
+                </th>
+                <th className="p-1 md:p-2 text-center border-r-[1px]">
+                  Vencimentos
+                </th>
                 <th className="p-1 md:p-2 text-center">Descontos</th>
               </tr>
             </thead>
@@ -210,10 +477,18 @@ export default function PreviewDocumento() {
               {eventos.map((e, i) => (
                 <tr key={i} className={i % 2 ? "bg-gray-100" : "bg-white"}>
                   <td className="p-1 md:p-2 border-r-[1px]">{e.evento}</td>
-                  <td className="p-1 md:p-2 border-r-[1px]">{truncate(e.evento_nome, 35)}</td>
-                  <td className="p-1 md:p-2 text-center border-r-[1px]">{fmtRef(e.referencia)}</td>
-                  <td className="p-1 md:p-2 text-center border-r-[1px]">{e.tipo === "V" ? fmtNum(e.valor) : ""}</td>
-                  <td className="p-1 md:p-2 text-center">{e.tipo === "D" ? fmtNum(e.valor) : ""}</td>
+                  <td className="p-1 md:p-2 border-r-[1px]">
+                    {truncate(e.evento_nome, 35)}
+                  </td>
+                  <td className="p-1 md:p-2 text-center border-r-[1px]">
+                    {fmtRef(e.referencia)}
+                  </td>
+                  <td className="p-1 md:p-2 text-center border-r-[1px]">
+                    {e.tipo === "V" ? fmtNum(e.valor) : ""}
+                  </td>
+                  <td className="p-1 md:p-2 text-center">
+                    {e.tipo === "D" ? fmtNum(e.valor) : ""}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -222,15 +497,16 @@ export default function PreviewDocumento() {
 
         <div className="bg-gray-300 w-full h-[1px] my-2"></div>
 
-        {/* Seção de Totais - Modificada apenas para mobile */}
+        {/* Seção de Totais */}
         <div className="my-4 md:my-6 flex flex-col sm:flex-row justify-between text-xs md:text-sm">
-          {/* Versão desktop (mantida igual) */}
+          {/* Versão desktop */}
           <div className="hidden sm:flex justify-end sm:justify-start xl:pl-[700px]">
             <div className="flex flex-col text-right">
-              <strong>Total Vencimentos:</strong> {fmtNum(rodape.total_vencimentos)}
+              <strong>Total Vencimentos:</strong>{" "}
+              {fmtNum(rodape.total_vencimentos)}
             </div>
           </div>
-          
+
           {/* Versão mobile */}
           <div className="sm:hidden flex flex-col gap-2">
             <div className="flex justify-between">
@@ -247,7 +523,7 @@ export default function PreviewDocumento() {
             </div>
           </div>
 
-          {/* Versão desktop (mantida igual) */}
+          {/* Versão desktop */}
           <div className="hidden sm:flex flex-col text-right">
             <div className="flex flex-col text-right">
               <strong>Total Descontos:</strong> {fmtNum(rodape.total_descontos)}
