@@ -319,11 +319,11 @@ export default function DocumentList() {
                 onChange={(e) => setMatricula(e.target.value)}
               />
             )}
-            <CustomMonthPicker
-              value={anomes}
-              onChange={setAnomes}
-              placeholder="Selecionar período"
-            />
+             <div className={`flex justify-center items-center ${!user?.gestor ? "sm:col-span-2 lg:col-span-3" : ""}`}>
+            <div className="w-full max-w-xs">
+              <CustomMonthPicker value={anomes} onChange={setAnomes} placeholder="Selecionar período" />
+            </div>
+          </div>
             <Button
               onClick={handleSearch}
               disabled={isLoading || !anomes}

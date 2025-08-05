@@ -1,25 +1,15 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Calendar, ChevronDown } from "lucide-react";
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Calendar, ChevronDown } from "lucide-react"
 
 interface CustomMonthPickerProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
 }
 
 export default function CustomMonthPicker({
@@ -27,17 +17,13 @@ export default function CustomMonthPicker({
   onChange,
   placeholder = "Selecionar mês/ano",
 }: CustomMonthPickerProps) {
-  const [open, setOpen] = useState(false);
-  const [selectedYear, setSelectedYear] = useState(
-    value ? value.split("-")[0] : ""
-  );
-  const [selectedMonth, setSelectedMonth] = useState(
-    value ? value.split("-")[1] : ""
-  );
+  const [open, setOpen] = useState(false)
+  const [selectedYear, setSelectedYear] = useState(value ? value.split("-")[0] : "")
+  const [selectedMonth, setSelectedMonth] = useState(value ? value.split("-")[1] : "")
 
   // Gerar anos (últimos 10 anos + próximos 2 anos)
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 11 }, (_, i) => currentYear - i);
+  const currentYear = new Date().getFullYear()
+  const years = Array.from({ length: 11 }, (_, i) => currentYear - i)
 
   const months = [
     { value: "01", label: "Janeiro" },
@@ -52,28 +38,28 @@ export default function CustomMonthPicker({
     { value: "10", label: "Outubro" },
     { value: "11", label: "Novembro" },
     { value: "12", label: "Dezembro" },
-  ];
+  ]
 
   const handleApply = () => {
     if (selectedYear && selectedMonth) {
-      onChange(`${selectedYear}-${selectedMonth}`);
-      setOpen(false);
+      onChange(`${selectedYear}-${selectedMonth}`)
+      setOpen(false)
     }
-  };
+  }
 
   const handleClear = () => {
-    setSelectedYear("");
-    setSelectedMonth("");
-    onChange("");
-    setOpen(false);
-  };
+    setSelectedYear("")
+    setSelectedMonth("")
+    onChange("")
+    setOpen(false)
+  }
 
   const getDisplayValue = () => {
-    if (!value) return placeholder;
-    const [year, month] = value.split("-");
-    const monthName = months.find((m) => m.value === month)?.label;
-    return `${monthName} ${year}`;
-  };
+    if (!value) return placeholder
+    const [year, month] = value.split("-")
+    const monthName = months.find((m) => m.value === month)?.label
+    return `${monthName} ${year}`
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -84,20 +70,18 @@ export default function CustomMonthPicker({
         >
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
-            <span>{getDisplayValue()}</span>
+            <span className="truncate">{getDisplayValue()}</span>
           </div>
-          <ChevronDown className="h-4 w-4 opacity-50" />
+          <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-80 bg-[#2c2c40] border-gray-600"
-        align="start"
+        className="w-[calc(100vw-2rem)] sm:w-80 max-w-80 bg-[#2c2c40] border-gray-600"
+        align="center"
+        sideOffset={5}
       >
         <div className="space-y-4">
-          <div className="text-sm font-medium text-white">
-            Selecionar Período
-          </div>
-
+          <div className="text-sm font-medium text-white text-center">Selecionar Período</div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <label className="text-xs text-gray-300">Ano</label>
@@ -118,7 +102,6 @@ export default function CustomMonthPicker({
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <label className="text-xs text-gray-300">Mês</label>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -139,7 +122,6 @@ export default function CustomMonthPicker({
               </Select>
             </div>
           </div>
-
           <div className="flex gap-2 pt-2">
             <Button
               onClick={handleApply}
@@ -159,5 +141,5 @@ export default function CustomMonthPicker({
         </div>
       </PopoverContent>
     </Popover>
-  );
+  )
 }

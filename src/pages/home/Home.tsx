@@ -1,6 +1,7 @@
 // src/pages/Home.tsx
 "use client";
 
+import Avatar from "../../../public/Avatar de Recepição.png";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText } from "lucide-react";
@@ -87,7 +88,7 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4 text-center sm:text-left">
                 <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white flex-shrink-0">
                   <img
-                    src="Avatar de Recepião.png"
+                    src={Avatar}
                     alt="Avatar"
                     className="w-full h-full object-cover"
                   />
