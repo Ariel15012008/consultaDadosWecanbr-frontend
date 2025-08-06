@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/pagination";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
+import { toast } from "sonner";
 
-// --- Tipos para Holerite (mantidos como estavam) ---
 interface DocumentoHolerite {
   id_documento: string;
   anomes: string;
@@ -62,7 +62,6 @@ interface RodapeHolerite {
   dep_irf: number;
 }
 
-// --- Tipos para Documentos Genéricos ---
 interface DocumentoGenerico {
   id_documento: string;
   situacao: string;
@@ -84,7 +83,6 @@ interface DocumentoGenerico {
   _norm_anomes: string;
 }
 
-// União dos tipos de documento
 type DocumentoUnion = DocumentoHolerite | DocumentoGenerico;
 
 export default function DocumentList() {
@@ -92,16 +90,15 @@ export default function DocumentList() {
   const { user, isLoading: userLoading } = useUser();
   const [searchParams] = useSearchParams();
 
-  // Parâmetros da URL
   const tipoDocumento = searchParams.get("tipo") || "holerite";
   const templateId = searchParams.get("template") || "3";
   const nomeDocumento = searchParams.get("documento") || "";
 
   const [matricula, setMatricula] = useState<string>("");
+  const [cpf, setCpf] = useState<string>("");
   const [anomes, setAnomes] = useState<string>("");
   const [documents, setDocuments] = useState<DocumentoUnion[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
 
@@ -112,14 +109,12 @@ export default function DocumentList() {
     paginaAtual * porPagina
   );
 
-  // Define a matrícula quando o usuário não é gestor
   useEffect(() => {
     if (user && !user.gestor) {
       setMatricula(String(user.matricula));
     }
   }, [user]);
 
-  // Formata "MM/YYYY" ou "YYYY-MM" → "YYYYMM"
   function formatCompetencia(input: string): string {
     if (input.includes("/")) {
       const [mm, yyyy] = input.split("/");
@@ -129,31 +124,56 @@ export default function DocumentList() {
     return input;
   }
 
-  // Busca documentos - lógica híbrida
   const handleSearch = async () => {
-    if (!anomes) return;
+    if (!anomes) {
+      toast.error("Período obrigatório", {
+        description: "Por favor, selecione um período antes de buscar.",
+      });
+      return;
+    }
+
+    if (user?.gestor && tipoDocumento === "holerite" && !cpf && !matricula) {
+      toast.error("CPF ou Matrícula obrigatório", {
+        description:
+          "Para gestores, é necessário informar pelo menos o CPF ou a matrícula.",
+      });
+      return;
+    }
+
     setIsLoading(true);
-    setError(null);
 
     try {
       if (tipoDocumento === "holerite") {
-        // ========== FLUXO HOLERITE (mantém como estava) ==========
         const payload = {
-          cpf: user?.cpf || "",
+          cpf: user?.gestor ? cpf || user?.cpf || "" : user?.cpf || "",
           matricula,
           competencia: formatCompetencia(anomes),
         };
-        const res = await api.post<any[]>(
-          "/documents/holerite/buscar",
-          payload
-        );
-        const mapped: DocumentoHolerite[] = res.data.map((item) => ({
-          id_documento: String(item.lote),
-          anomes: item.competencia,
-        }));
-        setDocuments(mapped);
+
+        const res = await api.post<{
+          cabecalho: CabecalhoHolerite;
+          eventos: EventoHolerite[];
+          rodape: RodapeHolerite;
+        }>("/documents/holerite/buscar", payload);
+
+        if (res.data && res.data.cabecalho) {
+          const documento: DocumentoHolerite = {
+            id_documento: String(res.data.cabecalho.lote || "1"),
+            anomes: res.data.cabecalho.competencia || formatCompetencia(anomes),
+          };
+          setDocuments([documento]);
+          sessionStorage.setItem("holeriteData", JSON.stringify(res.data));
+          toast.success("Holerite encontrado!", {
+            description: `Documento do período ${res.data.cabecalho.competencia} localizado.`,
+          });
+        } else {
+          setDocuments([]);
+          toast.warning("Nenhum holerite encontrado", {
+            description:
+              "Não foi localizado holerite para o período e critérios informados.",
+          });
+        }
       } else {
-        // ========== FLUXO GENÉRICO (novo) ==========
         const cp = [
           { nome: "tipodedoc", valor: nomeDocumento },
           { nome: "matricula", valor: matricula },
@@ -172,43 +192,147 @@ export default function DocumentList() {
           documentos: DocumentoGenerico[];
         }>("/documents/search", payload);
 
-        setDocuments(res.data.documentos || []);
+        const documentos = res.data.documentos || [];
+        setDocuments(documentos);
+
+        if (documentos.length > 0) {
+          toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
+            description: `Foram localizados ${documentos.length} documentos do tipo ${nomeDocumento}.`,
+          });
+        } else {
+          toast.warning("Nenhum documento encontrado", {
+            description: `Não foram localizados documentos do tipo ${nomeDocumento} para os critérios informados.`,
+          });
+        }
       }
 
       setPaginaAtual(1);
     } catch (err: any) {
       console.error("Erro ao buscar documentos:", err);
-      setError(err.response?.data?.message || "Erro ao buscar documentos");
+      setDocuments([]);
+
+      if (err.response) {
+        const status = err.response.status;
+        const message =
+          err.response.data?.message ||
+          err.response.data?.erro ||
+          err.response.data?.detail ||
+          "Erro desconhecido ao buscar documentos";
+
+        switch (status) {
+          case 401:
+            toast.error("Não autorizado", {
+              description: "Sua sessão expirou. Faça login novamente.",
+              action: {
+                label: "Ir para login",
+                onClick: () => navigate("/login"),
+              },
+            });
+            break;
+          case 403:
+            toast.error("Acesso negado", {
+              description:
+                "Você não tem permissão para acessar este documento.",
+            });
+            break;
+          case 404:
+            toast.error("Documento não encontrado", {
+              description:
+                message || "O documento solicitado não existe ou foi removido.",
+            });
+            break;
+          case 500:
+            toast.error("Erro interno do servidor", {
+              description:
+                "Ocorreu um problema no servidor. Tente novamente em alguns minutos.",
+              action: {
+                label: "Tentar novamente",
+                onClick: () => handleSearch(),
+              },
+            });
+            break;
+          default:
+            toast.error("Erro ao buscar documentos", {
+              description:
+                message || "Ocorreu um erro inesperado. Tente novamente.",
+              action: {
+                label: "Tentar novamente",
+                onClick: () => handleSearch(),
+              },
+            });
+        }
+      } else if (err.request) {
+        toast.error("Erro de conexão", {
+          description:
+            "Verifique sua conexão com a internet e tente novamente.",
+          action: {
+            label: "Tentar novamente",
+            onClick: () => handleSearch(),
+          },
+        });
+      } else {
+        toast.error("Erro inesperado", {
+          description:
+            "Ocorreu um erro inesperado. Entre em contato com o suporte.",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Visualizar documento - lógica híbrida
   const visualizarDocumento = async (doc: DocumentoUnion) => {
     setLoadingPreviewId(doc.id_documento);
 
     try {
       if (tipoDocumento === "holerite") {
-        // ========== FLUXO HOLERITE (mantém como estava) ==========
-        const docHolerite = doc as DocumentoHolerite;
-        const payload = {
-          cpf: user?.cpf || "",
-          matricula,
-          competencia: docHolerite.anomes,
-          lote: docHolerite.id_documento,
-        };
+        const savedHoleriteData = sessionStorage.getItem("holeriteData");
+        if (savedHoleriteData) {
+          const docHolerite = doc as DocumentoHolerite;
+          const payload = {
+            cpf: user?.gestor ? cpf || user?.cpf || "" : user?.cpf || "",
+            matricula,
+            competencia: docHolerite.anomes,
+            lote: docHolerite.id_documento,
+          };
 
-        const res = await api.post<{
-          cabecalho: CabecalhoHolerite;
-          eventos: EventoHolerite[];
-          rodape: RodapeHolerite;
-          pdf_base64: string;
-        }>("/documents/holerite/montar", payload);
+          const res = await api.post<{
+            cabecalho: CabecalhoHolerite;
+            eventos: EventoHolerite[];
+            rodape: RodapeHolerite;
+            pdf_base64: string;
+          }>("/documents/holerite/montar", payload);
 
-        navigate("/documento/preview", { state: res.data });
+          if (res.data && res.data.pdf_base64) {
+            navigate("/documento/preview", { state: res.data });
+            toast.success("Documento aberto com sucesso!");
+          } else {
+            throw new Error("Não foi possível gerar o PDF do holerite");
+          }
+        } else {
+          const docHolerite = doc as DocumentoHolerite;
+          const payload = {
+            cpf: user?.gestor ? cpf || user?.cpf || "" : user?.cpf || "",
+            matricula,
+            competencia: docHolerite.anomes,
+            lote: docHolerite.id_documento,
+          };
+
+          const res = await api.post<{
+            cabecalho: CabecalhoHolerite;
+            eventos: EventoHolerite[];
+            rodape: RodapeHolerite;
+            pdf_base64: string;
+          }>("/documents/holerite/montar", payload);
+
+          if (res.data && res.data.pdf_base64) {
+            navigate("/documento/preview", { state: res.data });
+            toast.success("Documento aberto com sucesso!");
+          } else {
+            throw new Error("Não foi possível gerar o PDF do holerite");
+          }
+        }
       } else {
-        // ========== FLUXO GENÉRICO (novo) ==========
         const docGenerico = doc as DocumentoGenerico;
         const payload = {
           id_tipo: Number(templateId),
@@ -221,24 +345,52 @@ export default function DocumentList() {
           base64?: string;
         }>("/searchdocuments/download", payload);
 
-        // Navega para preview com dados genéricos
-        navigate("/documento/preview", {
-          state: {
-            pdf_base64: res.data.base64_raw || res.data.base64,
-            documento_info: docGenerico,
-            tipo: "generico",
-          },
-        });
+        if (res.data.erro) {
+          throw new Error(
+            "O servidor retornou um erro ao processar o documento"
+          );
+        }
+
+        const pdfBase64 = res.data.base64_raw || res.data.base64;
+        if (pdfBase64) {
+          navigate("/documento/preview", {
+            state: {
+              pdf_base64: pdfBase64,
+              documento_info: docGenerico,
+              tipo: "generico",
+            },
+          });
+          toast.success("Documento aberto com sucesso!");
+        } else {
+          throw new Error("O documento não possui conteúdo PDF disponível");
+        }
       }
     } catch (err: any) {
       console.error("Erro ao visualizar documento:", err);
-      setError(err.response?.data?.message || "Erro ao visualizar documento");
+
+      let errorMessage = "Não foi possível abrir o documento";
+      if (err.response) {
+        errorMessage =
+          err.response.data?.message ||
+          err.response.data?.erro ||
+          err.response.data?.detail ||
+          "Erro ao processar o documento";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      toast.error("Erro ao abrir documento", {
+        description: errorMessage,
+        action: {
+          label: "Tentar novamente",
+          onClick: () => visualizarDocumento(doc),
+        },
+      });
     } finally {
       setLoadingPreviewId(null);
     }
   };
 
-  // Renderiza informações do documento na tabela
   const renderDocumentInfo = (doc: DocumentoUnion) => {
     if (tipoDocumento === "holerite") {
       const docHolerite = doc as DocumentoHolerite;
@@ -258,7 +410,6 @@ export default function DocumentList() {
     }
   };
 
-  // Renderiza cabeçalho da tabela
   const renderTableHeader = () => {
     if (tipoDocumento === "holerite") {
       return (
@@ -290,6 +441,7 @@ export default function DocumentList() {
     <div className="flex flex-col min-h-screen overflow-x-hidden">
       <Header />
       <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 z-0" />
+
       <main className="relative z-10 flex flex-col flex-grow items-center pt-32 px-4 pb-10">
         <div className="w-full max-w-6xl bg-[#1e1e2f] text-white rounded-xl shadow-2xl p-6">
           <Button
@@ -306,16 +458,15 @@ export default function DocumentList() {
               : `Buscar ${nomeDocumento}`}
           </h2>
 
-          {error && (
-            <div className="bg-red-500 text-white p-4 rounded mb-4 flex justify-between items-center">
-              <span>{error}</span>
-              <button onClick={() => setError(null)}>×</button>
-            </div>
-          )}
-
           {user?.gestor ? (
-            // Layout em grid para gestores (3 colunas)
-            <div className="w-fit mx-auto grid gap-4 sm:grid-cols-3 mb-6">
+            <div className="w-fit mx-auto grid gap-4 sm:grid-cols-4 mb-6">
+              <input
+                type="text"
+                placeholder="CPF (opcional)"
+                className="bg-[#2c2c40] text-white border p-2 rounded"
+                value={cpf}
+                onChange={(e) => setCpf(e.target.value)}
+              />
               <input
                 type="text"
                 placeholder="Matrícula"
@@ -339,7 +490,6 @@ export default function DocumentList() {
               </Button>
             </div>
           ) : (
-            // Layout em linha para não gestores (apenas anomes e botão)
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
               <div className="w-full max-w-xs">
                 <CustomMonthPicker
@@ -447,6 +597,7 @@ export default function DocumentList() {
           )}
         </div>
       </main>
+
       <Footer />
     </div>
   );
