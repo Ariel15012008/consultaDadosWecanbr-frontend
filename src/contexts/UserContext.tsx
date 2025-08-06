@@ -17,6 +17,7 @@ interface User {
   email: string;
   matricula: string;
   gestor: boolean;
+  cpf: string;
 }
 
 interface UserContextType {

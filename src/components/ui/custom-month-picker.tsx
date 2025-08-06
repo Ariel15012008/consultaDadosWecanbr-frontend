@@ -133,7 +133,7 @@ export default function CustomMonthPicker({
             <Button
               onClick={handleClear}
               variant="outline"
-              className="flex-1 bg-transparent border-gray-600 text-white hover:bg-[#3c3c50]"
+              className="flex-1 bg-transparent border-gray-600 text-white hover:bg-[#3c3c50] hover:text-white"
             >
               Limpar
             </Button>

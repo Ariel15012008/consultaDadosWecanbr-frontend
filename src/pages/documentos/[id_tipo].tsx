@@ -91,12 +91,12 @@ export default function DocumentList() {
   const navigate = useNavigate();
   const { user, isLoading: userLoading } = useUser();
   const [searchParams] = useSearchParams();
-  
+
   // Parâmetros da URL
   const tipoDocumento = searchParams.get("tipo") || "holerite";
   const templateId = searchParams.get("template") || "3";
   const nomeDocumento = searchParams.get("documento") || "";
-  
+
   const [matricula, setMatricula] = useState<string>("");
   const [anomes, setAnomes] = useState<string>("");
   const [documents, setDocuments] = useState<DocumentoUnion[]>([]);
@@ -104,7 +104,7 @@ export default function DocumentList() {
   const [error, setError] = useState<string | null>(null);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
-  
+
   const porPagina = 10;
   const totalPaginas = Math.ceil(documents.length / porPagina);
   const documentosVisiveis = documents.slice(
@@ -134,12 +134,19 @@ export default function DocumentList() {
     if (!anomes) return;
     setIsLoading(true);
     setError(null);
-    
+
     try {
       if (tipoDocumento === "holerite") {
         // ========== FLUXO HOLERITE (mantém como estava) ==========
-        const payload = { matricula, competencia: formatCompetencia(anomes) };
-        const res = await api.post<any[]>("/documents/holerite/buscar", payload);
+        const payload = {
+          cpf: user?.cpf || "",
+          matricula,
+          competencia: formatCompetencia(anomes),
+        };
+        const res = await api.post<any[]>(
+          "/documents/holerite/buscar",
+          payload
+        );
         const mapped: DocumentoHolerite[] = res.data.map((item) => ({
           id_documento: String(item.lote),
           anomes: item.competencia,
@@ -151,23 +158,23 @@ export default function DocumentList() {
           { nome: "tipodedoc", valor: nomeDocumento },
           { nome: "matricula", valor: matricula },
         ];
-        
+
         const payload = {
           id_template: Number(templateId),
           cp,
-          campo_anomes: "anomes"
+          campo_anomes: "anomes",
         };
-        
+
         const res = await api.post<{
           total_bruto: number;
           ultimos_6_meses: string[];
           total_encontrado: number;
           documentos: DocumentoGenerico[];
         }>("/documents/search", payload);
-        
+
         setDocuments(res.data.documentos || []);
       }
-      
+
       setPaginaAtual(1);
     } catch (err: any) {
       console.error("Erro ao buscar documentos:", err);
@@ -180,46 +187,47 @@ export default function DocumentList() {
   // Visualizar documento - lógica híbrida
   const visualizarDocumento = async (doc: DocumentoUnion) => {
     setLoadingPreviewId(doc.id_documento);
-    
+
     try {
       if (tipoDocumento === "holerite") {
         // ========== FLUXO HOLERITE (mantém como estava) ==========
         const docHolerite = doc as DocumentoHolerite;
         const payload = {
+          cpf: user?.cpf || "",
           matricula,
           competencia: docHolerite.anomes,
           lote: docHolerite.id_documento,
         };
-        
+
         const res = await api.post<{
           cabecalho: CabecalhoHolerite;
           eventos: EventoHolerite[];
           rodape: RodapeHolerite;
           pdf_base64: string;
         }>("/documents/holerite/montar", payload);
-        
+
         navigate("/documento/preview", { state: res.data });
       } else {
         // ========== FLUXO GENÉRICO (novo) ==========
         const docGenerico = doc as DocumentoGenerico;
         const payload = {
           id_tipo: Number(templateId),
-          id_documento: Number(docGenerico.id_documento)
+          id_documento: Number(docGenerico.id_documento),
         };
-        
+
         const res = await api.post<{
           erro: boolean;
           base64_raw?: string;
           base64?: string;
         }>("/searchdocuments/download", payload);
-        
+
         // Navega para preview com dados genéricos
-        navigate("/documento/preview", { 
-          state: { 
+        navigate("/documento/preview", {
+          state: {
             pdf_base64: res.data.base64_raw || res.data.base64,
             documento_info: docGenerico,
-            tipo: "generico"
-          } 
+            tipo: "generico",
+          },
         });
       }
     } catch (err: any) {
@@ -245,8 +253,6 @@ export default function DocumentList() {
       return (
         <>
           <td className="px-4 py-2 text-left">{docGenerico._norm_anomes}</td>
-          <td className="px-4 py-2 text-center">{docGenerico.nomearquivo}</td>
-          <td className="px-4 py-2 text-center">{docGenerico.tamanho} KB</td>
         </>
       );
     }
@@ -266,8 +272,6 @@ export default function DocumentList() {
       return (
         <>
           <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
-          <th className="py-3 text-center min-w-[200px]">Nome do Arquivo</th>
-          <th className="py-3 text-center min-w-[100px]">Tamanho</th>
           <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
         </>
       );
@@ -295,22 +299,23 @@ export default function DocumentList() {
           >
             <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
           </Button>
-          
+
           <h2 className="text-xl font-bold mb-6 text-center">
-            {tipoDocumento === "holerite" ? "Buscar Holerite" : `Buscar ${nomeDocumento}`}
+            {tipoDocumento === "holerite"
+              ? "Buscar Holerite"
+              : `Buscar ${nomeDocumento}`}
           </h2>
-          
+
           {error && (
             <div className="bg-red-500 text-white p-4 rounded mb-4 flex justify-between items-center">
               <span>{error}</span>
               <button onClick={() => setError(null)}>×</button>
             </div>
           )}
-          
-          <div className={`w-fit mx-auto grid gap-4 ${
-            user?.gestor ? "sm:grid-cols-3" : "sm:grid-cols-2"
-          } mb-6`}>
-            {user?.gestor && (
+
+          {user?.gestor ? (
+            // Layout em grid para gestores (3 colunas)
+            <div className="w-fit mx-auto grid gap-4 sm:grid-cols-3 mb-6">
               <input
                 type="text"
                 placeholder="Matrícula"
@@ -318,30 +323,48 @@ export default function DocumentList() {
                 value={matricula}
                 onChange={(e) => setMatricula(e.target.value)}
               />
-            )}
-             <div className={`flex justify-center items-center ${!user?.gestor ? "sm:col-span-2 lg:col-span-3" : ""}`}>
-            <div className="w-full max-w-xs">
-              <CustomMonthPicker value={anomes} onChange={setAnomes} placeholder="Selecionar período" />
+              <div className="w-full max-w-xs">
+                <CustomMonthPicker
+                  value={anomes}
+                  onChange={setAnomes}
+                  placeholder="Selecionar período"
+                />
+              </div>
+              <Button
+                onClick={handleSearch}
+                disabled={isLoading || !anomes}
+                className="bg-green-600 hover:bg-green-500"
+              >
+                {isLoading ? "Buscando..." : "Buscar"}
+              </Button>
             </div>
-          </div>
-            <Button
-              onClick={handleSearch}
-              disabled={isLoading || !anomes}
-              className="bg-green-600 hover:bg-green-500"
-            >
-              {isLoading ? "Buscando..." : "Buscar"}
-            </Button>
-          </div>
-          
+          ) : (
+            // Layout em linha para não gestores (apenas anomes e botão)
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+              <div className="w-full max-w-xs">
+                <CustomMonthPicker
+                  value={anomes}
+                  onChange={setAnomes}
+                  placeholder="Selecionar período"
+                />
+              </div>
+              <Button
+                onClick={handleSearch}
+                disabled={isLoading || !anomes}
+                className="bg-green-600 hover:bg-green-500 w-full sm:w-auto"
+              >
+                {isLoading ? "Buscando..." : "Buscar"}
+              </Button>
+            </div>
+          )}
+
           {isLoading ? (
             <p className="text-center">Carregando documentos...</p>
           ) : (
             <div className="overflow-x-auto border border-gray-600 rounded">
               <table className="w-full text-sm text-left text-white">
                 <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
-                  <tr>
-                    {renderTableHeader()}
-                  </tr>
+                  <tr>{renderTableHeader()}</tr>
                 </thead>
                 <tbody>
                   {documentosVisiveis.length === 0 ? (
@@ -378,7 +401,7 @@ export default function DocumentList() {
               </table>
             </div>
           )}
-          
+
           {totalPaginas > 1 && (
             <div className="flex justify-center mt-6 w-full overflow-x-auto px-2">
               <Pagination>
