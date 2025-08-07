@@ -1,5 +1,4 @@
 // src/contexts/UserContext.tsx
-"use client";
 
 import {
   createContext,
@@ -7,8 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type ReactNode,
-  useCallback,
+  type ReactNode
 } from "react";
 import { useNavigate } from "react-router-dom";
 import Cookies from "js-cookie";
@@ -47,28 +45,35 @@ export function UserProvider({ children }: UserProviderProps) {
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
   // Autenticação silenciosa (usado em mount e refresh)
-  const silentAuth = useCallback(async () => {
+  const silentAuth = async () => {
     setIsLoading(true);
     try {
       const res = await api.get("/user/me");
       if (res.status === 200) {
         setUser(res.data);
         setIsAuthenticated(true);
+        // Atualiza timestamp de autenticação
         Cookies.set("logged_user", Date.now().toString());
       } else {
         setUser(null);
         setIsAuthenticated(false);
       }
-    } catch {
+    } catch (error) {
+      console.error("Erro na autenticação:", error);
       setUser(null);
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
-  // Logout limpa cookies e redireciona
-  const logout = useCallback(async () => {
+  // Função para forçar refresh de usuário
+  const refreshUser = async () => {
+    await silentAuth();
+  };
+
+  // Logout limpa cookies e redireciona para landing
+  const logout = async () => {
     try {
       Cookies.remove("access_token");
       Cookies.remove("logged_user");
@@ -78,42 +83,25 @@ export function UserProvider({ children }: UserProviderProps) {
       didLogout.current = true;
       window.history.replaceState(null, "", "/");
       navigate("/", { replace: true });
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error("Erro no logout:", error);
     }
-  }, [navigate]);
-
-  // Função para forçar refresh de usuário
-  const refreshUser = useCallback(async () => {
-    await silentAuth();
-  }, [silentAuth]);
+  };
 
   // Autentica ao montar, se ainda não deslogado
   useEffect(() => {
     if (!didLogout.current) {
       silentAuth();
     }
-  }, [silentAuth]);
+  }, []);
 
-  // Polling heartbeat: verifica servidor a cada 30s e faz logout se cair
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        await api.get("/user/me"); // ping
-      } catch {
-        await logout();
-      }
-    }, 30_000);
-
-    return () => clearInterval(interval);
-  }, [logout]);
-
-  // Efeito de expiração de token (30 dias)
+  // Efeito de verificação de expiração e refresh automático
   useEffect(() => {
     const interval = setInterval(async () => {
       const timestamp = Cookies.get("logged_user");
       if (!timestamp) return;
       const loggedTime = parseInt(timestamp, 10);
+      // Usa 30 dias em milissegundos para expirar
       if (Date.now() - loggedTime > thirtyDays) {
         try {
           await api.post("/user/refresh");
@@ -125,7 +113,7 @@ export function UserProvider({ children }: UserProviderProps) {
     }, 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [logout]);
+  }, []);
 
   const value: UserContextType = {
     user,
