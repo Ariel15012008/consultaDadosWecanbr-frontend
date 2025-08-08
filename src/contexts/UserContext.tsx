@@ -40,7 +40,7 @@ export function UserProvider({ children }: UserProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
-  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  const thirtyDays = 60 * 1000;
 
   const silentAuth = async () => {
     setIsLoading(true);
