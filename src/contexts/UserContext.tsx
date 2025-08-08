@@ -1,4 +1,5 @@
 // src/contexts/UserContext.tsx
+
 import {
   createContext,
   useContext,
@@ -40,8 +41,10 @@ export function UserProvider({ children }: UserProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
+  // Intervalo de expiração (30 dias)
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
+  // Autenticação silenciosa (usado em mount e refresh)
   const silentAuth = async () => {
     setIsLoading(true);
     try {
@@ -49,11 +52,14 @@ export function UserProvider({ children }: UserProviderProps) {
       if (res.status === 200) {
         setUser(res.data);
         setIsAuthenticated(true);
+        // Atualiza timestamp de autenticação
+        Cookies.set("logged_user", Date.now().toString());
       } else {
         setUser(null);
         setIsAuthenticated(false);
       }
     } catch (error) {
+      console.error("Erro na autenticação:", error);
       setUser(null);
       setIsAuthenticated(false);
     } finally {
@@ -61,10 +67,12 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
+  // Função para forçar refresh de usuário
   const refreshUser = async () => {
     await silentAuth();
   };
 
+  // Logout limpa cookies e redireciona para landing
   const logout = async () => {
     try {
       Cookies.remove("access_token");
@@ -80,21 +88,20 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
+  // Autentica ao montar, se ainda não deslogado
   useEffect(() => {
     if (!didLogout.current) {
       silentAuth();
     }
   }, []);
 
+  // Efeito de verificação de expiração e refresh automático
   useEffect(() => {
-    if (!isAuthenticated) return;
-
     const interval = setInterval(async () => {
       const timestamp = Cookies.get("logged_user");
       if (!timestamp) return;
       const loggedTime = parseInt(timestamp, 10);
-      if (!Number.isFinite(loggedTime)) return;
-
+      // Usa 30 dias em milissegundos para expirar
       if (Date.now() - loggedTime > thirtyDays) {
         try {
           await api.post("/user/refresh");
@@ -106,7 +113,7 @@ export function UserProvider({ children }: UserProviderProps) {
     }, 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, []);
 
   const value: UserContextType = {
     user,
