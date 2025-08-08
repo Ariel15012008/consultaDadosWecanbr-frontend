@@ -13,11 +13,8 @@ export default defineConfig({
     sourcemap: true
   },
   server: {
-    https: {
-      key: './certs/localhost-key.pem',
-      cert: './certs/localhost.pem'
-    },
     host: '0.0.0.0',
-    port: 5173
+    port: 5173,
+    allowedHosts: ['rh.ziondocs.com.br'], // <-- libera seu domínio aqui
   }
 })
