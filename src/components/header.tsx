@@ -65,17 +65,17 @@ export default function Header() {
             <DropdownMenu>
               <DropdownMenuTrigger
                 asChild
-                className="hover:cursor-pointer mr-4"
+                className="hover:cursor-pointer "
               >
                 <Button
                   variant="ghost"
-                  className="flex items-center hover:bg-blue-700"
+                  className="flex items-center bg-transparent hover:bg-blue-700 mr-8"
                 >
                   <IoPersonCircle className="!w-8 !h-8" />
                   <span>{user?.nome || "Usuário"}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-white border border-blue-100 hover:cursor-pointer">
+              <DropdownMenuContent className="w-56 bg-white border border-blue-100 hover:cursor-pointer ">
                 {/*
                 <DropdownMenuItem
                   className="hover:cursor-pointer hover:bg-gray-200"
@@ -103,7 +103,7 @@ export default function Header() {
         </div>
 
         <Sheet>
-          <SheetTrigger asChild className="md:hidden">
+          <SheetTrigger asChild className="md:hidden mr-2">
             <Button variant="ghost" size="icon">
               <RxHamburgerMenu className="!h-6 !w-6 text-white" />
             </Button>
