@@ -115,11 +115,13 @@ export default function Home() {
                   const isHolerite = nome.toLowerCase().includes('holerite') || 
                                    nome.toLowerCase().includes('folha') ||
                                    nome.toLowerCase().includes('pagamento');
-                  
+                  console.log(1)
                   if (isHolerite) {
+		  console.log(2)
                     // Para holerite, navega sem parâmetros específicos (usa fluxo atual)
                     navigate("/documentos?tipo=holerite");
                   } else {
+		    console.log(3)
                     // Para outros documentos, passa o template e o tipo
                     const templateId = getTemplateId(nome);
                     navigate(`/documentos?tipo=generico&template=${templateId}&documento=${encodeURIComponent(nome)}`);
