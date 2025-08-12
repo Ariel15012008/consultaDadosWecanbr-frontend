@@ -13,7 +13,7 @@ type ButtonVariant = React.ComponentProps<typeof Button>["variant"]
 
 type ChevronProps = {
   className?: string
-  orientation?: "left" | "right" | "down" | "horizontal" | "vertical"
+  orientation?: "left" | "right" | "down" | "up" | "horizontal" | "vertical"
 } & React.SVGProps<SVGSVGElement>
 
 type RootProps = {
