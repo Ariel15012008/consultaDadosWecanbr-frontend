@@ -176,6 +176,29 @@ export default function DocumentList() {
     return cpfValue.replace(/\D/g, "");
   };
 
+  // ALTERAÇÃO: nova função para padronizar anomes no formato "YYYY-MM"
+  function formatAnomesYYYYMMdash(input: string): string {
+    if (!input) return "";
+    const v = input.trim();
+    if (v.includes("/")) {
+      const [mm, yyyy] = v.split("/");
+      return `${yyyy}-${mm.padStart(2, "0")}`;
+    }
+    if (/^\d{6}$/.test(v)) {
+      // yyyymm -> yyyy-mm
+      return `${v.slice(0, 4)}-${v.slice(4, 6)}`;
+    }
+    if (/^\d{4}-\d{2}$/.test(v)) {
+      return v;
+    }
+    if (/^\d{4}-\d{1}$/.test(v)) {
+      const [y, m] = v.split("-");
+      return `${y}-${m.padStart(2, "0")}`;
+    }
+    return v;
+  }
+
+  // Mantido para holerite, onde o backend usa "YYYYMM" em alguns casos
   function formatCompetencia(input: string): string {
     if (input.includes("/")) {
       const [mm, yyyy] = input.split("/");
@@ -248,6 +271,7 @@ export default function DocumentList() {
           });
         }
       } else {
+        // ALTERAÇÃO: enviar anomes no body top-level no formato "YYYY-MM"
         const cp = [
           { nome: "tipodedoc", valor: nomeDocumento },
           { nome: "matricula", valor: matricula.trim() },
@@ -257,6 +281,7 @@ export default function DocumentList() {
           id_template: Number(templateId),
           cp,
           campo_anomes: "anomes",
+          anomes: formatAnomesYYYYMMdash(anomes), // <--- ALTERAÇÃO
         };
 
         const res = await api.post<{
