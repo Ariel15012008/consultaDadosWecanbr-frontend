@@ -15,13 +15,13 @@ interface CustomMonthPickerProps {
 export default function CustomMonthPicker({
   value,
   onChange,
-  placeholder = "Selecionar mês/ano",
+  placeholder = "Selecionar período",
 }: CustomMonthPickerProps) {
   const [open, setOpen] = useState(false)
   const [selectedYear, setSelectedYear] = useState(value ? value.split("-")[0] : "")
   const [selectedMonth, setSelectedMonth] = useState(value ? value.split("-")[1] : "")
 
-  // Gerar anos (últimos 10 anos + próximos 2 anos)
+  // Gerar anos (últimos 10 anos)
   const currentYear = new Date().getFullYear()
   const years = Array.from({ length: 11 }, (_, i) => currentYear - i)
 
@@ -66,30 +66,35 @@ export default function CustomMonthPicker({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className="bg-[#2c2c40] text-white border-gray-600 hover:bg-[#3c3c50] hover:text-white justify-between w-full"
+          className="bg-[#2c2c40] text-white border-gray-600 hover:bg-[#3c3c50] hover:text-white justify-between w-full h-auto p-2.5"
         >
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span className="truncate">{getDisplayValue()}</span>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Calendar className="h-4 w-4 flex-shrink-0" />
+            <span className="truncate text-left text-sm">{getDisplayValue()}</span>
           </div>
           <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[calc(100vw-2rem)] sm:w-80 max-w-80 bg-[#2c2c40] border-gray-600"
+        className="w-[min(calc(100vw-2rem),320px)] bg-[#2c2c40] border-gray-600 p-4"
         align="center"
         sideOffset={5}
+        side="bottom"
+        avoidCollisions={true}
       >
         <div className="space-y-4">
-          <div className="text-sm font-medium text-white text-center">Selecionar Período</div>
+          <div className="text-sm font-medium text-white text-center">
+            Selecionar Período
+          </div>
+          
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <label className="text-xs text-gray-300">Ano</label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger className="bg-[#1e1e2f] border-gray-600 text-white">
+                <SelectTrigger className="bg-[#1e1e2f] border-gray-600 text-white h-10">
                   <SelectValue placeholder="Ano" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#2c2c40] border-gray-600">
+                <SelectContent className="bg-[#2c2c40] border-gray-600 max-h-60">
                   {years.map((year) => (
                     <SelectItem
                       key={year}
@@ -102,13 +107,14 @@ export default function CustomMonthPicker({
                 </SelectContent>
               </Select>
             </div>
+            
             <div className="space-y-2">
               <label className="text-xs text-gray-300">Mês</label>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="bg-[#1e1e2f] border-gray-600 text-white">
+                <SelectTrigger className="bg-[#1e1e2f] border-gray-600 text-white h-10">
                   <SelectValue placeholder="Mês" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#2c2c40] border-gray-600">
+                <SelectContent className="bg-[#2c2c40] border-gray-600 max-h-60">
                   {months.map((month) => (
                     <SelectItem
                       key={month.value}
@@ -122,18 +128,19 @@ export default function CustomMonthPicker({
               </Select>
             </div>
           </div>
+          
           <div className="flex gap-2 pt-2">
             <Button
               onClick={handleApply}
               disabled={!selectedYear || !selectedMonth}
-              className="flex-1 bg-green-600 hover:bg-green-500 text-white"
+              className="flex-1 bg-green-600 hover:bg-green-500 text-white disabled:bg-gray-600 disabled:cursor-not-allowed h-10"
             >
               Aplicar
             </Button>
             <Button
               onClick={handleClear}
               variant="outline"
-              className="flex-1 bg-transparent border-gray-600 text-white hover:bg-[#3c3c50] hover:text-white"
+              className="flex-1 bg-transparent border-gray-600 text-white hover:bg-[#3c3c50] hover:text-white h-10"
             >
               Limpar
             </Button>

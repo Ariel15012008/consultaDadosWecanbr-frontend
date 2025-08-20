@@ -18,8 +18,8 @@ function shouldSkipRefresh(requestUrl?: string) {
   if (!requestUrl) return true;
   return (
     requestUrl.includes("/user/refresh") ||
-    requestUrl.includes("/auth/login") ||
-    requestUrl.includes("/auth/logout")
+    requestUrl.includes("/user/login") ||
+    requestUrl.includes("/user/logout")
   );
 }
 

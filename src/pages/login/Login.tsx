@@ -40,10 +40,11 @@ export default function LoginPage() {
       await api.post("/user/login", data, { withCredentials: true });
       
       // Atualiza os dados do usuário no contexto após login bem-sucedido
-      await refreshUser();
+       await refreshUser();
       
       navigate("/");
     } catch (err: any) {
+      console.error("Erro ao fazer login:", err);
       if (err?.message === "Network Error") {
         setLoginError(
           "Não foi possível conectar ao servidor. Verifique sua conexão."

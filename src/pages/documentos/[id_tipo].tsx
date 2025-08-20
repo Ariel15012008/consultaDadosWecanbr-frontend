@@ -573,14 +573,14 @@ export default function DocumentList() {
               <Button
                 onClick={handleSearch}
                 disabled={isLoading || !anomes || (!!cpf && !!cpfError)}
-                className="bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                className="bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed p-5"
               >
                 {isLoading ? "Buscando..." : "Buscar"}
               </Button>
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
-              <div className="w-full max-w-xs">
+              <div className="w-full max-w-xs ">
                 <CustomMonthPicker
                   value={anomes}
                   onChange={setAnomes}
@@ -590,7 +590,7 @@ export default function DocumentList() {
               <Button
                 onClick={handleSearch}
                 disabled={isLoading || !anomes}
-                className="bg-green-600 hover:bg-green-500 w-full sm:w-auto"
+                className="bg-green-600 hover:bg-green-500 w-full sm:w-auto "
               >
                 {isLoading ? "Buscando..." : "Buscar"}
               </Button>
