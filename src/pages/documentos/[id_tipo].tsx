@@ -553,7 +553,7 @@ export default function DocumentList() {
       <main className="relative z-10 flex flex-col flex-grow items-center pt-32 px-4 pb-10">
         <div className="w-full max-w-6xl bg-[#1e1e2f] text-white rounded-xl shadow-2xl p-6">
           <Button
-            variant="ghost"
+            variant="default"
             onClick={() => navigate("/")}
             className="mb-4 text-white hover:text-gray-300"
           >
