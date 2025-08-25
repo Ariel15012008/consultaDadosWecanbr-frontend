@@ -94,17 +94,15 @@ interface CompetenciaItem {
 }
 
 // ================================================
-// 🔧 ALTERAÇÃO: helpers de formatação
-// - toYYYYDashMM: exibição "YYYY-MM" a partir de "YYYYMM" ou "YYYY-MM"
-// - makeYYYYMMLabel: rótulo para botões ("YYYY-MM")
-// - makeYYYYMMValue: valor para backend ("YYYYMM")
+// 🔧 helpers de formatação
 // ================================================
 const toYYYYDashMM = (v: string) => {
   if (!v) return v;
   return v.includes("-") ? v : v.replace(/(\d{4})(\d{2})/, "$1-$2");
 };
 const makeYYYYMMLabel = (ano: number, mes: string) => `${ano}-${mes}`; // exibição
-const makeYYYYMMValue = (ano: number, mes: string) => `${ano}${mes}`;   // payload
+const makeYYYYMMValue = (ano: number, mes: string | number) =>
+  `${ano}${String(mes).padStart(2, "0")}`;
 
 export default function DocumentList() {
   const navigate = useNavigate();
@@ -132,6 +130,10 @@ export default function DocumentList() {
   );
 
   const fetchedCompetencias = useRef(false);
+  // ALTERAÇÃO: flag independente para discovery de documentos genéricos
+  const fetchedCompetenciasGenericos = useRef(false);
+
+  // ⚠️ Nota: variáveis let reiniciam a cada render. Se quiser garantir “uma vez”, use useRef/useState.
   let HAS_SHOWN_COMPETENCIAS_TOAST = false;
 
   useEffect(() => {
@@ -212,19 +214,26 @@ export default function DocumentList() {
 
   // ===========================================================
   // ALTERAÇÃO: estados e lógica do "modo discovery" (não gestor)
+  // - holerite (já existia)
+  // - genéricos (NOVO) via /documents/search com anomes: ""
   // ===========================================================
   const [isLoadingCompetencias, setIsLoadingCompetencias] = useState(false);
   const [competencias, setCompetencias] = useState<CompetenciaItem[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
-  // anos únicos ordenados (desc)
+  // NOVO: estados para discovery de genéricos
+  const [isLoadingCompetenciasGen, setIsLoadingCompetenciasGen] = useState(false);
+  const [competenciasGen, setCompetenciasGen] = useState<CompetenciaItem[]>([]);
+  const [selectedYearGen, setSelectedYearGen] = useState<number | null>(null);
+
+  // anos únicos ordenados (desc) — holerite
   const anosDisponiveis = useMemo(() => {
     const setAnos = new Set<number>();
     competencias.forEach((c) => setAnos.add(c.ano));
     return Array.from(setAnos).sort((a, b) => b - a);
   }, [competencias]);
 
-  // meses do ano selecionado (únicos, ordenados desc numericamente "01".."12")
+  // meses do ano selecionado — holerite
   const mesesDoAnoSelecionado = useMemo(() => {
     if (!selectedYear) return [];
     const meses = competencias
@@ -234,68 +243,152 @@ export default function DocumentList() {
     return unicos.sort((a, b) => Number(b) - Number(a)); // "12".."01"
   }, [competencias, selectedYear]);
 
+  // anos únicos ordenados (desc) — genéricos
+  const anosDisponiveisGen = useMemo(() => {
+    const setAnos = new Set<number>();
+    competenciasGen.forEach((c) => setAnos.add(c.ano));
+    return Array.from(setAnos).sort((a, b) => b - a);
+  }, [competenciasGen]);
+
+  // meses do ano selecionado — genéricos
+  const mesesDoAnoSelecionadoGen = useMemo(() => {
+    if (!selectedYearGen) return [];
+    const meses = competenciasGen
+      .filter((c) => c.ano === selectedYearGen)
+      .map((c) => c.mes);
+    const unicos = Array.from(new Set(meses));
+    return unicos.sort((a, b) => Number(b) - Number(a)); // "12".."01"
+  }, [competenciasGen, selectedYearGen]);
+
   // ================================================
-  // ALTERAÇÃO: carregar competências ao entrar (não gestor / holerite)
+  // Holerite: carregar competências ao entrar (não gestor / holerite)
   // ================================================
   useEffect(() => {
-  const deveRodarDiscovery =
-    !userLoading && user && !user.gestor && tipoDocumento === "holerite";
+    const deveRodarDiscovery =
+      !userLoading && user && !user.gestor && tipoDocumento === "holerite";
 
-  if (!deveRodarDiscovery) return;
+    if (!deveRodarDiscovery) return;
 
-  if (fetchedCompetencias.current) return; // evita segunda execução em StrictMode
-  fetchedCompetencias.current = true;
+    if (fetchedCompetencias.current) return; // evita segunda execução em StrictMode
+    fetchedCompetencias.current = true;
 
-  const run = async () => {
-    try {
-      setIsLoadingCompetencias(true);
-      setDocuments([]);
-      setPaginaAtual(1);
+    const run = async () => {
+      try {
+        setIsLoadingCompetencias(true);
+        setDocuments([]);
+        setPaginaAtual(1);
 
-      const payload = {
-        cpf: user?.cpf || "",
-        matricula: String(user?.matricula || "").trim(),
-        competencia: "",
-      };
+        const payload = {
+          cpf: user?.cpf || "",
+          matricula: String(user?.matricula || "").trim(),
+          competencia: "",
+        };
 
-      const res = await api.post<{ competencias: CompetenciaItem[] }>(
-        "/documents/holerite/buscar",
-        payload
-      );
+        const res = await api.post<{ competencias: CompetenciaItem[] }>(
+          "/documents/holerite/buscar",
+          payload
+        );
 
-      const lista = res.data?.competencias || [];
-      setCompetencias(lista);
+        const lista = res.data?.competencias || [];
+        setCompetencias(lista);
 
-      if (!lista.length) {
-  toast.warning("Nenhum período de holerite encontrado.", { id: "competencias-empty" });
-} else {
-  if (!HAS_SHOWN_COMPETENCIAS_TOAST) {
-    toast.success("Períodos disponíveis carregados.", { id: "competencias-loaded" });
-    HAS_SHOWN_COMPETENCIAS_TOAST = true;
-  }
-}
+        if (!lista.length) {
+          toast.warning("Nenhum período de holerite encontrado.", { id: "competencias-empty" });
+        } else {
+          if (!HAS_SHOWN_COMPETENCIAS_TOAST) {
+            toast.success("Períodos disponíveis carregados.", { id: "competencias-loaded" });
+            HAS_SHOWN_COMPETENCIAS_TOAST = true;
+             console.log("payload holerite buscar:", payload);
+          }
+        }
+      } catch (err: any) {
+        console.error("Erro ao listar competências:", err);
+        toast.error("Erro ao carregar períodos do holerite", {
+          description:
+            err?.response?.data?.detail ||
+            err?.response?.data?.message ||
+            "Falha ao consultar competências.",
+        });
+      } finally {
+        setIsLoadingCompetencias(false);
+      }
+    };
 
-    } catch (err: any) {
-      console.error("Erro ao listar competências:", err);
-      toast.error("Erro ao carregar períodos do holerite", {
-        description:
-          err?.response?.data?.detail ||
-          err?.response?.data?.message ||
-          "Falha ao consultar competências.",
-      });
-    } finally {
-      setIsLoadingCompetencias(false);
-    }
-  };
+    run();
+  }, [userLoading, user, tipoDocumento]);
 
-  run();
-}, [userLoading, user, tipoDocumento]);
+  // ================================================
+  // ALTERAÇÃO: Genéricos: carregar competências (não gestor / tipo != holerite)
+  // Chama /documents/search com anomes: ""
+  // ================================================
+  useEffect(() => {
+    const deveRodarDiscoveryGen =
+      !userLoading && user && !user.gestor && tipoDocumento !== "holerite";
 
+    if (!deveRodarDiscoveryGen) return;
+
+    if (fetchedCompetenciasGenericos.current) return; // evita segunda execução em StrictMode
+    fetchedCompetenciasGenericos.current = true;
+
+    const run = async () => {
+      try {
+        setIsLoadingCompetenciasGen(true);
+        setDocuments([]);
+        setPaginaAtual(1);
+
+        const cp = [
+          { nome: "tipodedoc", valor: nomeDocumento },
+          { nome: "matricula", valor: String(user?.matricula || "").trim() },
+        ];
+
+        const payload = {
+          id_template: Number(templateId),
+          cp,
+          campo_anomes: "anomes",
+          anomes: "", // <- discovery
+        };
+
+        const res = await api.post<{ anomes: { ano: number; mes: number }[] }>(
+          "/documents/search",
+          payload
+        );
+
+        const listaBruta = res.data?.anomes ?? [];
+        const lista: CompetenciaItem[] = listaBruta.map((x) => ({
+          ano: x.ano,
+          mes: String(x.mes).padStart(2, "0"),
+        }));
+
+        setCompetenciasGen(lista);
+
+        if (!lista.length) {
+          toast.warning(`Nenhum período encontrado para ${nomeDocumento}.`, {
+            id: "competencias-gen-empty",
+          });
+        } else {
+          toast.success(`Períodos disponíveis de ${nomeDocumento} carregados.`, {
+            id: "competencias-gen-loaded",
+          });
+          
+        }
+      } catch (err: any) {
+        console.error("Erro ao listar períodos (genéricos):", err);
+        toast.error("Erro ao carregar períodos", {
+          description:
+            err?.response?.data?.detail ||
+            err?.response?.data?.message ||
+            "Falha ao consultar períodos disponíveis.",
+        });
+      } finally {
+        setIsLoadingCompetenciasGen(false);
+      }
+    };
+
+    run();
+  }, [userLoading, user, tipoDocumento, nomeDocumento, templateId]);
 
   // ==========================================
-  // ALTERAÇÃO: buscar holerite de um mês (click)
-  // - Envia YYYYMM para backend
-  // - Exibe rótulos YYYY-MM nos botões
+  // Holerite: buscar de um mês (click)
   // ==========================================
   const buscarHoleritePorAnoMes = async (ano: number, mes: string) => {
     const competenciaYYYYMM = makeYYYYMMValue(ano, mes); // payload "YYYYMM"
@@ -333,6 +426,59 @@ export default function DocumentList() {
     } catch (err: any) {
       console.error("Erro ao buscar holerite do mês:", err);
       toast.error("Erro ao buscar holerite", {
+        description:
+          err?.response?.data?.detail ||
+          err?.response?.data?.message ||
+          "Falha ao consultar o período escolhido.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ==========================================
+  // ALTERAÇÃO: Genéricos: buscar documentos de um mês (click)
+  // - Envia YYYY-MM para backend /documents/search
+  // - Remove o botão "Buscar" (auto-submit ao clicar no mês)
+  // ==========================================
+  const buscarGenericoPorAnoMes = async (ano: number, mes: string) => {
+    setIsLoading(true);
+    setDocuments([]);
+    setPaginaAtual(1);
+
+    try {
+      const cp = [
+        { nome: "tipodedoc", valor: nomeDocumento },
+        { nome: "matricula", valor: String(user?.matricula || "").trim() },
+      ];
+
+      const payload = {
+        id_template: Number(templateId),
+        cp,
+        campo_anomes: "anomes",
+        anomes: `${ano}-${mes}`, // <<< backend espera "YYYY-MM" para genéricos
+      };
+
+      const res = await api.post<{
+        total_bruto: number;
+        ultimos_6_meses: string[];
+        total_encontrado: number;
+        documentos: DocumentoGenerico[];
+      }>("/documents/search", payload);
+
+      const documentos = res.data.documentos || [];
+      setDocuments(documentos);
+
+      if (documentos.length > 0) {
+        toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
+          description: `Período ${ano}-${mes} para ${nomeDocumento}.`,
+        });
+      } else {
+        toast.warning("Nenhum documento encontrado para o mês selecionado.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao buscar documentos (genéricos):", err);
+      toast.error("Erro ao buscar documentos", {
         description:
           err?.response?.data?.detail ||
           err?.response?.data?.message ||
@@ -417,7 +563,7 @@ export default function DocumentList() {
   const renderDocumentInfo = (doc: DocumentoUnion) => {
     if (tipoDocumento === "holerite") {
       const docHolerite = doc as DocumentoHolerite;
-      // 🔧 ALTERAÇÃO: exibir "YYYY-MM" mesmo que venha "YYYYMM"
+      // exibir "YYYY-MM" mesmo que venha "YYYYMM"
       return (
         <>
           <td className="px-4 py-2 text-left">{toYYYYDashMM(docHolerite.anomes)}</td>
@@ -462,9 +608,12 @@ export default function DocumentList() {
   }
 
   // ================================================
-  // UI condicional para NÃO gestor/holerite
+  // UI condicional
+  // - showDiscoveryFlow: NÃO gestor / holerite (já existia)
+  // - showDiscoveryFlowGenerico: NÃO gestor / tipo != holerite (NOVO)
   // ================================================
   const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
+  const showDiscoveryFlowGenerico = !user?.gestor && tipoDocumento !== "holerite";
 
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden">
@@ -489,7 +638,6 @@ export default function DocumentList() {
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}
           {showDiscoveryFlow ? (
             <>
-              {/* Passo 1: Anos disponíveis */}
               {isLoadingCompetencias ? (
                 <p className="text-center mb-6">Carregando períodos disponíveis...</p>
               ) : anosDisponiveis.length === 0 ? (
@@ -511,7 +659,6 @@ export default function DocumentList() {
                 </div>
               ) : (
                 <>
-                  {/* Passo 2: Meses do ano selecionado */}
                   <div className="flex flex-wrap gap-3 justify-center mb-4">
                     {mesesDoAnoSelecionado.map((mm) => (
                       <Button
@@ -521,16 +668,14 @@ export default function DocumentList() {
                         onClick={() => buscarHoleritePorAnoMes(selectedYear, mm)}
                         disabled={isLoading}
                       >
-                        {/* rótulo humano "YYYY-MM" */}
                         {makeYYYYMMLabel(selectedYear, mm)}
                       </Button>
                     ))}
                   </div>
 
-                  {/* Botão para trocar o ano */}
                   <div className="flex justify-center mb-6">
                     <Button
-                      variant="ghost"
+                      variant="default"
                       className="border border-gray-600 hover:bg-gray-800"
                       onClick={() => {
                         setSelectedYear(null);
@@ -545,9 +690,10 @@ export default function DocumentList() {
               )}
             </>
           ) : (
-            // ===================== FLUXO ORIGINAL (GESTOR / OUTROS TIPOS) =====================
+            // ===================== FLUXO (GESTOR) OU (NÃO GESTOR / GENÉRICOS) =====================
             <>
               {user?.gestor ? (
+                // ====== Gestor mantém formulário + MonthPicker + Buscar ======
                 <div className="w-fit mx-auto grid gap-4 sm:grid-cols-4 mb-6">
                   <div className="flex flex-col">
                     <input
@@ -608,15 +754,16 @@ export default function DocumentList() {
                           const payload = {
                             cpf: getCpfNumbers(cpf.trim()) || user?.cpf || "",
                             matricula: matricula.trim(),
-                            // envia "YYYYMM" para backend
                             competencia: formatCompetencia(anomes),
                           };
+                          
 
                           const res = await api.post<{
                             cabecalho: CabecalhoHolerite;
                             eventos: EventoHolerite[];
                             rodape: RodapeHolerite;
                           }>("/documents/holerite/buscar", payload);
+                         
 
                           if (res.data && res.data.cabecalho) {
                             const documento: DocumentoHolerite = {
@@ -634,6 +781,7 @@ export default function DocumentList() {
                               description:
                                 "Não foi localizado holerite para o período e critérios informados.",
                             });
+                            console.log("payload holerite buscar:", payload);
                           }
                         } else {
                           const cp = [
@@ -645,8 +793,7 @@ export default function DocumentList() {
                             id_template: Number(templateId),
                             cp,
                             campo_anomes: "anomes",
-                            // para documentos genéricos usamos "YYYY-MM" (exibição)
-                            anomes: anomes.includes("/") // caso venha no picker como MM/YYYY
+                            anomes: anomes.includes("/")
                               ? `${anomes.split("/")[1]}-${anomes.split("/")[0].padStart(2, "0")}`
                               : anomes.length === 6
                               ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
@@ -746,8 +893,62 @@ export default function DocumentList() {
                     {isLoading ? "Buscando..." : "Buscar"}
                   </Button>
                 </div>
+              ) : showDiscoveryFlowGenerico ? (
+                // ====== NÃO gestor / GENÉRICOS: NOVO fluxo discovery (ano -> meses -> auto buscar) ======
+                <>
+                  {isLoadingCompetenciasGen ? (
+                    <p className="text-center mb-6">Carregando períodos disponíveis...</p>
+                  ) : anosDisponiveisGen.length === 0 ? (
+                    <p className="text-center mb-6 text-gray-300">
+                      Nenhum período de {nomeDocumento} encontrado para sua conta.
+                    </p>
+                  ) : !selectedYearGen ? (
+                    <div className="flex flex-wrap gap-3 justify-center mb-6">
+                      {anosDisponiveisGen.map((ano) => (
+                        <Button
+                          key={ano}
+                          variant="default"
+                          className="bg-green-600 hover:bg-green-500"
+                          onClick={() => setSelectedYearGen(ano)}
+                        >
+                          {ano}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-3 justify-center mb-4">
+                        {mesesDoAnoSelecionadoGen.map((mm) => (
+                          <Button
+                            key={mm}
+                            variant="default"
+                            className="bg-blue-600 hover:bg-blue-500"
+                            onClick={() => buscarGenericoPorAnoMes(selectedYearGen, mm)}
+                            disabled={isLoading}
+                          >
+                            {makeYYYYMMLabel(selectedYearGen, mm)}
+                          </Button>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-center mb-6">
+                        <Button
+                          variant="default"
+                          className="border border-gray-600 hover:bg-gray-800"
+                          onClick={() => {
+                            setSelectedYearGen(null);
+                            setDocuments([]);
+                            setPaginaAtual(1);
+                          }}
+                        >
+                          Escolher outro ano
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </>
               ) : (
-                // Não gestor porém não-holerite: mantém MonthPicker + Buscar
+                // ====== Não gestor porém sem discovery (fallback): mantém MonthPicker + Buscar ======
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
                   <div className="w-full max-w-xs ">
                     <CustomMonthPicker
