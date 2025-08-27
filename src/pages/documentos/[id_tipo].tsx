@@ -222,7 +222,8 @@ export default function DocumentList() {
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
   // NOVO: estados para discovery de genéricos
-  const [isLoadingCompetenciasGen, setIsLoadingCompetenciasGen] = useState(false);
+  const [isLoadingCompetenciasGen, setIsLoadingCompetenciasGen] =
+    useState(false);
   const [competenciasGen, setCompetenciasGen] = useState<CompetenciaItem[]>([]);
   const [selectedYearGen, setSelectedYearGen] = useState<number | null>(null);
 
@@ -293,12 +294,16 @@ export default function DocumentList() {
         setCompetencias(lista);
 
         if (!lista.length) {
-          toast.warning("Nenhum período de holerite encontrado.", { id: "competencias-empty" });
+          toast.warning("Nenhum período de holerite encontrado.", {
+            id: "competencias-empty",
+          });
         } else {
           if (!HAS_SHOWN_COMPETENCIAS_TOAST) {
-            toast.success("Períodos disponíveis carregados.", { id: "competencias-loaded" });
+            toast.success("Períodos disponíveis carregados.", {
+              id: "competencias-loaded",
+            });
             HAS_SHOWN_COMPETENCIAS_TOAST = true;
-             console.log("payload holerite buscar:", payload);
+            console.log("payload holerite buscar:", payload);
           }
         }
       } catch (err: any) {
@@ -366,10 +371,12 @@ export default function DocumentList() {
             id: "competencias-gen-empty",
           });
         } else {
-          toast.success(`Períodos disponíveis de ${nomeDocumento} carregados.`, {
-            id: "competencias-gen-loaded",
-          });
-          
+          toast.success(
+            `Períodos disponíveis de ${nomeDocumento} carregados.`,
+            {
+              id: "competencias-gen-loaded",
+            }
+          );
         }
       } catch (err: any) {
         console.error("Erro ao listar períodos (genéricos):", err);
@@ -496,7 +503,9 @@ export default function DocumentList() {
       if (tipoDocumento === "holerite") {
         const docHolerite = doc as DocumentoHolerite;
         const payload = {
-          cpf: user?.gestor ? getCpfNumbers(cpf) || user?.cpf || "" : user?.cpf || "",
+          cpf: user?.gestor
+            ? getCpfNumbers(cpf) || user?.cpf || ""
+            : user?.cpf || "",
           matricula,
           competencia: docHolerite.anomes, // aqui já vem "YYYYMM"
           lote: docHolerite.id_documento,
@@ -529,13 +538,19 @@ export default function DocumentList() {
         }>("/searchdocuments/download", payload);
 
         if (res.data.erro) {
-          throw new Error("O servidor retornou um erro ao processar o documento");
+          throw new Error(
+            "O servidor retornou um erro ao processar o documento"
+          );
         }
 
         const pdfBase64 = res.data.base64_raw || res.data.base64;
         if (pdfBase64) {
           navigate("/documento/preview", {
-            state: { pdf_base64: pdfBase64, documento_info: docGenerico, tipo: "generico" },
+            state: {
+              pdf_base64: pdfBase64,
+              documento_info: docGenerico,
+              tipo: "generico",
+            },
           });
           toast.success("Documento aberto com sucesso!");
         } else {
@@ -553,7 +568,10 @@ export default function DocumentList() {
 
       toast.error("Erro ao abrir documento", {
         description: errorMessage,
-        action: { label: "Tentar novamente", onClick: () => visualizarDocumento(doc) },
+        action: {
+          label: "Tentar novamente",
+          onClick: () => visualizarDocumento(doc),
+        },
       });
     } finally {
       setLoadingPreviewId(null);
@@ -566,7 +584,9 @@ export default function DocumentList() {
       // exibir "YYYY-MM" mesmo que venha "YYYYMM"
       return (
         <>
-          <td className="px-4 py-2 text-left">{toYYYYDashMM(docHolerite.anomes)}</td>
+          <td className="px-4 py-2 text-left">
+            {toYYYYDashMM(docHolerite.anomes)}
+          </td>
           <td className="px-4 py-2 text-center">{docHolerite.id_documento}</td>
         </>
       );
@@ -613,7 +633,16 @@ export default function DocumentList() {
   // - showDiscoveryFlowGenerico: NÃO gestor / tipo != holerite (NOVO)
   // ================================================
   const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
-  const showDiscoveryFlowGenerico = !user?.gestor && tipoDocumento !== "holerite";
+  const showDiscoveryFlowGenerico =
+    !user?.gestor && tipoDocumento !== "holerite";
+
+  // ================================================
+  // ALTERAÇÃO: grid dinâmico no formulário do gestor
+  // - holerite => 4 colunas (CPF + Matrícula + MonthPicker + Buscar)
+  // - genéricos => 3 colunas (Matrícula + MonthPicker + Buscar)
+  // ================================================
+  const gestorGridCols =
+    tipoDocumento === "holerite" ? "sm:grid-cols-4" : "sm:grid-cols-3";
 
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden">
@@ -632,14 +661,18 @@ export default function DocumentList() {
           </Button>
 
           <h2 className="text-xl font-bold mb-6 text-center">
-            {tipoDocumento === "holerite" ? "Holerite" : `Buscar ${nomeDocumento}`}
+            {tipoDocumento === "holerite"
+              ? "Holerite"
+              : `Buscar ${nomeDocumento}`}
           </h2>
 
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}
           {showDiscoveryFlow ? (
             <>
               {isLoadingCompetencias ? (
-                <p className="text-center mb-6">Carregando períodos disponíveis...</p>
+                <p className="text-center mb-6">
+                  Carregando períodos disponíveis...
+                </p>
               ) : anosDisponiveis.length === 0 ? (
                 <p className="text-center mb-6 text-gray-300">
                   Nenhum período de holerite encontrado para sua conta.
@@ -665,7 +698,9 @@ export default function DocumentList() {
                         key={mm}
                         variant="default"
                         className="bg-blue-600 hover:bg-blue-500"
-                        onClick={() => buscarHoleritePorAnoMes(selectedYear, mm)}
+                        onClick={() =>
+                          buscarHoleritePorAnoMes(selectedYear, mm)
+                        }
                         disabled={isLoading}
                       >
                         {makeYYYYMMLabel(selectedYear, mm)}
@@ -694,20 +729,26 @@ export default function DocumentList() {
             <>
               {user?.gestor ? (
                 // ====== Gestor mantém formulário + MonthPicker + Buscar ======
-                <div className="w-fit mx-auto grid gap-4 sm:grid-cols-4 mb-6">
-                  <div className="flex flex-col">
-                    <input
-                      type="text"
-                      placeholder="CPF"
-                      required
-                      className={`bg-[#2c2c40] text-white border p-2 rounded ${
-                        cpfError ? "border-red-500" : "border-gray-600"
-                      }`}
-                      value={cpf}
-                      onChange={handleCpfChange}
-                      maxLength={14}
-                    />
-                  </div>
+                // ALTERAÇÃO: aplicando grid dinâmico via `gestorGridCols`
+                <div
+                  className={`w-fit mx-auto grid gap-4 ${gestorGridCols} mb-6`}
+                >
+                  {tipoDocumento === "holerite" && (
+                    <div className="flex flex-col">
+                      <input
+                        type="text"
+                        placeholder="CPF"
+                        required
+                        className={`bg-[#2c2c40] text-white border p-2 rounded ${
+                          cpfError ? "border-red-500" : "border-gray-600"
+                        }`}
+                        value={cpf}
+                        onChange={handleCpfChange}
+                        maxLength={14}
+                      />
+                    </div>
+                  )}
+
                   <input
                     type="text"
                     placeholder="Matrícula"
@@ -727,7 +768,8 @@ export default function DocumentList() {
                       // Fluxo original do botão Buscar (gestor)
                       if (!anomes) {
                         toast.error("Período obrigatório", {
-                          description: "Por favor, selecione um período antes de buscar.",
+                          description:
+                            "Por favor, selecione um período antes de buscar.",
                         });
                         return;
                       }
@@ -735,7 +777,8 @@ export default function DocumentList() {
                       const cpfNumbers = cpf ? getCpfNumbers(cpf) : "";
                       if (cpfNumbers && !validateCPF(cpf)) {
                         toast.error("CPF inválido", {
-                          description: "Por favor, informe um CPF válido com 11 dígitos.",
+                          description:
+                            "Por favor, informe um CPF válido com 11 dígitos.",
                         });
                         return;
                       }
@@ -756,24 +799,31 @@ export default function DocumentList() {
                             matricula: matricula.trim(),
                             competencia: formatCompetencia(anomes),
                           };
-                          
 
                           const res = await api.post<{
                             cabecalho: CabecalhoHolerite;
                             eventos: EventoHolerite[];
                             rodape: RodapeHolerite;
                           }>("/documents/holerite/buscar", payload);
-                         
 
                           if (res.data && res.data.cabecalho) {
                             const documento: DocumentoHolerite = {
-                              id_documento: String(res.data.cabecalho.lote || "1"),
-                              anomes: res.data.cabecalho.competencia || formatCompetencia(anomes),
+                              id_documento: String(
+                                res.data.cabecalho.lote || "1"
+                              ),
+                              anomes:
+                                res.data.cabecalho.competencia ||
+                                formatCompetencia(anomes),
                             };
                             setDocuments([documento]);
-                            sessionStorage.setItem("holeriteData", JSON.stringify(res.data));
+                            sessionStorage.setItem(
+                              "holeriteData",
+                              JSON.stringify(res.data)
+                            );
                             toast.success("Holerite encontrado!", {
-                              description: `Documento do período ${toYYYYDashMM(documento.anomes)} localizado.`,
+                              description: `Documento do período ${toYYYYDashMM(
+                                documento.anomes
+                              )} localizado.`,
                             });
                           } else {
                             setDocuments([]);
@@ -794,7 +844,9 @@ export default function DocumentList() {
                             cp,
                             campo_anomes: "anomes",
                             anomes: anomes.includes("/")
-                              ? `${anomes.split("/")[1]}-${anomes.split("/")[0].padStart(2, "0")}`
+                              ? `${anomes.split("/")[1]}-${anomes
+                                  .split("/")[0]
+                                  .padStart(2, "0")}`
                               : anomes.length === 6
                               ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
                               : anomes,
@@ -811,9 +863,12 @@ export default function DocumentList() {
                           setDocuments(documentos);
 
                           if (documentos.length > 0) {
-                            toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
-                              description: `Foram localizados ${documentos.length} documentos do tipo ${nomeDocumento}.`,
-                            });
+                            toast.success(
+                              `${documentos.length} documento(s) encontrado(s)!`,
+                              {
+                                description: `Foram localizados ${documentos.length} documentos do tipo ${nomeDocumento}.`,
+                              }
+                            );
                           } else {
                             toast.warning("Nenhum documento encontrado", {
                               description: `Não foram localizados documentos do tipo ${nomeDocumento} para os critérios informados.`,
@@ -848,34 +903,48 @@ export default function DocumentList() {
                           switch (status) {
                             case 401:
                               toast.error("Não autorizado", {
-                                description: "Sua sessão expirou. Faça login novamente.",
-                                action: { label: "Ir para login", onClick: () => navigate("/login") },
+                                description:
+                                  "Sua sessão expirou. Faça login novamente.",
+                                action: {
+                                  label: "Ir para login",
+                                  onClick: () => navigate("/login"),
+                                },
                               });
                               break;
                             case 403:
                               toast.error("Acesso negado", {
-                                description: "Você não tem permissão para acessar este documento.",
+                                description:
+                                  "Você não tem permissão para acessar este documento.",
                               });
                               break;
                             case 404:
-                              toast.error("Documento não encontrado", { description });
+                              toast.error("Documento não encontrado", {
+                                description,
+                              });
                               break;
                             case 500:
                               toast.error("Erro interno do servidor", {
                                 description:
                                   "Ocorreu um problema no servidor. Tente novamente em alguns minutos.",
-                                action: { label: "Tentar novamente", onClick: () => window.location.reload() },
+                                action: {
+                                  label: "Tentar novamente",
+                                  onClick: () => window.location.reload(),
+                                },
                               });
                               break;
                             default:
                               toast.error("Erro ao buscar documentos", {
                                 description,
-                                action: { label: "Tentar novamente", onClick: () => window.location.reload() },
+                                action: {
+                                  label: "Tentar novamente",
+                                  onClick: () => window.location.reload(),
+                                },
                               });
                           }
                         } else if (err.request) {
                           toast.error("Erro de conexão", {
-                            description: "Verifique sua conexão com a internet e tente novamente.",
+                            description:
+                              "Verifique sua conexão com a internet e tente novamente.",
                           });
                         } else {
                           toast.error("Erro inesperado", {
@@ -897,10 +966,13 @@ export default function DocumentList() {
                 // ====== NÃO gestor / GENÉRICOS: NOVO fluxo discovery (ano -> meses -> auto buscar) ======
                 <>
                   {isLoadingCompetenciasGen ? (
-                    <p className="text-center mb-6">Carregando períodos disponíveis...</p>
+                    <p className="text-center mb-6">
+                      Carregando períodos disponíveis...
+                    </p>
                   ) : anosDisponiveisGen.length === 0 ? (
                     <p className="text-center mb-6 text-gray-300">
-                      Nenhum período de {nomeDocumento} encontrado para sua conta.
+                      Nenhum período de {nomeDocumento} encontrado para sua
+                      conta.
                     </p>
                   ) : !selectedYearGen ? (
                     <div className="flex flex-wrap gap-3 justify-center mb-6">
@@ -923,7 +995,9 @@ export default function DocumentList() {
                             key={mm}
                             variant="default"
                             className="bg-blue-600 hover:bg-blue-500"
-                            onClick={() => buscarGenericoPorAnoMes(selectedYearGen, mm)}
+                            onClick={() =>
+                              buscarGenericoPorAnoMes(selectedYearGen, mm)
+                            }
                             disabled={isLoading}
                           >
                             {makeYYYYMMLabel(selectedYearGen, mm)}
@@ -967,14 +1041,19 @@ export default function DocumentList() {
                       try {
                         const cp = [
                           { nome: "tipodedoc", valor: nomeDocumento },
-                          { nome: "matricula", valor: String(user?.matricula || "").trim() },
+                          {
+                            nome: "matricula",
+                            valor: String(user?.matricula || "").trim(),
+                          },
                         ];
                         const payload = {
                           id_template: Number(templateId),
                           cp,
                           campo_anomes: "anomes",
                           anomes: anomes.includes("/")
-                            ? `${anomes.split("/")[1]}-${anomes.split("/")[0].padStart(2, "0")}`
+                            ? `${anomes.split("/")[1]}-${anomes
+                                .split("/")[0]
+                                .padStart(2, "0")}`
                             : anomes.length === 6
                             ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
                             : anomes,
@@ -991,7 +1070,9 @@ export default function DocumentList() {
                         setPaginaAtual(1);
 
                         if (documentos.length > 0) {
-                          toast.success(`${documentos.length} documento(s) encontrado(s)!`);
+                          toast.success(
+                            `${documentos.length} documento(s) encontrado(s)!`
+                          );
                         } else {
                           toast.warning("Nenhum documento encontrado.");
                         }
@@ -1043,7 +1124,9 @@ export default function DocumentList() {
                             disabled={loadingPreviewId === doc.id_documento}
                             className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {loadingPreviewId === doc.id_documento ? "Abrindo..." : "Visualizar"}
+                            {loadingPreviewId === doc.id_documento
+                              ? "Abrindo..."
+                              : "Visualizar"}
                           </Button>
                         </td>
                       </tr>
@@ -1068,20 +1151,24 @@ export default function DocumentList() {
                       }
                     />
                   </PaginationItem>
-                  {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((p) => (
-                    <PaginationItem key={p}>
-                      <PaginationLink
-                        isActive={paginaAtual === p}
-                        onClick={() => setPaginaAtual(p)}
-                        className="hover:bg-gray-700 cursor-pointer"
-                      >
-                        {p}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
+                  {Array.from({ length: totalPaginas }, (_, i) => i + 1).map(
+                    (p) => (
+                      <PaginationItem key={p}>
+                        <PaginationLink
+                          isActive={paginaAtual === p}
+                          onClick={() => setPaginaAtual(p)}
+                          className="hover:bg-gray-700 cursor-pointer"
+                        >
+                          {p}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  )}
                   <PaginationItem>
                     <PaginationNext
-                      onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
+                      onClick={() =>
+                        setPaginaAtual((p) => Math.min(totalPaginas, p + 1))
+                      }
                       className={
                         paginaAtual === totalPaginas
                           ? "pointer-events-none opacity-50"
