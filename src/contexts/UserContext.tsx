@@ -11,12 +11,26 @@ import { useNavigate } from "react-router-dom";
 import Cookies from "js-cookie";
 import api from "@/utils/axiosInstance";
 
+// ================================================
+// ALTERAÇÃO: Tipos para suportar 'dados[]' do /user/me
+// ================================================
+interface EmpresaMatricula {
+  id: string;        // cliente
+  nome: string;      // nome da empresa
+  matricula: string; // matrícula do usuário nesta empresa
+}
+
 interface User {
   nome: string;
   email: string;
-  matricula: string;
+  matricula?: string; // pode existir para compatibilidade, mas nem sempre é única
   gestor: boolean;
   cpf: string;
+
+  // ALTERAÇÃO: novos campos vindos do /user/me
+  cliente?: string;
+  centro_de_custo?: string;
+  dados?: EmpresaMatricula[];
 }
 
 interface UserContextType {
@@ -40,14 +54,19 @@ export function UserProvider({ children }: UserProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
-  const thirtyDays = 60 * 1000;
+  // ================================================
+  // ALTERAÇÃO: corrigido "30 dias"
+  // (antes estava 60 * 1000 = 1min)
+  // ================================================
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
   const silentAuth = async () => {
     setIsLoading(true);
     try {
       const res = await api.get("/user/me");
       if (res.status === 200) {
-        setUser(res.data);
+        // ALTERAÇÃO: setUser com payload completo (inclui dados[])
+        setUser(res.data as User);
         setIsAuthenticated(true);
       } else {
         setUser(null);
