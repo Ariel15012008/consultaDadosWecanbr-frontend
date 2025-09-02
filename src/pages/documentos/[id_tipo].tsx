@@ -219,12 +219,48 @@ export default function DocumentList() {
   }, [competencias, selectedYear]);
 
   // ================================================
-  // DISCOVERY de competências (genéricos)
+  // ===== AJUSTE: MATRÍCULA PARA GENÉRICOS =====
   // ================================================
-  const fetchedCompetenciasGenericos = useRef(false);
   const [isLoadingCompetenciasGen, setIsLoadingCompetenciasGen] = useState(false);
   const [competenciasGen, setCompetenciasGen] = useState<CompetenciaItem[]>([]);
   const [selectedYearGen, setSelectedYearGen] = useState<number | null>(null);
+
+  // AJUSTE: lista de matrículas do /user/me para fluxos genéricos
+  const [matriculasGen, setMatriculasGen] = useState<string[]>([]);
+  const [selectedMatriculaGen, setSelectedMatriculaGen] = useState<string | null>(null);
+
+  // resolve matriz única ou força seleção
+  useEffect(() => {
+    if (userLoading || !user || user.gestor || tipoDocumento === "holerite") return;
+
+    // coleta matrículas do /user/me.dados
+    const lista = Array.from(
+      new Set((user?.dados ?? []).map((d) => d.matricula).filter(Boolean))
+    );
+
+    setMatriculasGen(lista);
+
+    // se houver só uma, define automática
+    if (lista.length === 1) {
+      setSelectedMatriculaGen(lista[0]);
+    } else if (lista.length === 0) {
+      // fallback: se por acaso existir user.matricula
+      if (user?.matricula) {
+        setSelectedMatriculaGen(user.matricula);
+      } else {
+        setSelectedMatriculaGen(null);
+      }
+    } else {
+      // várias → aguarda seleção de usuário
+      setSelectedMatriculaGen(null);
+    }
+
+    // limpar competências/documents ao trocar contexto
+    setCompetenciasGen([]);
+    setSelectedYearGen(null);
+    setDocuments([]);
+    setPaginaAtual(1);
+  }, [userLoading, user, tipoDocumento]);
 
   const anosDisponiveisGen = useMemo(() => {
     const setAnos = new Set<number>();
@@ -305,11 +341,11 @@ export default function DocumentList() {
   // Estados para controlar loading geral
   // ================================================
   const isAnyLoading = useMemo(() => {
-    return isLoading || 
-           isLoadingCompetencias || 
-           isLoadingCompetenciasGen || 
-           !!loadingPreviewId ||
-           userLoading;
+    return isLoading ||
+      isLoadingCompetencias ||
+      isLoadingCompetenciasGen ||
+      !!loadingPreviewId ||
+      userLoading;
   }, [isLoading, isLoadingCompetencias, isLoadingCompetenciasGen, loadingPreviewId, userLoading]);
 
   // ================================================
@@ -353,7 +389,7 @@ export default function DocumentList() {
   }, [userLoading, user, tipoDocumento]);
 
   // ================================================
-  // Buscar COMPETÊNCIAS após escolher empresa(/matrícula)
+  // Buscar COMPETÊNCIAS após escolher empresa(/matrícula) - holerite
   // ================================================
   useEffect(() => {
     const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
@@ -401,7 +437,6 @@ export default function DocumentList() {
           );
         }
       } catch (err: any) {
-        console.error("Erro ao listar competências:", err);
         toast.error("Erro ao carregar períodos do holerite", {
           description: extractErrorMessage(err, "Falha ao consultar competências."),
         });
@@ -414,13 +449,15 @@ export default function DocumentList() {
   }, [user, tipoDocumento, selectedEmpresaId, selectedMatricula, requerEscolherMatricula, selectedEmpresaNome]);
 
   // ================================================
-  // Genéricos: carregar competências
+  // Genéricos: carregar competências  **AJUSTE: usa matrícula do /user/me e envia colaborador/CPF**
   // ================================================
   useEffect(() => {
     const deveRodarDiscoveryGen = !userLoading && user && !user.gestor && tipoDocumento !== "holerite";
     if (!deveRodarDiscoveryGen) return;
-    if (fetchedCompetenciasGenericos.current) return;
-    fetchedCompetenciasGenericos.current = true;
+
+    // AJUSTE: exige matrícula resolvida
+    const matr = selectedMatriculaGen || "";
+    if (!matr) return; // aguarda o usuário escolher se houver várias
 
     const run = async () => {
       try {
@@ -430,7 +467,8 @@ export default function DocumentList() {
 
         const cp = [
           { nome: "tipodedoc", valor: nomeDocumento },
-          { nome: "matricula", valor: String(user?.matricula || "").trim() },
+          { nome: "matricula", valor: matr }, // AJUSTE
+          { nome: "colaborador", valor: String(user?.cpf || "").replace(/\D/g, "") }, // AJUSTE
         ];
 
         const payload = {
@@ -458,7 +496,6 @@ export default function DocumentList() {
           toast.success(`Períodos disponíveis de ${nomeDocumento} carregados.`);
         }
       } catch (err: any) {
-        console.error("Erro ao listar períodos (genéricos):", err);
         toast.error("Erro ao carregar períodos", {
           description: extractErrorMessage(err, "Falha ao consultar períodos disponíveis."),
         });
@@ -468,7 +505,7 @@ export default function DocumentList() {
     };
 
     run();
-  }, [userLoading, user, tipoDocumento, nomeDocumento, templateId]);
+  }, [userLoading, user, tipoDocumento, nomeDocumento, templateId, selectedMatriculaGen]);
 
   // ==========================================
   // Holerite: buscar de um mês (click)
@@ -518,7 +555,6 @@ export default function DocumentList() {
         toast.warning("Nenhum holerite encontrado para o mês selecionado.");
       }
     } catch (err: any) {
-      console.error("Erro ao buscar holerite do mês:", err);
       toast.error("Erro ao buscar holerite", {
         description: extractErrorMessage(err, "Falha ao consultar o período escolhido."),
       });
@@ -528,9 +564,16 @@ export default function DocumentList() {
   };
 
   // ==========================================
-  // Genéricos: buscar documentos de um mês
+  // Genéricos: buscar documentos de um mês **AJUSTE: usa matrícula do /me e colaborador/CPF**
   // ==========================================
   const buscarGenericoPorAnoMes = async (ano: number, mes: string) => {
+    // AJUSTE: garantir matrícula válida
+    const matr = selectedMatriculaGen || "";
+    if (!matr) {
+      toast.error("Selecione a matrícula para continuar.");
+      return;
+    }
+
     setIsLoading(true);
     setDocuments([]);
     setPaginaAtual(1);
@@ -538,7 +581,8 @@ export default function DocumentList() {
     try {
       const cp = [
         { nome: "tipodedoc", valor: nomeDocumento },
-        { nome: "matricula", valor: String(user?.matricula || "").trim() },
+        { nome: "matricula", valor: matr }, // AJUSTE
+        { nome: "colaborador", valor: String(user?.cpf || "").replace(/\D/g, "") }, // AJUSTE
       ];
 
       const payload = {
@@ -566,7 +610,6 @@ export default function DocumentList() {
         toast.warning("Nenhum documento encontrado para o mês selecionado.");
       }
     } catch (err: any) {
-      console.error("Erro ao buscar documentos (genéricos):", err);
       toast.error("Erro ao buscar documentos", {
         description: extractErrorMessage(err, "Falha ao consultar o período escolhido."),
       });
@@ -640,7 +683,6 @@ export default function DocumentList() {
         }
       }
     } catch (err: any) {
-      console.error("Erro ao visualizar documento:", err);
       toast.error("Erro ao abrir documento", {
         description: extractErrorMessage(err, "Erro ao processar o documento"),
         action: {
@@ -969,19 +1011,38 @@ export default function DocumentList() {
                         return;
                       }
 
-                      const cpfNumbers = cpf ? getCpfNumbers(cpf) : "";
-                      if (cpfNumbers && !validateCPF(cpf)) {
-                        toast.error("CPF inválido", {
-                          description: "Por favor, informe um CPF válido com 11 dígitos.",
-                        });
-                        return;
-                      }
-
-                      if (!cpfNumbers && !matricula.trim()) {
-                        toast.error("CPF ou Matrícula obrigatório", {
-                          description: "Para gestores, é necessário informar pelo menos o CPF ou a matrícula.",
-                        });
-                        return;
+                      // =========================
+                      // GESTOR: validações
+                      // =========================
+                      const cpfNumbers = getCpfNumbers(cpf || "");
+                      if (tipoDocumento !== "holerite") {
+                        // Para genéricos: exige matrícula + colaborador (CPF)
+                        if (!matricula.trim()) {
+                          toast.error("Matrícula obrigatória", {
+                            description: "Informe a matrícula para continuar.",
+                          });
+                          return;
+                        }
+                        if (!cpfNumbers || cpfNumbers.length !== 11 || !validateCPF(cpf)) {
+                          toast.error("CPF inválido", {
+                            description: "Informe um CPF válido (11 dígitos).",
+                          });
+                          return;
+                        }
+                      } else {
+                        // holerite (mantém a lógica anterior)
+                        if (cpfNumbers && !validateCPF(cpf)) {
+                          toast.error("CPF inválido", {
+                            description: "Por favor, informe um CPF válido com 11 dígitos.",
+                          });
+                          return;
+                        }
+                        if (!cpfNumbers && !matricula.trim()) {
+                          toast.error("CPF ou Matrícula obrigatório", {
+                            description: "Para gestores, informe pelo menos o CPF ou a matrícula.",
+                          });
+                          return;
+                        }
                       }
 
                       setIsLoading(true);
@@ -1013,13 +1074,17 @@ export default function DocumentList() {
                           } else {
                             setDocuments([]);
                             toast.warning("Nenhum holerite encontrado", {
-                              description: "Não foi localizado holerite para o período e critérios informados.",
+                              description: "Não foi localizado holerite para o período informado.",
                             });
                           }
                         } else {
+                          // =========================
+                          // GESTOR: genéricos (inclui colaborador/CPF)
+                          // =========================
                           const cp = [
                             { nome: "tipodedoc", valor: nomeDocumento },
                             { nome: "matricula", valor: matricula.trim() },
+                            { nome: "colaborador", valor: cpfNumbers }, // CPF puro
                           ];
 
                           const payload = {
@@ -1056,7 +1121,6 @@ export default function DocumentList() {
 
                         setPaginaAtual(1);
                       } catch (err: any) {
-                        console.error("Erro ao buscar documentos:", err);
                         setDocuments([]);
 
                         const description = extractErrorMessage(err, "Erro ao buscar documentos.");
@@ -1108,6 +1172,32 @@ export default function DocumentList() {
                 </div>
               ) : showDiscoveryFlowGenerico ? (
                 <>
+                  {/* AJUSTE: seletor quando o /me retorna várias matrículas */}
+                  {matriculasGen.length > 1 && !selectedMatriculaGen && (
+                    <div className="bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
+                      <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">Selecione a matrícula</h3>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {matriculasGen.map((m) => (
+                          <Button
+                            key={m}
+                            variant="default"
+                            className="bg-teal-600 hover:bg-teal-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            onClick={() => {
+                              setSelectedMatriculaGen(m);
+                              setCompetenciasGen([]);
+                              setSelectedYearGen(null);
+                              setDocuments([]);
+                              setPaginaAtual(1);
+                            }}
+                            disabled={isAnyLoading}
+                          >
+                            Matrícula {m}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {isLoadingCompetenciasGen ? (
                     <p className="text-center mb-6">Carregando períodos disponíveis...</p>
                   ) : anosDisponiveisGen.length === 0 ? (
@@ -1176,12 +1266,19 @@ export default function DocumentList() {
                         return;
                       }
 
+                      // AJUSTE: garantir matrícula antes de buscar
+                      if (!selectedMatriculaGen) {
+                        toast.error("Selecione a matrícula para continuar.");
+                        return;
+                      }
+
                       setIsLoading(true);
 
                       try {
                         const cp = [
                           { nome: "tipodedoc", valor: nomeDocumento },
-                          { nome: "matricula", valor: String(user?.matricula || "").trim() },
+                          { nome: "matricula", valor: selectedMatriculaGen }, // AJUSTE
+                          { nome: "colaborador", valor: String(user?.cpf || "").replace(/\D/g, "") }, // AJUSTE
                         ];
 
                         const payload = {
@@ -1212,7 +1309,6 @@ export default function DocumentList() {
                           toast.warning("Nenhum documento encontrado.");
                         }
                       } catch (err: any) {
-                        console.error(err);
                         toast.error("Erro ao buscar documentos", {
                           description: extractErrorMessage(err, "Falha ao buscar documentos."),
                         });
