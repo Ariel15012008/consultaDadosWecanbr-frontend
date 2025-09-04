@@ -125,6 +125,35 @@ const extractErrorMessage = (err: any, fallback = "Ocorreu um erro.") => {
   return fallback;
 };
 
+// [NOVO] Retry com backoff simples (usado SOMENTE na visualização)
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries = 2,
+  baseDelayMs = 600
+): Promise<T> {
+  let lastErr: any;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      const status = err?.response?.status;
+      const code = err?.code;
+      const transient =
+        code === "ERR_NETWORK" ||
+        code === "ECONNABORTED" ||
+        status === 502 ||
+        status === 503 ||
+        status === 504;
+
+      if (!transient || attempt === retries) break;
+      const wait = baseDelayMs * Math.pow(2, attempt);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  throw lastErr;
+}
+
 export default function DocumentList() {
   const navigate = useNavigate();
   const { user, isLoading: userLoading } = useUser();
@@ -145,13 +174,16 @@ export default function DocumentList() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
-
   const porPagina = 10;
+
   const totalPaginas = Math.ceil(documents.length / porPagina);
   const documentosVisiveis = documents.slice(
     (paginaAtual - 1) * porPagina,
     paginaAtual * porPagina
   );
+
+  // [NOVO] Controller para cancelar visualização anterior (só usado na visualização)
+  const previewAbortRef = useRef<AbortController | null>(null);
 
   // ================================================
   // Seleção prévia de EMPRESA e MATRÍCULA (não gestor / holerite)
@@ -622,6 +654,11 @@ export default function DocumentList() {
   // Visualizar documento
   // ==========================================
   const visualizarDocumento = async (doc: DocumentoUnion) => {
+    // [NOVO] Cancela visualização anterior, se existir
+    previewAbortRef.current?.abort(); // aborta a requisição pendente
+    const controller = new AbortController(); // novo controller para esta visualização
+    previewAbortRef.current = controller;
+
     setLoadingPreviewId(doc.id_documento);
 
     try {
@@ -636,14 +673,27 @@ export default function DocumentList() {
           lote: docHolerite.id_documento,
         };
 
-        const res = await api.post<{
-          cabecalho: CabecalhoHolerite;
-          eventos: EventoHolerite[];
-          rodape: RodapeHolerite;
-          pdf_base64: string;
-        }>("/documents/holerite/montar", payload);
+        // Timeout local + retry + cancelamento
+        const res = await withRetry(
+          () =>
+            api.post<{
+              cabecalho: CabecalhoHolerite;
+              eventos: EventoHolerite[];
+              rodape: RodapeHolerite;
+              pdf_base64: string;
+            }>("/documents/holerite/montar", payload, {
+              timeout: 45000,
+              signal: controller.signal,
+            }),
+          2,
+          700
+        );
 
         if (res.data && res.data.pdf_base64) {
+          // limpar loading ANTES de navegar (evita setState após unmount)
+          setLoadingPreviewId(null);
+          previewAbortRef.current = null;
+
           navigate("/documento/preview", { state: res.data });
           toast.success("Documento aberto com sucesso!");
         } else {
@@ -657,11 +707,20 @@ export default function DocumentList() {
           id_documento: Number(docGenerico.id_documento),
         };
 
-        const res = await api.post<{
-          erro: boolean;
-          base64_raw?: string;
-          base64?: string;
-        }>("/searchdocuments/download", payload);
+        // Timeout local + retry + cancelamento
+        const res = await withRetry(
+          () =>
+            api.post<{
+              erro: boolean;
+              base64_raw?: string;
+              base64?: string;
+            }>("/searchdocuments/download", payload, {
+              timeout: 45000,
+              signal: controller.signal,
+            }),
+          2,
+          700
+        );
 
         if (res.data.erro) {
           throw new Error("O servidor retornou um erro ao processar o documento");
@@ -670,6 +729,10 @@ export default function DocumentList() {
         const pdfBase64 = res.data.base64_raw || res.data.base64;
 
         if (pdfBase64) {
+          // limpar loading ANTES de navegar
+          setLoadingPreviewId(null);
+          previewAbortRef.current = null;
+
           navigate("/documento/preview", {
             state: {
               pdf_base64: pdfBase64,
@@ -683,16 +746,88 @@ export default function DocumentList() {
         }
       }
     } catch (err: any) {
-      console.log(err)
-      toast.error("Erro ao abrir documento", {
-        description: extractErrorMessage(err, "Erro ao processar o documento"),
-        action: {
-          label: "Tentar novamente",
-          onClick: () => visualizarDocumento(doc)
-        },
+      // [ERROS] —— tratamento abrangente e sem alterar payloads/rotas
+      const status = err?.response?.status as number | undefined;
+      const code = err?.code as string | undefined;
+      const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+      const canceled =
+        controller.signal.aborted ||
+        code === "ERR_CANCELED" ||
+        err?.name === "CanceledError";
+
+      // Se o usuário clicou rapidamente em outro documento (requisição anterior abortada)
+      if (canceled) {
+        // Silencioso: não mostra erro para cancelamento intencional
+        return;
+      }
+
+      let title = "Erro ao abrir documento";
+      let description = extractErrorMessage(err, "Erro ao processar o documento");
+      let action:
+        | { label: string; onClick: () => void }
+        | undefined = { label: "Tentar novamente", onClick: () => visualizarDocumento(doc) };
+
+      if (offline || code === "ERR_NETWORK") {
+        title = "Sem conexão com a internet";
+        description = "Verifique sua conexão e tente novamente.";
+      } else if (code === "ECONNABORTED" || /timeout/i.test(err?.message ?? "")) {
+        title = "Tempo esgotado";
+        description = "O servidor demorou para responder. Tente novamente em instantes.";
+      } else {
+        switch (status) {
+          case 401:
+            title = "Sessão expirada";
+            description = "Faça login novamente para continuar.";
+            action = {
+              label: "Ir para login",
+              onClick: () => navigate("/login"),
+            };
+            break;
+          case 403:
+            title = "Acesso negado";
+            description = description || "Você não tem permissão para visualizar este documento.";
+            break;
+          case 404:
+            title = "Documento não encontrado";
+            description = description || "Não localizamos o arquivo para os dados informados.";
+            break;
+          case 413:
+            title = "Documento muito grande";
+            description = description || "Tente novamente mais tarde ou contate o suporte.";
+            break;
+          case 415:
+          case 422:
+            title = "Requisição inválida";
+            description = description || "Os dados informados não foram aceitos pelo servidor.";
+            break;
+          case 429:
+            title = "Muitas tentativas";
+            description = "Você atingiu o limite momentâneo. Aguarde alguns segundos e tente novamente.";
+            break;
+          case 500:
+            title = "Erro interno do servidor";
+            description = "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
+            break;
+          case 502:
+          case 503:
+          case 504:
+            title = "Instabilidade no serviço";
+            description = "O servidor está indisponível no momento. Tente novamente em instantes.";
+            break;
+          default:
+            // mantém title/description padrão já definidos
+            break;
+        }
+      }
+
+      console.log(err);
+      toast.error(title, {
+        description,
+        action,
       });
     } finally {
       setLoadingPreviewId(null);
+      previewAbortRef.current = null; // garante limpeza do controller
     }
   };
 
