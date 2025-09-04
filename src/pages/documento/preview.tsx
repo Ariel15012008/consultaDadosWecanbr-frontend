@@ -248,7 +248,7 @@ export default function PreviewDocumento() {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
       <Header />
-      <main className="flex-grow p-8 pt-24 bg-white">
+      <main className="flex-grow p-8 max-sm:p-2 max-sm:pt-24 pt-24 bg-white">
         <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 flex items-center gap-2 text-white ">
           <ArrowLeft /> Voltar
         </Button>
@@ -303,11 +303,28 @@ export default function PreviewDocumento() {
           <table className="w-full border-collapse text-xs md:text-sm">
             <thead>
               <tr className="bg-gray-100">
-                <th className="p-1 md:p-2 text-left border-r-[1px]">Cód.</th>
-                <th className="p-1 md:p-2 text-center border-r-[1px]">Descrição</th>
-                <th className="p-1 md:p-2 text-center border-r-[1px]">Referência</th>
-                <th className="p-1 md:p-2 text-center border-r-[1px]">Vencimentos</th>
-                <th className="p-1 md:p-2 text-center">Descontos</th>
+                {/* [RESPONSIVO] o texto muda conforme o breakpoint sm (640px) */}
+                <th className="p-1 md:p-2 text-left border-r-[1px]">
+                  {/* Cód. é igual nos dois, mas mantive a estrutura pra consistência */}
+                  <span className="sm:hidden">Cód.</span>
+                  <span className="hidden sm:inline">Cód.</span>
+                </th>
+                <th className="p-1 md:p-2 text-center border-r-[1px]">
+                  <span className="sm:hidden">Descr</span>
+                  <span className="hidden sm:inline">Descrição</span>
+                </th>
+                <th className="p-1 md:p-2 text-center border-r-[1px]">
+                  <span className="sm:hidden">Ref</span>
+                  <span className="hidden sm:inline">Referência</span>
+                </th>
+                <th className="p-1 md:p-2 text-center border-r-[1px]">
+                  <span className="sm:hidden">Venci</span>
+                  <span className="hidden sm:inline">Vencimentos</span>
+                </th>
+                <th className="p-1 md:p-2 text-center">
+                  <span className="sm:hidden">Desc</span>
+                  <span className="hidden sm:inline">Descontos</span>
+                </th>
               </tr>
             </thead>
             <tbody>
