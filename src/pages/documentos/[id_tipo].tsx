@@ -683,6 +683,7 @@ export default function DocumentList() {
         }
       }
     } catch (err: any) {
+      console.log(err)
       toast.error("Erro ao abrir documento", {
         description: extractErrorMessage(err, "Erro ao processar o documento"),
         action: {
