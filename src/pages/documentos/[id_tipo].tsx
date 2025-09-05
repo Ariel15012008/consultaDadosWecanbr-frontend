@@ -503,19 +503,21 @@ export default function DocumentList() {
   }, [userLoading, user]);
 
   // ================================================
-  // Buscar COMPETÊNCIAS após escolher empresa(/matrícula) - holerite
+  // Define banner inicial
   // ================================================
-  // Define showInitialBanner to control initial loading banner display
   const showInitialBanner =
     !user?.gestor &&
     ((tipoDocumento === "holerite" && !competenciasHoleriteLoaded) ||
       (tipoDocumento !== "holerite" && !competenciasGenLoaded));
 
+  // ================================================
+  // Buscar COMPETÊNCIAS após escolher empresa(/matrícula) - holerite
+  // (com AbortController para evitar duplicidade no StrictMode)
+  // ================================================
   useEffect(() => {
     const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
     if (!showDiscoveryFlow) return;
     if (!selectedEmpresaId) return;
-
 
     const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
     const matriculaEfetiva = requerEscolherMatricula
@@ -526,6 +528,8 @@ export default function DocumentList() {
     const key = `${selectedEmpresaId}|${matriculaEfetiva}`;
     if (lastFetchKeyRef.current === key) return;
     lastFetchKeyRef.current = key;
+
+    const controller = new AbortController();
 
     const run = async () => {
       try {
@@ -547,7 +551,10 @@ export default function DocumentList() {
           method: "POST",
           url: "/documents/holerite/competencias",
           data: payload,
+          signal: controller.signal,
         });
+
+        if (controller.signal.aborted) return;
 
         const lista = (res.data?.competencias ?? []).map((x) => ({
           ano: x.ano,
@@ -568,6 +575,13 @@ export default function DocumentList() {
           );
         }
       } catch (err: any) {
+        if (
+          controller.signal.aborted ||
+          err?.code === "ERR_CANCELED" ||
+          err?.name === "CanceledError"
+        ) {
+          return;
+        }
         toast.error("Erro ao carregar períodos do holerite", {
           description: extractErrorMessage(
             err,
@@ -575,12 +589,16 @@ export default function DocumentList() {
           ),
         });
       } finally {
-        setIsLoadingCompetencias(false);
-        setCompetenciasHoleriteLoaded(true);
+        if (!controller.signal.aborted) {
+          setIsLoadingCompetencias(false);
+          setCompetenciasHoleriteLoaded(true);
+        }
       }
     };
 
     run();
+
+    return () => controller.abort();
   }, [
     user,
     tipoDocumento,
@@ -594,6 +612,7 @@ export default function DocumentList() {
 
   // ================================================
   // Genéricos: carregar competências (matrícula do /me + colaborador/CPF)
+  // (com AbortController para evitar duplicidade no StrictMode)
   // ================================================
   useEffect(() => {
     const deveRodarDiscoveryGen =
@@ -602,6 +621,8 @@ export default function DocumentList() {
 
     const matr = selectedMatriculaGen || "";
     if (!matr) return;
+
+    const controller = new AbortController();
 
     const run = async () => {
       try {
@@ -625,8 +646,11 @@ export default function DocumentList() {
 
         const res = await api.post<{ anomes: { ano: number; mes: number }[] }>(
           "/documents/search",
-          payload
+          payload,
+          { signal: controller.signal }
         );
+
+        if (controller.signal.aborted) return;
 
         const listaBruta = res.data?.anomes ?? [];
         const lista: CompetenciaItem[] = listaBruta.map((x) => ({
@@ -642,6 +666,13 @@ export default function DocumentList() {
           toast.success(`Períodos disponíveis de ${nomeDocumento} carregados.`);
         }
       } catch (err: any) {
+        if (
+          controller.signal.aborted ||
+          err?.code === "ERR_CANCELED" ||
+          err?.name === "CanceledError"
+        ) {
+          return;
+        }
         toast.error("Erro ao carregar períodos", {
           description: extractErrorMessage(
             err,
@@ -649,12 +680,16 @@ export default function DocumentList() {
           ),
         });
       } finally {
-        setIsLoadingCompetenciasGen(false);
-        setCompetenciasGenLoaded(true);
+        if (!controller.signal.aborted) {
+          setIsLoadingCompetenciasGen(false);
+          setCompetenciasGenLoaded(true);
+        }
       }
     };
 
     run();
+
+    return () => controller.abort();
   }, [
     userLoading,
     user,
@@ -841,6 +876,7 @@ export default function DocumentList() {
   // Visualizar documento
   // ==========================================
   const visualizarDocumento = async (doc: DocumentoUnion) => {
+    // Cancela visualização anterior, se existir
     previewAbortRef.current?.abort();
     const controller = new AbortController();
     previewAbortRef.current = controller;
@@ -1113,7 +1149,8 @@ export default function DocumentList() {
               ? "Holerite"
               : `Buscar ${nomeDocumento}`}
           </h2>
-            {showInitialBanner && (
+
+          {showInitialBanner && tipoDocumento === "holerite" && (
             <p className="text-center mb-6">Carregando documentos...</p>
           )}
 
@@ -1268,7 +1305,6 @@ export default function DocumentList() {
                   ) : isLoadingCompetencias ? (
                     <p className="text-center">Carregando períodos disponíveis...</p>
                   ) : !competenciasHoleriteLoaded ? (
-                    // 👇 evita flash de "Nenhum período..." enquanto o efeito ainda não marcou como carregado
                     <p className="text-center">Carregando períodos disponíveis...</p>
                   ) : anosDisponiveis.length === 0 ? (
                     <p className="text-center text-gray-300">
@@ -1593,7 +1629,6 @@ export default function DocumentList() {
                       Carregando períodos disponíveis...
                     </p>
                   ) : !competenciasGenLoaded ? (
-                    // 👇 evita flash antes da primeira resposta
                     <p className="text-center mb-6">
                       Carregando períodos disponíveis...
                     </p>
@@ -1736,50 +1771,48 @@ export default function DocumentList() {
 
           {/* TABELA: SOMENTE para gestor */}
           {user?.gestor ? (
-             (
-              <div className="overflow-x-auto border border-gray-600 rounded">
-                <table className="w-full text-sm text-left text-white">
-                  <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
-                    <tr>{renderTableHeader()}</tr>
-                  </thead>
-                  <tbody>
-                    {documentosVisiveis.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={tipoDocumento === "holerite" ? 3 : 2}
-                          className="text-center py-4 text-gray-400"
-                        >
-                          Nenhum documento encontrado.
+            <div className="overflow-x-auto border border-gray-600 rounded">
+              <table className="w-full text-sm text-left text-white">
+                <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
+                  <tr>{renderTableHeader()}</tr>
+                </thead>
+                <tbody>
+                  {documentosVisiveis.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={tipoDocumento === "holerite" ? 3 : 2}
+                        className="text-center py-4 text-gray-400"
+                      >
+                        Nenhum documento encontrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    documentosVisiveis.map((doc) => (
+                      <tr
+                        key={doc.id_documento}
+                        className="border-t border-gray-700 hover:bg-gray-800 transition-colors"
+                      >
+                        {renderDocumentInfo(doc)}
+                        <td className="px-4 py-2 text-right">
+                          <Button
+                            onClick={() => visualizarDocumento(doc)}
+                            disabled={
+                              isAnyLoading ||
+                              loadingPreviewId === doc.id_documento
+                            }
+                            className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {loadingPreviewId === doc.id_documento
+                              ? "Abrindo..."
+                              : "Visualizar"}
+                          </Button>
                         </td>
                       </tr>
-                    ) : (
-                      documentosVisiveis.map((doc) => (
-                        <tr
-                          key={doc.id_documento}
-                          className="border-t border-gray-700 hover:bg-gray-800 transition-colors"
-                        >
-                          {renderDocumentInfo(doc)}
-                          <td className="px-4 py-2 text-right">
-                            <Button
-                              onClick={() => visualizarDocumento(doc)}
-                              disabled={
-                                isAnyLoading ||
-                                loadingPreviewId === doc.id_documento
-                              }
-                              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {loadingPreviewId === doc.id_documento
-                                ? "Abrindo..."
-                                : "Visualizar"}
-                            </Button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           ) : null}
 
           {user?.gestor && totalPaginas > 1 && (
