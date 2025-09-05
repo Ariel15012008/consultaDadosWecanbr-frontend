@@ -1736,9 +1736,7 @@ export default function DocumentList() {
 
           {/* TABELA: SOMENTE para gestor */}
           {user?.gestor ? (
-            isAnyLoading ? (
-              <p className="text-center">Carregando documentos...</p>
-            ) : (
+             (
               <div className="overflow-x-auto border border-gray-600 rounded">
                 <table className="w-full text-sm text-left text-white">
                   <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
