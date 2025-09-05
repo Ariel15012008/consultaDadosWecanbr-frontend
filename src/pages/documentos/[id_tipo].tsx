@@ -115,17 +115,45 @@ const makeYYYYMMLabel = (ano: number, mes: string) => `${ano}-${mes}`;
 const makeYYYYMMValue = (ano: number, mes: string | number) =>
   `${ano}${String(mes).padStart(2, "0")}`;
 
+// 🔄 SUBSTITUIR APENAS ESTA FUNÇÃO
 const extractErrorMessage = (err: any, fallback = "Ocorreu um erro.") => {
-  const detail = err?.response?.data?.detail;
-  if (typeof detail === "string") return detail;
-  if (detail?.message && typeof detail.message === "string") return detail.message;
-  if (err?.response?.data?.message && typeof err.response.data.message === "string")
-    return err.response.data.message;
-  if (err?.message && typeof err.message === "string") return err.message;
+  const status = err?.response?.status as number | undefined;
+
+  // 1) Mensagens amigáveis por status (cobre casos sem switch local)
+  if (typeof status === "number") {
+    switch (status) {
+      case 401:
+        return "Sua sessão expirou. Faça login novamente.";
+      case 403:
+        return "Você não tem permissão para executar esta ação.";
+      case 404:
+        return "Não localizamos documentos para os dados informados.";
+      case 413:
+        return "Documento muito grande. Tente novamente mais tarde.";
+      case 415:
+      case 422:
+        return "Os dados informados não foram aceitos pelo servidor.";
+      case 429:
+        return "Muitas tentativas. Aguarde e tente novamente.";
+      case 500:
+        return "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
+      case 502:
+      case 503:
+      case 504:
+        return "O servidor está indisponível no momento. Tente novamente.";
+      default:
+        // mantém o fluxo normal abaixo
+        break;
+    }
+  }
+  // Use fallback if no specific message is found
   return fallback;
 };
 
-// [NOVO] Retry com backoff simples (usado SOMENTE na visualização)
+// util: apenas dígitos
+const onlyDigits = (s: string) => String(s || "").replace(/\D/g, "");
+
+// Retry com backoff simples (usado SOMENTE na visualização)
 async function withRetry<T>(
   fn: () => Promise<T>,
   retries = 2,
@@ -182,16 +210,30 @@ export default function DocumentList() {
     paginaAtual * porPagina
   );
 
-  // [NOVO] Controller para cancelar visualização anterior (só usado na visualização)
+  // Controller para cancelar visualização anterior (só usado na visualização)
   const previewAbortRef = useRef<AbortController | null>(null);
+
+  // ================================================
+  // ME (não gestor): CPF + empresas/matrículas
+  // ================================================
+  const [meCpf, setMeCpf] = useState<string>(""); // somente dígitos
+  const [meLoading, setMeLoading] = useState<boolean>(false);
 
   // ================================================
   // Seleção prévia de EMPRESA e MATRÍCULA (não gestor / holerite)
   // ================================================
-  const [empresasDoUsuario, setEmpresasDoUsuario] = useState<EmpresaMatricula[]>([]);
-  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string | null>(null);
-  const [selectedEmpresaNome, setSelectedEmpresaNome] = useState<string | null>(null);
-  const [selectedMatricula, setSelectedMatricula] = useState<string | null>(null);
+  const [empresasDoUsuario, setEmpresasDoUsuario] = useState<
+    EmpresaMatricula[]
+  >([]);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string | null>(
+    null
+  );
+  const [selectedEmpresaNome, setSelectedEmpresaNome] = useState<string | null>(
+    null
+  );
+  const [selectedMatricula, setSelectedMatricula] = useState<string | null>(
+    null
+  );
 
   const empresasMap = useMemo(() => {
     const map = new Map<string, { nome: string; matriculas: string[] }>();
@@ -251,48 +293,17 @@ export default function DocumentList() {
   }, [competencias, selectedYear]);
 
   // ================================================
-  // ===== AJUSTE: MATRÍCULA PARA GENÉRICOS =====
+  // Genéricos (não gestor): matrícula do /me + colaborador/CPF
   // ================================================
-  const [isLoadingCompetenciasGen, setIsLoadingCompetenciasGen] = useState(false);
+  const [isLoadingCompetenciasGen, setIsLoadingCompetenciasGen] =
+    useState(false);
   const [competenciasGen, setCompetenciasGen] = useState<CompetenciaItem[]>([]);
   const [selectedYearGen, setSelectedYearGen] = useState<number | null>(null);
 
-  // AJUSTE: lista de matrículas do /user/me para fluxos genéricos
   const [matriculasGen, setMatriculasGen] = useState<string[]>([]);
-  const [selectedMatriculaGen, setSelectedMatriculaGen] = useState<string | null>(null);
-
-  // resolve matriz única ou força seleção
-  useEffect(() => {
-    if (userLoading || !user || user.gestor || tipoDocumento === "holerite") return;
-
-    // coleta matrículas do /user/me.dados
-    const lista = Array.from(
-      new Set((user?.dados ?? []).map((d) => d.matricula).filter(Boolean))
-    );
-
-    setMatriculasGen(lista);
-
-    // se houver só uma, define automática
-    if (lista.length === 1) {
-      setSelectedMatriculaGen(lista[0]);
-    } else if (lista.length === 0) {
-      // fallback: se por acaso existir user.matricula
-      if (user?.matricula) {
-        setSelectedMatriculaGen(user.matricula);
-      } else {
-        setSelectedMatriculaGen(null);
-      }
-    } else {
-      // várias → aguarda seleção de usuário
-      setSelectedMatriculaGen(null);
-    }
-
-    // limpar competências/documents ao trocar contexto
-    setCompetenciasGen([]);
-    setSelectedYearGen(null);
-    setDocuments([]);
-    setPaginaAtual(1);
-  }, [userLoading, user, tipoDocumento]);
+  const [selectedMatriculaGen, setSelectedMatriculaGen] = useState<
+    string | null
+  >(null);
 
   const anosDisponiveisGen = useMemo(() => {
     const setAnos = new Set<number>();
@@ -357,7 +368,8 @@ export default function DocumentList() {
     }
   };
 
-  const getCpfNumbers = (cpfValue: string): string => cpfValue.replace(/\D/g, "");
+  const getCpfNumbers = (cpfValue: string): string =>
+    cpfValue.replace(/\D/g, "");
 
   // compat function
   function formatCompetencia(input: string): string {
@@ -373,52 +385,119 @@ export default function DocumentList() {
   // Estados para controlar loading geral
   // ================================================
   const isAnyLoading = useMemo(() => {
-    return isLoading ||
+    return (
+      isLoading ||
       isLoadingCompetencias ||
       isLoadingCompetenciasGen ||
       !!loadingPreviewId ||
-      userLoading;
-  }, [isLoading, isLoadingCompetencias, isLoadingCompetenciasGen, loadingPreviewId, userLoading]);
+      userLoading ||
+      meLoading // inclui carregamento do /me
+    );
+  }, [
+    isLoading,
+    isLoadingCompetencias,
+    isLoadingCompetenciasGen,
+    loadingPreviewId,
+    userLoading,
+    meLoading,
+  ]);
 
   // ================================================
-  // Carregar empresas/matrículas do /user/me (não gestor / holerite)
+  // [ALTERAÇÃO] Carregar /user/me para NÃO GESTOR (CPF + dados)
   // ================================================
   useEffect(() => {
-    if (userLoading || !user || user.gestor || tipoDocumento !== "holerite") return;
+    const shouldRun = !userLoading && user && !user.gestor;
+    if (!shouldRun) return;
 
-    const dados = (user as any)?.dados as EmpresaMatricula[] | undefined;
-    if (!dados || !dados.length) return;
+    const run = async () => {
+      try {
+        setMeLoading(true);
 
-    setEmpresasDoUsuario(dados);
+        const res = await api.get<{
+          nome: string;
+          cpf: string;
+          gestor: boolean;
+          dados?: { id: string; nome: string; matricula: string }[];
+        }>("/user/me");
 
-    const porEmpresa = new Map<string, EmpresaMatricula[]>();
-    for (const d of dados) {
-      const arr = porEmpresa.get(d.id) ?? [];
-      arr.push(d);
-      porEmpresa.set(d.id, arr);
-    }
+        const cpfDigits = onlyDigits(res.data?.cpf || "");
+        setMeCpf(cpfDigits);
 
-    const empresas = Array.from(porEmpresa.entries());
-    if (empresas.length === 1) {
-      const [empresaId, arr] = empresas[0];
-      setSelectedEmpresaId(empresaId);
-      setSelectedEmpresaNome(arr[0].nome);
-      if (arr.length === 1) {
-        setSelectedMatricula(arr[0].matricula);
-      } else {
-        setSelectedMatricula(null);
+        const dadosList = (res.data?.dados ?? []).map((d) => ({
+          id: d.id,
+          nome: d.nome,
+          matricula: d.matricula,
+        }));
+        setEmpresasDoUsuario(dadosList);
+
+        const matrList = Array.from(
+          new Set(dadosList.map((d) => d.matricula).filter(Boolean))
+        );
+        setMatriculasGen(matrList);
+
+        if (dadosList.length > 0) {
+          const porEmpresa = new Map<string, EmpresaMatricula[]>();
+          for (const d of dadosList) {
+            const arr = porEmpresa.get(d.id) ?? [];
+            arr.push(d);
+            porEmpresa.set(d.id, arr);
+          }
+          const empresas = Array.from(porEmpresa.entries());
+
+          if (empresas.length === 1) {
+            const [empresaId, arr] = empresas[0];
+            setSelectedEmpresaId(empresaId);
+            setSelectedEmpresaNome(arr[0].nome);
+            if (arr.length === 1) {
+              setSelectedMatricula(arr[0].matricula);
+            } else {
+              setSelectedMatricula(null);
+            }
+          } else {
+            setSelectedEmpresaId(null);
+            setSelectedEmpresaNome(null);
+            setSelectedMatricula(null);
+          }
+        } else {
+          setSelectedEmpresaId(null);
+          setSelectedEmpresaNome(null);
+          setSelectedMatricula(null);
+        }
+
+        if (matrList.length === 1) {
+          setSelectedMatriculaGen(matrList[0]);
+        } else if (matrList.length === 0) {
+          setSelectedMatriculaGen(null);
+        } else {
+          setSelectedMatriculaGen(null); // várias: usuário escolhe
+        }
+
+        // limpa estados dependentes
+        setCompetencias([]);
+        setSelectedYear(null);
+        setCompetenciasGen([]);
+        setSelectedYearGen(null);
+        setDocuments([]);
+        setPaginaAtual(1);
+        lastFetchKeyRef.current = null;
+      } catch (err: any) {
+        // fallback se falhar
+        console.error("Falha ao carregar /user/me:", err);
+        if (!user?.gestor) {
+          setMeCpf(onlyDigits((user as any)?.cpf || ""));
+          const dados = ((user as any)?.dados ?? []) as EmpresaMatricula[];
+          setEmpresasDoUsuario(dados);
+          setMatriculasGen(
+            Array.from(new Set(dados.map((d) => d.matricula).filter(Boolean)))
+          );
+        }
+      } finally {
+        setMeLoading(false);
       }
-    } else {
-      setSelectedEmpresaId(null);
-      setSelectedEmpresaNome(null);
-      setSelectedMatricula(null);
-    }
+    };
 
-    setCompetencias([]);
-    setSelectedYear(null);
-    setDocuments([]);
-    setPaginaAtual(1);
-  }, [userLoading, user, tipoDocumento]);
+    run();
+  }, [userLoading, user]);
 
   // ================================================
   // Buscar COMPETÊNCIAS após escolher empresa(/matrícula) - holerite
@@ -427,9 +506,14 @@ export default function DocumentList() {
     const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
     if (!showDiscoveryFlow) return;
     if (!selectedEmpresaId) return;
-    if (requerEscolherMatricula && !selectedMatricula) return;
 
-    const key = `${selectedEmpresaId}|${requerEscolherMatricula ? selectedMatricula ?? "" : "-"}`;
+    const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
+    const matriculaEfetiva = requerEscolherMatricula
+      ? selectedMatricula
+      : arr[0];
+    if (!matriculaEfetiva) return;
+
+    const key = `${selectedEmpresaId}|${matriculaEfetiva}`;
     if (lastFetchKeyRef.current === key) return;
     lastFetchKeyRef.current = key;
 
@@ -441,18 +525,19 @@ export default function DocumentList() {
         setDocuments([]);
         setPaginaAtual(1);
 
-        const payload: any = {
-          cpf: user?.cpf || "",
-          empresa: selectedEmpresaId
+        const payload = {
+          cpf: meCpf,
+          matricula: matriculaEfetiva,
         };
-        if (selectedMatricula) payload.matricula = selectedMatricula;
+        console.log(payload);
 
-        const res = await api.post<{
-          tipo: "competencias";
+        const res = await api.request<{
           competencias: { ano: number; mes: number }[];
-          empresa: string;
-          cliente_nome: string;
-        }>("/documents/holerite/buscar", payload);
+        }>({
+          method: "POST",
+          url: "/documents/holerite/competencias",
+          data: payload,
+        });
 
         const lista = (res.data?.competencias ?? []).map((x) => ({
           ano: x.ano,
@@ -462,15 +547,22 @@ export default function DocumentList() {
         setCompetencias(lista);
 
         if (!lista.length) {
-          toast.warning("Nenhum período de holerite encontrado para esta empresa.");
+          toast.warning(
+            "Nenhum período de holerite encontrado para esta seleção."
+          );
         } else {
           toast.success(
-            `Períodos disponíveis carregados para ${selectedEmpresaNome ?? "a empresa selecionada"}.`
+            `Períodos disponíveis carregados para ${
+              selectedEmpresaNome ?? "a empresa selecionada"
+            }.`
           );
         }
       } catch (err: any) {
         toast.error("Erro ao carregar períodos do holerite", {
-          description: extractErrorMessage(err, "Falha ao consultar competências."),
+          description: extractErrorMessage(
+            err,
+            "Falha ao consultar competências."
+          ),
         });
       } finally {
         setIsLoadingCompetencias(false);
@@ -478,16 +570,25 @@ export default function DocumentList() {
     };
 
     run();
-  }, [user, tipoDocumento, selectedEmpresaId, selectedMatricula, requerEscolherMatricula, selectedEmpresaNome]);
+  }, [
+    user,
+    tipoDocumento,
+    selectedEmpresaId,
+    selectedMatricula,
+    requerEscolherMatricula,
+    selectedEmpresaNome,
+    empresasMap,
+    meCpf, // depende do CPF do /me
+  ]);
 
   // ================================================
-  // Genéricos: carregar competências  **AJUSTE: usa matrícula do /user/me e envia colaborador/CPF**
+  // Genéricos: carregar competências (matrícula do /me + colaborador/CPF)
   // ================================================
   useEffect(() => {
-    const deveRodarDiscoveryGen = !userLoading && user && !user.gestor && tipoDocumento !== "holerite";
+    const deveRodarDiscoveryGen =
+      !userLoading && user && !user.gestor && tipoDocumento !== "holerite";
     if (!deveRodarDiscoveryGen) return;
 
-    // AJUSTE: exige matrícula resolvida
     const matr = selectedMatriculaGen || "";
     if (!matr) return; // aguarda o usuário escolher se houver várias
 
@@ -499,20 +600,22 @@ export default function DocumentList() {
 
         const cp = [
           { nome: "tipodedoc", valor: nomeDocumento },
-          { nome: "matricula", valor: matr }, // AJUSTE
-          { nome: "colaborador", valor: String(user?.cpf || "").replace(/\D/g, "") }, // AJUSTE
+          { nome: "matricula", valor: matr },
+          { nome: "colaborador", valor: meCpf }, // CPF do /me (11 dígitos)
         ];
 
         const payload = {
           id_template: Number(templateId),
           cp,
           campo_anomes: "anomes",
-          anomes: ""
+          anomes: "",
         };
 
-        const res = await api.post<{
-          anomes: { ano: number; mes: number }[]
-        }>("/documents/search", payload);
+        const res = await api.post<{ anomes: { ano: number; mes: number }[] }>(
+          "/documents/search",
+          payload
+        );
+        console.log(res.data);
 
         const listaBruta = res.data?.anomes ?? [];
         const lista: CompetenciaItem[] = listaBruta.map((x) => ({
@@ -529,7 +632,10 @@ export default function DocumentList() {
         }
       } catch (err: any) {
         toast.error("Erro ao carregar períodos", {
-          description: extractErrorMessage(err, "Falha ao consultar períodos disponíveis."),
+          description: extractErrorMessage(
+            err,
+            "Falha ao consultar períodos disponíveis."
+          ),
         });
       } finally {
         setIsLoadingCompetenciasGen(false);
@@ -537,10 +643,18 @@ export default function DocumentList() {
     };
 
     run();
-  }, [userLoading, user, tipoDocumento, nomeDocumento, templateId, selectedMatriculaGen]);
+  }, [
+    userLoading,
+    user,
+    tipoDocumento,
+    nomeDocumento,
+    templateId,
+    selectedMatriculaGen,
+    meCpf,
+  ]);
 
   // ==========================================
-  // Holerite: buscar de um mês (click)
+  // Holerite: buscar de um mês (click) -> abre prévia
   // ==========================================
   const buscarHoleritePorAnoMes = async (ano: number, mes: string) => {
     if (!selectedEmpresaId) {
@@ -548,7 +662,11 @@ export default function DocumentList() {
       return;
     }
 
-    if (requerEscolherMatricula && !selectedMatricula) {
+    const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
+    const matriculaEfetiva = requerEscolherMatricula
+      ? selectedMatricula
+      : arr[0];
+    if (!matriculaEfetiva) {
       toast.error("Selecione a matrícula antes de continuar.");
       return;
     }
@@ -559,12 +677,11 @@ export default function DocumentList() {
     setPaginaAtual(1);
 
     try {
-      const payload: any = {
-        cpf: user?.cpf || "",
-        empresa: selectedEmpresaId,
+      const payload = {
+        cpf: meCpf, // CPF do /me (11 dígitos)
+        matricula: matriculaEfetiva,
         competencia: competenciaYYYYMM,
       };
-      if (selectedMatricula) payload.matricula = selectedMatricula;
 
       const res = await api.post<{
         tipo: "holerite";
@@ -583,12 +700,19 @@ export default function DocumentList() {
         toast.success("Holerite encontrado!", {
           description: `Período ${toYYYYDashMM(documento.anomes)} localizado.`,
         });
+
+        setIsLoading(false);
+        await visualizarDocumento(documento);
+        return;
       } else {
         toast.warning("Nenhum holerite encontrado para o mês selecionado.");
       }
     } catch (err: any) {
       toast.error("Erro ao buscar holerite", {
-        description: extractErrorMessage(err, "Falha ao consultar o período escolhido."),
+        description: extractErrorMessage(
+          err,
+          "Falha ao consultar o período escolhido."
+        ),
       });
     } finally {
       setIsLoading(false);
@@ -596,10 +720,10 @@ export default function DocumentList() {
   };
 
   // ==========================================
-  // Genéricos: buscar documentos de um mês **AJUSTE: usa matrícula do /me e colaborador/CPF**
+  // Genéricos: buscar documentos de um mês -> abre prévia do primeiro
+  // (AQUI só estilizei as mensagens de erro)
   // ==========================================
   const buscarGenericoPorAnoMes = async (ano: number, mes: string) => {
-    // AJUSTE: garantir matrícula válida
     const matr = selectedMatriculaGen || "";
     if (!matr) {
       toast.error("Selecione a matrícula para continuar.");
@@ -613,8 +737,8 @@ export default function DocumentList() {
     try {
       const cp = [
         { nome: "tipodedoc", valor: nomeDocumento },
-        { nome: "matricula", valor: matr }, // AJUSTE
-        { nome: "colaborador", valor: String(user?.cpf || "").replace(/\D/g, "") }, // AJUSTE
+        { nome: "matricula", valor: matr },
+        { nome: "colaborador", valor: meCpf }, // CPF do /me
       ];
 
       const payload = {
@@ -638,13 +762,67 @@ export default function DocumentList() {
         toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
           description: `Período ${ano}-${mes} para ${nomeDocumento}.`,
         });
+
+        setIsLoading(false);
+        await visualizarDocumento(documentos[0]);
+        return;
       } else {
         toast.warning("Nenhum documento encontrado para o mês selecionado.");
       }
     } catch (err: any) {
-      toast.error("Erro ao buscar documentos", {
-        description: extractErrorMessage(err, "Falha ao consultar o período escolhido."),
-      });
+      // ======= MENSAGENS AMIGÁVEIS PARA GENÉRICOS =======
+      const status = err?.response?.status as number | undefined;
+      let title = "Erro ao buscar documentos";
+      let description = extractErrorMessage(
+        err,
+        "Falha ao consultar o período escolhido."
+      );
+
+      switch (status) {
+        case 401:
+          title = "Não autorizado";
+          description = "Sua sessão expirou. Faça login novamente.";
+          break;
+        case 403:
+          title = "Acesso negado";
+          description = "Você não tem permissão para executar esta busca.";
+          break;
+        case 404:
+          title = "Documento não encontrado";
+          description = "Não localizamos documentos para os dados informados.";
+          break;
+        case 413:
+          title = "Documento muito grande";
+          description = "Tente novamente mais tarde ou contate o suporte.";
+          break;
+        case 415:
+        case 422:
+          title = "Requisição inválida";
+          description = "Os dados informados não foram aceitos pelo servidor.";
+          break;
+        case 429:
+          title = "Muitas tentativas";
+          description =
+            "Você atingiu o limite momentâneo. Aguarde e tente novamente.";
+          break;
+        case 500:
+          title = "Erro interno do servidor";
+          description =
+            "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
+          break;
+        case 502:
+        case 503:
+        case 504:
+          title = "Instabilidade no serviço";
+          description =
+            "O servidor está indisponível no momento. Tente novamente.";
+          break;
+        default:
+          // mantém a genérica
+          break;
+      }
+
+      toast.error(title, { description });
     } finally {
       setIsLoading(false);
     }
@@ -652,11 +830,12 @@ export default function DocumentList() {
 
   // ==========================================
   // Visualizar documento
+  // (AQUI padronizei para não exibir "Not Found"/mensagens cruas)
   // ==========================================
   const visualizarDocumento = async (doc: DocumentoUnion) => {
-    // [NOVO] Cancela visualização anterior, se existir
-    previewAbortRef.current?.abort(); // aborta a requisição pendente
-    const controller = new AbortController(); // novo controller para esta visualização
+    // Cancela visualização anterior, se existir
+    previewAbortRef.current?.abort();
+    const controller = new AbortController();
     previewAbortRef.current = controller;
 
     setLoadingPreviewId(doc.id_documento);
@@ -664,16 +843,26 @@ export default function DocumentList() {
     try {
       if (tipoDocumento === "holerite") {
         const docHolerite = doc as DocumentoHolerite;
-        const matForPreview = user?.gestor ? matricula : (selectedMatricula ?? "");
+
+        let matForPreview = "";
+        if (user?.gestor) {
+          matForPreview = matricula;
+        } else if (selectedEmpresaId) {
+          const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
+          matForPreview = requerEscolherMatricula
+            ? selectedMatricula ?? ""
+            : arr[0] ?? "";
+        }
 
         const payload: any = {
-          cpf: user?.gestor ? getCpfNumbers(cpf) || user?.cpf || "" : user?.cpf || "",
+          cpf: user?.gestor
+            ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
+            : meCpf,
           matricula: matForPreview,
           competencia: docHolerite.anomes,
           lote: docHolerite.id_documento,
         };
 
-        // Timeout local + retry + cancelamento
         const res = await withRetry(
           () =>
             api.post<{
@@ -690,7 +879,6 @@ export default function DocumentList() {
         );
 
         if (res.data && res.data.pdf_base64) {
-          // limpar loading ANTES de navegar (evita setState após unmount)
           setLoadingPreviewId(null);
           previewAbortRef.current = null;
 
@@ -707,7 +895,6 @@ export default function DocumentList() {
           id_documento: Number(docGenerico.id_documento),
         };
 
-        // Timeout local + retry + cancelamento
         const res = await withRetry(
           () =>
             api.post<{
@@ -723,13 +910,14 @@ export default function DocumentList() {
         );
 
         if (res.data.erro) {
-          throw new Error("O servidor retornou um erro ao processar o documento");
+          throw new Error(
+            "O servidor retornou um erro ao processar o documento"
+          );
         }
 
         const pdfBase64 = res.data.base64_raw || res.data.base64;
 
         if (pdfBase64) {
-          // limpar loading ANTES de navegar
           setLoadingPreviewId(null);
           previewAbortRef.current = null;
 
@@ -746,34 +934,41 @@ export default function DocumentList() {
         }
       }
     } catch (err: any) {
-      // [ERROS] —— tratamento abrangente e sem alterar payloads/rotas
       const status = err?.response?.status as number | undefined;
       const code = err?.code as string | undefined;
-      const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+      const offline =
+        typeof navigator !== "undefined" && navigator.onLine === false;
       const canceled =
         controller.signal.aborted ||
         code === "ERR_CANCELED" ||
         err?.name === "CanceledError";
 
-      // Se o usuário clicou rapidamente em outro documento (requisição anterior abortada)
       if (canceled) {
-        // Silencioso: não mostra erro para cancelamento intencional
         return;
       }
 
       let title = "Erro ao abrir documento";
-      let description = extractErrorMessage(err, "Erro ao processar o documento");
-      let action:
-        | { label: string; onClick: () => void }
-        | undefined = { label: "Tentar novamente", onClick: () => visualizarDocumento(doc) };
+      let description = extractErrorMessage(
+        err,
+        "Erro ao processar o documento"
+      );
+      let action: { label: string; onClick: () => void } | undefined = {
+        label: "Tentar novamente",
+        onClick: () => visualizarDocumento(doc),
+      };
 
       if (offline || code === "ERR_NETWORK") {
         title = "Sem conexão com a internet";
         description = "Verifique sua conexão e tente novamente.";
-      } else if (code === "ECONNABORTED" || /timeout/i.test(err?.message ?? "")) {
+      } else if (
+        code === "ECONNABORTED" ||
+        /timeout/i.test(err?.message ?? "")
+      ) {
         title = "Tempo esgotado";
-        description = "O servidor demorou para responder. Tente novamente em instantes.";
+        description =
+          "O servidor demorou para responder. Tente novamente em instantes.";
       } else {
+        // ======= SEM MENSAGEM CRUA: sempre descrição amigável por status =======
         switch (status) {
           case 401:
             title = "Sessão expirada";
@@ -785,49 +980,50 @@ export default function DocumentList() {
             break;
           case 403:
             title = "Acesso negado";
-            description = description || "Você não tem permissão para visualizar este documento.";
+            description =
+              "Você não tem permissão para visualizar este documento.";
             break;
           case 404:
             title = "Documento não encontrado";
-            description = description || "Não localizamos o arquivo para os dados informados.";
+            description = "Não localizamos o arquivo para os dados informados.";
             break;
           case 413:
             title = "Documento muito grande";
-            description = description || "Tente novamente mais tarde ou contate o suporte.";
+            description = "Tente novamente mais tarde ou contate o suporte.";
             break;
           case 415:
           case 422:
             title = "Requisição inválida";
-            description = description || "Os dados informados não foram aceitos pelo servidor.";
+            description =
+              "Os dados informados não foram aceitos pelo servidor.";
             break;
           case 429:
             title = "Muitas tentativas";
-            description = "Você atingiu o limite momentâneo. Aguarde alguns segundos e tente novamente.";
+            description =
+              "Você atingiu o limite momentâneo. Aguarde e tente novamente.";
             break;
           case 500:
             title = "Erro interno do servidor";
-            description = "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
+            description =
+              "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
             break;
           case 502:
           case 503:
           case 504:
             title = "Instabilidade no serviço";
-            description = "O servidor está indisponível no momento. Tente novamente em instantes.";
+            description =
+              "O servidor está indisponível no momento. Tente novamente.";
             break;
           default:
-            // mantém title/description padrão já definidos
+            // mantém a descrição genérica/extraída
             break;
         }
       }
 
-      console.log(err);
-      toast.error(title, {
-        description,
-        action,
-      });
+      toast.error(title, { description, action });
     } finally {
       setLoadingPreviewId(null);
-      previewAbortRef.current = null; // garante limpeza do controller
+      previewAbortRef.current = null;
     }
   };
 
@@ -836,7 +1032,9 @@ export default function DocumentList() {
       const docHolerite = doc as DocumentoHolerite;
       return (
         <>
-          <td className="px-4 py-2 text-left">{toYYYYDashMM(docHolerite.anomes)}</td>
+          <td className="px-4 py-2 text-left">
+            {toYYYYDashMM(docHolerite.anomes)}
+          </td>
           <td className="px-4 py-2 text-center">{docHolerite.id_documento}</td>
         </>
       );
@@ -881,8 +1079,10 @@ export default function DocumentList() {
   // UI condicional
   // ================================================
   const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
-  const showDiscoveryFlowGenerico = !user?.gestor && tipoDocumento !== "holerite";
-  const gestorGridCols = tipoDocumento === "holerite" ? "sm:grid-cols-4" : "sm:grid-cols-3";
+  const showDiscoveryFlowGenerico =
+    !user?.gestor && tipoDocumento !== "holerite";
+  const gestorGridCols =
+    tipoDocumento === "holerite" ? "sm:grid-cols-4" : "sm:grid-cols-3";
 
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden">
@@ -904,7 +1104,9 @@ export default function DocumentList() {
           </Button>
 
           <h2 className="text-xl font-bold mb-6 text-center">
-            {tipoDocumento === "holerite" ? "Holerite" : `Buscar ${nomeDocumento}`}
+            {tipoDocumento === "holerite"
+              ? "Holerite"
+              : `Buscar ${nomeDocumento}`}
           </h2>
 
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}
@@ -914,10 +1116,14 @@ export default function DocumentList() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
                 {/* ====== ESQUERDA — EMPRESA ====== */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
-                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">Empresa</h3>
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Empresa
+                  </h3>
                   {!selectedEmpresaId ? (
                     empresasUnicas.length === 0 ? (
-                      <p className="text-center text-gray-400">Nenhuma empresa encontrada.</p>
+                      <p className="text-center text-gray-400">
+                        Nenhuma empresa encontrada.
+                      </p>
                     ) : (
                       <div className="grid grid-cols-1 gap-2">
                         {empresasUnicas.map((e) => (
@@ -934,7 +1140,6 @@ export default function DocumentList() {
                               setSelectedYear(null);
                               setDocuments([]);
                               setPaginaAtual(1);
-                              // Limpar cache de requisições
                               lastFetchKeyRef.current = null;
                             }}
                             disabled={isAnyLoading}
@@ -955,7 +1160,9 @@ export default function DocumentList() {
                     <div className="space-y-3">
                       <div className="text-sm text-gray-300 text-center">
                         Selecionada:{" "}
-                        <span className="font-semibold text-white">{selectedEmpresaNome}</span>
+                        <span className="font-semibold text-white">
+                          {selectedEmpresaNome}
+                        </span>
                       </div>
                       <Button
                         variant="default"
@@ -979,16 +1186,14 @@ export default function DocumentList() {
 
                 {/* ====== DIREITA — MATRÍCULA ====== */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
-                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">Matrícula</h3>
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Matrícula
+                  </h3>
                   {requerEscolherMatricula ? (
                     !selectedMatricula ? (
-                      // LISTA DE MATRÍCULAS COM SCROLL APÓS 3 ITENS
                       <div
                         className="grid grid-cols-1 gap-2 overflow-y-auto pr-1"
-                        style={{
-                          // 3 itens * 44px + 2 gaps * 8px ≈ 148px
-                          maxHeight: "148px",
-                        }}
+                        style={{ maxHeight: "148px" }}
                       >
                         {matriculasDaEmpresaSelecionada.map((m) => (
                           <Button
@@ -1006,7 +1211,9 @@ export default function DocumentList() {
                       <div className="space-y-3">
                         <div className="text-sm text-gray-300 text-center">
                           Selecionada:{" "}
-                          <span className="font-semibold text-white">{selectedMatricula}</span>
+                          <span className="font-semibold text-white">
+                            {selectedMatricula}
+                          </span>
                         </div>
                         <Button
                           variant="default"
@@ -1017,7 +1224,6 @@ export default function DocumentList() {
                             setSelectedYear(null);
                             setDocuments([]);
                             setPaginaAtual(1);
-                            // Limpar cache de requisições
                             lastFetchKeyRef.current = null;
                           }}
                           disabled={isAnyLoading}
@@ -1047,10 +1253,13 @@ export default function DocumentList() {
                       Selecione a matrícula para carregar os períodos.
                     </p>
                   ) : isLoadingCompetencias ? (
-                    <p className="text-center">Carregando períodos disponíveis...</p>
+                    <p className="text-center">
+                      Carregando períodos disponíveis...
+                    </p>
                   ) : anosDisponiveis.length === 0 ? (
                     <p className="text-center text-gray-300">
-                      Nenhum período de holerite encontrado para a seleção atual.
+                      Nenhum período de holerite encontrado para a seleção
+                      atual.
                     </p>
                   ) : !selectedYear ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -1074,10 +1283,14 @@ export default function DocumentList() {
                             key={mm}
                             variant="default"
                             className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            onClick={() => buscarHoleritePorAnoMes(selectedYear, mm)}
+                            onClick={() =>
+                              buscarHoleritePorAnoMes(selectedYear, mm)
+                            }
                             disabled={isAnyLoading}
                           >
-                            {isLoading ? "Buscando..." : makeYYYYMMLabel(selectedYear, mm)}
+                            {isAnyLoading
+                              ? "Buscando..."
+                              : makeYYYYMMLabel(selectedYear, mm)}
                           </Button>
                         ))}
                       </div>
@@ -1104,7 +1317,9 @@ export default function DocumentList() {
             // ===================== FLUXO (GESTOR) OU (NÃO GESTOR / GENÉRICOS) =====================
             <>
               {user?.gestor ? (
-                <div className={`w-fit mx-auto grid gap-4 ${gestorGridCols} mb-6`}>
+                <div
+                  className={`w-fit mx-auto grid gap-4 ${gestorGridCols} mb-6`}
+                >
                   {tipoDocumento === "holerite" && (
                     <div className="flex flex-col">
                       <input
@@ -1113,7 +1328,9 @@ export default function DocumentList() {
                         required
                         className={`bg-[#2c2c40] text-white border p-2 rounded ${
                           cpfError ? "border-red-500" : "border-gray-600"
-                        } ${isAnyLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                        } ${
+                          isAnyLoading ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
                         value={cpf}
                         onChange={handleCpfChange}
                         maxLength={14}
@@ -1142,40 +1359,42 @@ export default function DocumentList() {
                     onClick={async () => {
                       if (!anomes) {
                         toast.error("Período obrigatório", {
-                          description: "Por favor, selecione um período antes de buscar.",
+                          description:
+                            "Por favor, selecione um período antes de buscar.",
                         });
                         return;
                       }
 
-                      // =========================
-                      // GESTOR: validações
-                      // =========================
                       const cpfNumbers = getCpfNumbers(cpf || "");
                       if (tipoDocumento !== "holerite") {
-                        // Para genéricos: exige matrícula + colaborador (CPF)
                         if (!matricula.trim()) {
                           toast.error("Matrícula obrigatória", {
                             description: "Informe a matrícula para continuar.",
                           });
                           return;
                         }
-                        if (!cpfNumbers || cpfNumbers.length !== 11 || !validateCPF(cpf)) {
+                        if (
+                          !cpfNumbers ||
+                          cpfNumbers.length !== 11 ||
+                          !validateCPF(cpf)
+                        ) {
                           toast.error("CPF inválido", {
                             description: "Informe um CPF válido (11 dígitos).",
                           });
                           return;
                         }
                       } else {
-                        // holerite (mantém a lógica anterior)
                         if (cpfNumbers && !validateCPF(cpf)) {
                           toast.error("CPF inválido", {
-                            description: "Por favor, informe um CPF válido com 11 dígitos.",
+                            description:
+                              "Por favor, informe um CPF válido com 11 dígitos.",
                           });
                           return;
                         }
                         if (!cpfNumbers && !matricula.trim()) {
                           toast.error("CPF ou Matrícula obrigatório", {
-                            description: "Para gestores, informe pelo menos o CPF ou a matrícula.",
+                            description:
+                              "Para gestores, informe pelo menos o CPF ou a matrícula.",
                           });
                           return;
                         }
@@ -1186,7 +1405,9 @@ export default function DocumentList() {
                       try {
                         if (tipoDocumento === "holerite") {
                           const payload = {
-                            cpf: getCpfNumbers(cpf.trim()) || user?.cpf || "",
+                            cpf:
+                              getCpfNumbers(cpf.trim()) ||
+                              onlyDigits((user as any)?.cpf || ""),
                             matricula: matricula.trim(),
                             competencia: formatCompetencia(anomes),
                           };
@@ -1199,39 +1420,49 @@ export default function DocumentList() {
 
                           if (res.data && res.data.cabecalho) {
                             const documento: DocumentoHolerite = {
-                              id_documento: String(res.data.cabecalho.lote || "1"),
-                              anomes: res.data.cabecalho.competencia || formatCompetencia(anomes),
+                              id_documento: String(
+                                res.data.cabecalho.lote || "1"
+                              ),
+                              anomes:
+                                res.data.cabecalho.competencia ||
+                                formatCompetencia(anomes),
                             };
                             setDocuments([documento]);
-                            sessionStorage.setItem("holeriteData", JSON.stringify(res.data));
+                            sessionStorage.setItem(
+                              "holeriteData",
+                              JSON.stringify(res.data)
+                            );
                             toast.success("Holerite encontrado!", {
-                              description: `Documento do período ${toYYYYDashMM(documento.anomes)} localizado.`,
+                              description: `Documento do período ${toYYYYDashMM(
+                                documento.anomes
+                              )} localizado.`,
                             });
                           } else {
                             setDocuments([]);
                             toast.warning("Nenhum holerite encontrado", {
-                              description: "Não foi localizado holerite para o período informado.",
+                              description:
+                                "Não foi localizado holerite para o período informado.",
                             });
                           }
                         } else {
-                          // =========================
-                          // GESTOR: genéricos (inclui colaborador/CPF)
-                          // =========================
+                          // dentro do onClick, no bloco else (genéricos)
                           const cp = [
-                            { nome: "tipodedoc", valor: nomeDocumento },
-                            { nome: "matricula", valor: matricula.trim() },
-                            { nome: "colaborador", valor: cpfNumbers }, // CPF puro
+                            { nome: "tipodedoc", valor: nomeDocumento }, // ex.: "Beneficios"
+                            { nome: "matricula", valor: matricula.trim() }, // ex.: "767678"
+                            { nome: "colaborador", valor: cpfNumbers }, // ex.: "04258297232"
                           ];
 
                           const payload = {
-                            id_template: Number(templateId),
+                            id_template: Number(templateId), // ex.: 3
                             cp,
                             campo_anomes: "anomes",
                             anomes: anomes.includes("/")
-                              ? `${anomes.split("/")[1]}-${anomes.split("/")[0].padStart(2, "0")}`
+                              ? `${anomes.split("/")[1]}-${anomes
+                                  .split("/")[0]
+                                  .padStart(2, "0")}` // "02/2024" -> "2024-02"
                               : anomes.length === 6
-                              ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
-                              : anomes,
+                              ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}` // "202402" -> "2024-02"
+                              : anomes, // já "YYYY-MM"
                           };
 
                           const res = await api.post<{
@@ -1245,9 +1476,12 @@ export default function DocumentList() {
                           setDocuments(documentos);
 
                           if (documentos.length > 0) {
-                            toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
-                              description: `Foram localizados ${documentos.length} documentos do tipo ${nomeDocumento}.`,
-                            });
+                            toast.success(
+                              `${documentos.length} documento(s) encontrado(s)!`,
+                              {
+                                description: `Foram localizados ${documentos.length} documentos do tipo ${nomeDocumento}.`,
+                              }
+                            );
                           } else {
                             toast.warning("Nenhum documento encontrado", {
                               description: `Não foram localizados documentos do tipo ${nomeDocumento} para os critérios informados.`,
@@ -1259,16 +1493,20 @@ export default function DocumentList() {
                       } catch (err: any) {
                         setDocuments([]);
 
-                        const description = extractErrorMessage(err, "Erro ao buscar documentos.");
+                        const description = extractErrorMessage(
+                          err,
+                          "Erro ao buscar documentos."
+                        );
                         const status = err?.response?.status;
 
                         switch (status) {
                           case 401:
                             toast.error("Não autorizado", {
-                              description: "Sua sessão expirou. Faça login novamente.",
+                              description:
+                                "Sua sessão expirou. Faça login novamente.",
                               action: {
                                 label: "Ir para login",
-                                onClick: () => navigate("/login")
+                                onClick: () => navigate("/login"),
                               },
                             });
                             break;
@@ -1276,14 +1514,17 @@ export default function DocumentList() {
                             toast.error("Acesso negado", { description });
                             break;
                           case 404:
-                            toast.error("Documento não encontrado", { description });
+                            toast.error("Documento não encontrado", {
+                              description,
+                            });
                             break;
                           case 500:
                             toast.error("Erro interno do servidor", {
-                              description: "Ocorreu um problema no servidor. Tente novamente em alguns minutos.",
+                              description:
+                                "Ocorreu um problema no servidor. Tente novamente em alguns minutos.",
                               action: {
                                 label: "Tentar novamente",
-                                onClick: () => window.location.reload()
+                                onClick: () => window.location.reload(),
                               },
                             });
                             break;
@@ -1292,7 +1533,7 @@ export default function DocumentList() {
                               description,
                               action: {
                                 label: "Tentar novamente",
-                                onClick: () => window.location.reload()
+                                onClick: () => window.location.reload(),
                               },
                             });
                         }
@@ -1303,15 +1544,17 @@ export default function DocumentList() {
                     disabled={isAnyLoading || !anomes || (!!cpf && !!cpfError)}
                     className="bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed p-5"
                   >
-                    {isLoading ? "Buscando..." : "Buscar"}
+                    {isAnyLoading ? "Buscando..." : "Buscar"}
                   </Button>
                 </div>
               ) : showDiscoveryFlowGenerico ? (
                 <>
-                  {/* AJUSTE: seletor quando o /me retorna várias matrículas */}
+                  {/* seletor quando o /me retorna várias matrículas */}
                   {matriculasGen.length > 1 && !selectedMatriculaGen && (
                     <div className="bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
-                      <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">Selecione a matrícula</h3>
+                      <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                        Selecione a matrícula
+                      </h3>
                       <div className="flex flex-wrap gap-2 justify-center">
                         {matriculasGen.map((m) => (
                           <Button
@@ -1335,10 +1578,13 @@ export default function DocumentList() {
                   )}
 
                   {isLoadingCompetenciasGen ? (
-                    <p className="text-center mb-6">Carregando períodos disponíveis...</p>
+                    <p className="text-center mb-6">
+                      Carregando períodos disponíveis...
+                    </p>
                   ) : anosDisponiveisGen.length === 0 ? (
                     <p className="text-center mb-6 text-gray-300">
-                      Nenhum período de {nomeDocumento} encontrado para sua conta.
+                      Nenhum período de {nomeDocumento} encontrado para sua
+                      conta.
                     </p>
                   ) : !selectedYearGen ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 justify-items-stretch mb-6 px-4">
@@ -1362,10 +1608,14 @@ export default function DocumentList() {
                             key={mm}
                             variant="default"
                             className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            onClick={() => buscarGenericoPorAnoMes(selectedYearGen, mm)}
+                            onClick={() =>
+                              buscarGenericoPorAnoMes(selectedYearGen, mm)
+                            }
                             disabled={isAnyLoading}
                           >
-                            {isLoading ? "Buscando..." : makeYYYYMMLabel(selectedYearGen, mm)}
+                            {isAnyLoading
+                              ? "Buscando..."
+                              : makeYYYYMMLabel(selectedYearGen, mm)}
                           </Button>
                         ))}
                       </div>
@@ -1402,7 +1652,6 @@ export default function DocumentList() {
                         return;
                       }
 
-                      // AJUSTE: garantir matrícula antes de buscar
                       if (!selectedMatriculaGen) {
                         toast.error("Selecione a matrícula para continuar.");
                         return;
@@ -1413,8 +1662,8 @@ export default function DocumentList() {
                       try {
                         const cp = [
                           { nome: "tipodedoc", valor: nomeDocumento },
-                          { nome: "matricula", valor: selectedMatriculaGen }, // AJUSTE
-                          { nome: "colaborador", valor: String(user?.cpf || "").replace(/\D/g, "") }, // AJUSTE
+                          { nome: "matricula", valor: selectedMatriculaGen },
+                          { nome: "colaborador", valor: meCpf }, // CPF do /me
                         ];
 
                         const payload = {
@@ -1422,7 +1671,9 @@ export default function DocumentList() {
                           cp,
                           campo_anomes: "anomes",
                           anomes: anomes.includes("/")
-                            ? `${anomes.split("/")[1]}-${anomes.split("/")[0].padStart(2, "0")}`
+                            ? `${anomes.split("/")[1]}-${anomes
+                                .split("/")[0]
+                                .padStart(2, "0")}`
                             : anomes.length === 6
                             ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
                             : anomes,
@@ -1440,13 +1691,18 @@ export default function DocumentList() {
                         setPaginaAtual(1);
 
                         if (documentos.length > 0) {
-                          toast.success(`${documentos.length} documento(s) encontrado(s)!`);
+                          toast.success(
+                            `${documentos.length} documento(s) encontrado(s)!`
+                          );
                         } else {
                           toast.warning("Nenhum documento encontrado.");
                         }
                       } catch (err: any) {
                         toast.error("Erro ao buscar documentos", {
-                          description: extractErrorMessage(err, "Falha ao buscar documentos."),
+                          description: extractErrorMessage(
+                            err,
+                            "Falha ao buscar documentos."
+                          ),
                         });
                       } finally {
                         setIsLoading(false);
@@ -1455,56 +1711,64 @@ export default function DocumentList() {
                     disabled={isAnyLoading || !anomes}
                     className="bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed w-full sm:w-auto"
                   >
-                    {isLoading ? "Buscando..." : "Buscar"}
+                    {isAnyLoading ? "Buscando..." : "Buscar"}
                   </Button>
                 </div>
               )}
             </>
           )}
 
-          {isLoading ? (
-            <p className="text-center">Carregando documentos...</p>
-          ) : (
-            <div className="overflow-x-auto border border-gray-600 rounded">
-              <table className="w-full text-sm text-left text-white">
-                <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
-                  <tr>{renderTableHeader()}</tr>
-                </thead>
-                <tbody>
-                  {documentosVisiveis.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={tipoDocumento === "holerite" ? 3 : 2}
-                        className="text-center py-4 text-gray-400"
-                      >
-                        Nenhum documento encontrado.
-                      </td>
-                    </tr>
-                  ) : (
-                    documentosVisiveis.map((doc) => (
-                      <tr
-                        key={doc.id_documento}
-                        className="border-t border-gray-700 hover:bg-gray-800 transition-colors"
-                      >
-                        {renderDocumentInfo(doc)}
-                        <td className="px-4 py-2 text-right">
-                          <Button
-                            onClick={() => visualizarDocumento(doc)}
-                            disabled={isAnyLoading || loadingPreviewId === doc.id_documento}
-                            className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {loadingPreviewId === doc.id_documento ? "Abrindo..." : "Visualizar"}
-                          </Button>
+          {/* TABELA: manter SOMENTE para gestor (não-gestor abre direto na prévia, sem tabela/botão) */}
+          {user?.gestor ? (
+            isAnyLoading ? (
+              <p className="text-center">Carregando documentos...</p>
+            ) : (
+              <div className="overflow-x-auto border border-gray-600 rounded">
+                <table className="w-full text-sm text-left text-white">
+                  <thead className="bg-[#2c2c40] text-xs uppercase text-gray-300">
+                    <tr>{renderTableHeader()}</tr>
+                  </thead>
+                  <tbody>
+                    {documentosVisiveis.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={tipoDocumento === "holerite" ? 3 : 2}
+                          className="text-center py-4 text-gray-400"
+                        >
+                          Nenhum documento encontrado.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    ) : (
+                      documentosVisiveis.map((doc) => (
+                        <tr
+                          key={doc.id_documento}
+                          className="border-t border-gray-700 hover:bg-gray-800 transition-colors"
+                        >
+                          {renderDocumentInfo(doc)}
+                          <td className="px-4 py-2 text-right">
+                            <Button
+                              onClick={() => visualizarDocumento(doc)}
+                              disabled={
+                                isAnyLoading ||
+                                loadingPreviewId === doc.id_documento
+                              }
+                              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-sm rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {loadingPreviewId === doc.id_documento
+                                ? "Abrindo..."
+                                : "Visualizar"}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : null}
 
-          {totalPaginas > 1 && (
+          {user?.gestor && totalPaginas > 1 && (
             <div className="flex justify-center mt-6 w-full overflow-x-auto px-2">
               <Pagination>
                 <PaginationContent className="flex flex-wrap justify-center gap-1">
@@ -1518,24 +1782,28 @@ export default function DocumentList() {
                       }
                     />
                   </PaginationItem>
-                  {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((p) => (
-                    <PaginationItem key={p}>
-                      <PaginationLink
-                        isActive={paginaAtual === p}
-                        onClick={() => setPaginaAtual(p)}
-                        className={
-                          isAnyLoading
-                            ? "pointer-events-none opacity-50"
-                            : "hover:bg-gray-700 cursor-pointer"
-                        }
-                      >
-                        {p}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
+                  {Array.from({ length: totalPaginas }, (_, i) => i + 1).map(
+                    (p) => (
+                      <PaginationItem key={p}>
+                        <PaginationLink
+                          isActive={paginaAtual === p}
+                          onClick={() => setPaginaAtual(p)}
+                          className={
+                            isAnyLoading
+                              ? "pointer-events-none opacity-50"
+                              : "hover:bg-gray-700 cursor-pointer"
+                          }
+                        >
+                          {p}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  )}
                   <PaginationItem>
                     <PaginationNext
-                      onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
+                      onClick={() =>
+                        setPaginaAtual((p) => Math.min(totalPaginas, p + 1))
+                      }
                       className={
                         paginaAtual === totalPaginas || isAnyLoading
                           ? "pointer-events-none opacity-50"
