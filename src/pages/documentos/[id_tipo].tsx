@@ -119,7 +119,6 @@ const makeYYYYMMValue = (ano: number, mes: string | number) =>
 const extractErrorMessage = (err: any, fallback = "Ocorreu um erro.") => {
   const status = err?.response?.status as number | undefined;
 
-  // 1) Mensagens amigáveis por status (cobre casos sem switch local)
   if (typeof status === "number") {
     switch (status) {
       case 401:
@@ -142,11 +141,9 @@ const extractErrorMessage = (err: any, fallback = "Ocorreu um erro.") => {
       case 504:
         return "O servidor está indisponível no momento. Tente novamente.";
       default:
-        // mantém o fluxo normal abaixo
         break;
     }
   }
-  // Use fallback if no specific message is found
   return fallback;
 };
 
@@ -276,7 +273,7 @@ export default function DocumentList() {
   const [competencias, setCompetencias] = useState<CompetenciaItem[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const lastFetchKeyRef = useRef<string | null>(null);
-  // 🚫 evita "Nenhum período..." antes do primeiro carregamento (holerite)
+  // ✅ flags para controlar quando exibir "Nenhum período..."
   const [competenciasHoleriteLoaded, setCompetenciasHoleriteLoaded] =
     useState(false);
 
@@ -307,7 +304,6 @@ export default function DocumentList() {
   const [selectedMatriculaGen, setSelectedMatriculaGen] = useState<
     string | null
   >(null);
-  // 🚫 evita "Nenhum período..." antes do primeiro carregamento (genéricos)
   const [competenciasGenLoaded, setCompetenciasGenLoaded] = useState(false);
 
   const anosDisponiveisGen = useMemo(() => {
@@ -396,7 +392,7 @@ export default function DocumentList() {
       isLoadingCompetenciasGen ||
       !!loadingPreviewId ||
       userLoading ||
-      meLoading // inclui carregamento do /me
+      meLoading
     );
   }, [
     isLoading,
@@ -474,7 +470,7 @@ export default function DocumentList() {
         } else if (matrList.length === 0) {
           setSelectedMatriculaGen(null);
         } else {
-          setSelectedMatriculaGen(null); // várias: usuário escolhe
+          setSelectedMatriculaGen(null);
         }
 
         // limpa estados dependentes
@@ -485,11 +481,10 @@ export default function DocumentList() {
         setDocuments([]);
         setPaginaAtual(1);
         lastFetchKeyRef.current = null;
-        // 🚫 evita "flash" nas duas áreas
+        // reset de “loaded” p/ evitar flash
         setCompetenciasHoleriteLoaded(false);
         setCompetenciasGenLoaded(false);
       } catch (err: any) {
-        // fallback se falhar
         console.error("Falha ao carregar /user/me:", err);
         if (!user?.gestor) {
           setMeCpf(onlyDigits((user as any)?.cpf || ""));
@@ -532,14 +527,12 @@ export default function DocumentList() {
         setSelectedYear(null);
         setDocuments([]);
         setPaginaAtual(1);
-        // 🚫 ainda não carregou
         setCompetenciasHoleriteLoaded(false);
 
         const payload = {
           cpf: meCpf,
           matricula: matriculaEfetiva,
         };
-        console.log(payload);
 
         const res = await api.request<{
           competencias: { ano: number; mes: number }[];
@@ -576,7 +569,6 @@ export default function DocumentList() {
         });
       } finally {
         setIsLoadingCompetencias(false);
-        // ✅ marcou que já carregou uma vez
         setCompetenciasHoleriteLoaded(true);
       }
     };
@@ -590,7 +582,7 @@ export default function DocumentList() {
     requerEscolherMatricula,
     selectedEmpresaNome,
     empresasMap,
-    meCpf, // depende do CPF do /me
+    meCpf,
   ]);
 
   // ================================================
@@ -602,20 +594,19 @@ export default function DocumentList() {
     if (!deveRodarDiscoveryGen) return;
 
     const matr = selectedMatriculaGen || "";
-    if (!matr) return; // aguarda o usuário escolher se houver várias
+    if (!matr) return;
 
     const run = async () => {
       try {
         setIsLoadingCompetenciasGen(true);
         setDocuments([]);
         setPaginaAtual(1);
-        // 🚫 ainda não carregou
         setCompetenciasGenLoaded(false);
 
         const cp = [
           { nome: "tipodedoc", valor: nomeDocumento },
           { nome: "matricula", valor: matr },
-          { nome: "colaborador", valor: meCpf }, // CPF do /me (11 dígitos)
+          { nome: "colaborador", valor: meCpf },
         ];
 
         const payload = {
@@ -629,7 +620,6 @@ export default function DocumentList() {
           "/documents/search",
           payload
         );
-        console.log(res.data);
 
         const listaBruta = res.data?.anomes ?? [];
         const lista: CompetenciaItem[] = listaBruta.map((x) => ({
@@ -653,7 +643,6 @@ export default function DocumentList() {
         });
       } finally {
         setIsLoadingCompetenciasGen(false);
-        // ✅ marcou que já carregou uma vez
         setCompetenciasGenLoaded(true);
       }
     };
@@ -694,7 +683,7 @@ export default function DocumentList() {
 
     try {
       const payload = {
-        cpf: meCpf, // CPF do /me (11 dígitos)
+        cpf: meCpf,
         matricula: matriculaEfetiva,
         competencia: competenciaYYYYMM,
       };
@@ -737,7 +726,6 @@ export default function DocumentList() {
 
   // ==========================================
   // Genéricos: buscar documentos de um mês -> abre prévia do primeiro
-  // (AQUI só estilizei as mensagens de erro)
   // ==========================================
   const buscarGenericoPorAnoMes = async (ano: number, mes: string) => {
     const matr = selectedMatriculaGen || "";
@@ -754,7 +742,7 @@ export default function DocumentList() {
       const cp = [
         { nome: "tipodedoc", valor: nomeDocumento },
         { nome: "matricula", valor: matr },
-        { nome: "colaborador", valor: meCpf }, // CPF do /me
+        { nome: "colaborador", valor: meCpf },
       ];
 
       const payload = {
@@ -786,7 +774,6 @@ export default function DocumentList() {
         toast.warning("Nenhum documento encontrado para o mês selecionado.");
       }
     } catch (err: any) {
-      // ======= MENSAGENS AMIGÁVEIS PARA GENÉRICOS =======
       const status = err?.response?.status as number | undefined;
       let title = "Erro ao buscar documentos";
       let description = extractErrorMessage(
@@ -809,7 +796,7 @@ export default function DocumentList() {
           break;
         case 413:
           title = "Documento muito grande";
-          description: "Tente novamente mais tarde ou contate o suporte.";
+          description = "Tente novamente mais tarde ou contate o suporte.";
           break;
         case 415:
         case 422:
@@ -834,7 +821,6 @@ export default function DocumentList() {
             "O servidor está indisponível no momento. Tente novamente.";
           break;
         default:
-          // mantém a genérica
           break;
       }
 
@@ -846,10 +832,8 @@ export default function DocumentList() {
 
   // ==========================================
   // Visualizar documento
-  // (AQUI padronizei para não exibir "Not Found"/mensagens cruas)
   // ==========================================
   const visualizarDocumento = async (doc: DocumentoUnion) => {
-    // Cancela visualização anterior, se existir
     previewAbortRef.current?.abort();
     const controller = new AbortController();
     previewAbortRef.current = controller;
@@ -984,7 +968,6 @@ export default function DocumentList() {
         description =
           "O servidor demorou para responder. Tente novamente em instantes.";
       } else {
-        // ======= SEM MENSAGEM CRUA: sempre descrição amigável por status =======
         switch (status) {
           case 401:
             title = "Sessão expirada";
@@ -1031,7 +1014,6 @@ export default function DocumentList() {
               "O servidor está indisponível no momento. Tente novamente.";
             break;
           default:
-            // mantém a descrição genérica/extraída
             break;
         }
       }
@@ -1128,7 +1110,6 @@ export default function DocumentList() {
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}
           {showDiscoveryFlow ? (
             <>
-              {/* Grade (Empresa esquerda, Matrícula direita, Períodos abaixo ocupando toda a largura) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
                 {/* ====== ESQUERDA — EMPRESA ====== */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
@@ -1157,7 +1138,6 @@ export default function DocumentList() {
                               setDocuments([]);
                               setPaginaAtual(1);
                               lastFetchKeyRef.current = null;
-                              // 🚫 reset da flag de carregamento
                               setCompetenciasHoleriteLoaded(false);
                             }}
                             disabled={isAnyLoading}
@@ -1193,7 +1173,6 @@ export default function DocumentList() {
                           setSelectedYear(null);
                           setDocuments([]);
                           setPaginaAtual(1);
-                          // 🚫 reset da flag de carregamento
                           setCompetenciasHoleriteLoaded(false);
                         }}
                         disabled={isAnyLoading}
@@ -1222,7 +1201,6 @@ export default function DocumentList() {
                             className="w-full h-11 bg-teal-600 hover:bg-teal-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
                             onClick={() => {
                               setSelectedMatricula(m);
-                              // 🚫 reset da flag de carregamento
                               setCompetenciasHoleriteLoaded(false);
                             }}
                             disabled={isAnyLoading}
@@ -1249,7 +1227,6 @@ export default function DocumentList() {
                             setDocuments([]);
                             setPaginaAtual(1);
                             lastFetchKeyRef.current = null;
-                            // 🚫 reset da flag de carregamento
                             setCompetenciasHoleriteLoaded(false);
                           }}
                           disabled={isAnyLoading}
@@ -1279,15 +1256,13 @@ export default function DocumentList() {
                       Selecione a matrícula para carregar os períodos.
                     </p>
                   ) : isLoadingCompetencias ? (
-                    <p className="text-center">
-                      Carregando períodos disponíveis...
-                    </p>
+                    <p className="text-center">Carregando períodos disponíveis...</p>
                   ) : !competenciasHoleriteLoaded ? (
-                    <></>
+                    // 👇 evita flash de "Nenhum período..." enquanto o efeito ainda não marcou como carregado
+                    <p className="text-center">Carregando períodos disponíveis...</p>
                   ) : anosDisponiveis.length === 0 ? (
                     <p className="text-center text-gray-300">
-                      Nenhum período de holerite encontrado para a seleção
-                      atual.
+                      Nenhum período de holerite encontrado para a seleção atual.
                     </p>
                   ) : !selectedYear ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -1348,7 +1323,7 @@ export default function DocumentList() {
                 <div
                   className={`w-fit mx-auto grid gap-4 sm:grid-cols-4 ${gestorGridCols} mb-6`}
                 >
-                  {/* ✅ CPF agora aparece para gestor em qualquer tipo de documento */}
+                  {/* CPF para gestor em qualquer tipo */}
                   <div className="flex flex-col">
                     <input
                       type="text"
@@ -1470,25 +1445,23 @@ export default function DocumentList() {
                             });
                           }
                         } else {
-                          // dentro do onClick, no bloco else (genéricos)
                           const cp = [
-                            { nome: "tipodedoc", valor: nomeDocumento }, // ex.: "Beneficios"
-                            { nome: "matricula", valor: matricula.trim() }, // ex.: "767678"
-                            { nome: "colaborador", valor: cpfNumbers }, // ex.: "04258297232"
+                            { nome: "tipodedoc", valor: nomeDocumento },
+                            { nome: "matricula", valor: matricula.trim() },
+                            { nome: "colaborador", valor: cpfNumbers },
                           ];
 
                           const payload = {
-                            id_template: Number(templateId), // ex.: 3
+                            id_template: Number(templateId),
                             cp,
                             campo_anomes: "anomes",
                             anomes: anomes.includes("/")
                               ? `${anomes.split("/")[1]}-${anomes
                                   .split("/")[0]
-                                  .padStart(2, "0")}` // "02/2024" -> "2024-02"
+                                  .padStart(2, "0")}`
                               : anomes.length === 6
-                              ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}` // "202402" -> "2024-02"
-                              : anomes, // já "YYYY-MM"
-                            // ✅ envia cpf no payload raiz quando gestor (pedido)
+                              ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
+                              : anomes,
                             cpf: cpfNumbers,
                           };
 
@@ -1594,7 +1567,6 @@ export default function DocumentList() {
                               setSelectedYearGen(null);
                               setDocuments([]);
                               setPaginaAtual(1);
-                              // 🚫 reset da flag para evitar "flash"
                               setCompetenciasGenLoaded(false);
                             }}
                             disabled={isAnyLoading}
@@ -1611,7 +1583,10 @@ export default function DocumentList() {
                       Carregando períodos disponíveis...
                     </p>
                   ) : !competenciasGenLoaded ? (
-                    <></>
+                    // 👇 evita flash antes da primeira resposta
+                    <p className="text-center mb-6">
+                      Carregando períodos disponíveis...
+                    </p>
                   ) : anosDisponiveisGen.length === 0 ? (
                     <p className="text-center mb-6 text-gray-300">
                       Nenhum período de {nomeDocumento} encontrado para sua
@@ -1694,7 +1669,7 @@ export default function DocumentList() {
                         const cp = [
                           { nome: "tipodedoc", valor: nomeDocumento },
                           { nome: "matricula", valor: selectedMatriculaGen },
-                          { nome: "colaborador", valor: meCpf }, // CPF do /me
+                          { nome: "colaborador", valor: meCpf },
                         ];
 
                         const payload = {
@@ -1749,7 +1724,7 @@ export default function DocumentList() {
             </>
           )}
 
-          {/* TABELA: manter SOMENTE para gestor (não-gestor abre direto na prévia, sem tabela/botão) */}
+          {/* TABELA: SOMENTE para gestor */}
           {user?.gestor ? (
             isAnyLoading ? (
               <p className="text-center">Carregando documentos...</p>
