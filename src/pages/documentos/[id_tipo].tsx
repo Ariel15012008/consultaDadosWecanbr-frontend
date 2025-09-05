@@ -276,6 +276,9 @@ export default function DocumentList() {
   const [competencias, setCompetencias] = useState<CompetenciaItem[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const lastFetchKeyRef = useRef<string | null>(null);
+  // 🚫 evita "Nenhum período..." antes do primeiro carregamento (holerite)
+  const [competenciasHoleriteLoaded, setCompetenciasHoleriteLoaded] =
+    useState(false);
 
   const anosDisponiveis = useMemo(() => {
     const setAnos = new Set<number>();
@@ -304,6 +307,8 @@ export default function DocumentList() {
   const [selectedMatriculaGen, setSelectedMatriculaGen] = useState<
     string | null
   >(null);
+  // 🚫 evita "Nenhum período..." antes do primeiro carregamento (genéricos)
+  const [competenciasGenLoaded, setCompetenciasGenLoaded] = useState(false);
 
   const anosDisponiveisGen = useMemo(() => {
     const setAnos = new Set<number>();
@@ -480,6 +485,9 @@ export default function DocumentList() {
         setDocuments([]);
         setPaginaAtual(1);
         lastFetchKeyRef.current = null;
+        // 🚫 evita "flash" nas duas áreas
+        setCompetenciasHoleriteLoaded(false);
+        setCompetenciasGenLoaded(false);
       } catch (err: any) {
         // fallback se falhar
         console.error("Falha ao carregar /user/me:", err);
@@ -508,7 +516,7 @@ export default function DocumentList() {
     if (!selectedEmpresaId) return;
 
     const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
-     const matriculaEfetiva = requerEscolherMatricula
+    const matriculaEfetiva = requerEscolherMatricula
       ? selectedMatricula
       : arr[0];
     if (!matriculaEfetiva) return;
@@ -524,6 +532,8 @@ export default function DocumentList() {
         setSelectedYear(null);
         setDocuments([]);
         setPaginaAtual(1);
+        // 🚫 ainda não carregou
+        setCompetenciasHoleriteLoaded(false);
 
         const payload = {
           cpf: meCpf,
@@ -566,6 +576,8 @@ export default function DocumentList() {
         });
       } finally {
         setIsLoadingCompetencias(false);
+        // ✅ marcou que já carregou uma vez
+        setCompetenciasHoleriteLoaded(true);
       }
     };
 
@@ -597,6 +609,8 @@ export default function DocumentList() {
         setIsLoadingCompetenciasGen(true);
         setDocuments([]);
         setPaginaAtual(1);
+        // 🚫 ainda não carregou
+        setCompetenciasGenLoaded(false);
 
         const cp = [
           { nome: "tipodedoc", valor: nomeDocumento },
@@ -639,6 +653,8 @@ export default function DocumentList() {
         });
       } finally {
         setIsLoadingCompetenciasGen(false);
+        // ✅ marcou que já carregou uma vez
+        setCompetenciasGenLoaded(true);
       }
     };
 
@@ -793,7 +809,7 @@ export default function DocumentList() {
           break;
         case 413:
           title = "Documento muito grande";
-          description = "Tente novamente mais tarde ou contate o suporte.";
+          description: "Tente novamente mais tarde ou contate o suporte.";
           break;
         case 415:
         case 422:
@@ -858,7 +874,7 @@ export default function DocumentList() {
           cpf: user?.gestor
             ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
             : meCpf,
-        matricula: matForPreview,
+          matricula: matForPreview,
           competencia: docHolerite.anomes,
           lote: docHolerite.id_documento,
         };
@@ -1141,6 +1157,8 @@ export default function DocumentList() {
                               setDocuments([]);
                               setPaginaAtual(1);
                               lastFetchKeyRef.current = null;
+                              // 🚫 reset da flag de carregamento
+                              setCompetenciasHoleriteLoaded(false);
                             }}
                             disabled={isAnyLoading}
                           >
@@ -1175,6 +1193,8 @@ export default function DocumentList() {
                           setSelectedYear(null);
                           setDocuments([]);
                           setPaginaAtual(1);
+                          // 🚫 reset da flag de carregamento
+                          setCompetenciasHoleriteLoaded(false);
                         }}
                         disabled={isAnyLoading}
                       >
@@ -1200,7 +1220,11 @@ export default function DocumentList() {
                             key={m}
                             variant="default"
                             className="w-full h-11 bg-teal-600 hover:bg-teal-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            onClick={() => setSelectedMatricula(m)}
+                            onClick={() => {
+                              setSelectedMatricula(m);
+                              // 🚫 reset da flag de carregamento
+                              setCompetenciasHoleriteLoaded(false);
+                            }}
                             disabled={isAnyLoading}
                           >
                             Matrícula {m}
@@ -1225,6 +1249,8 @@ export default function DocumentList() {
                             setDocuments([]);
                             setPaginaAtual(1);
                             lastFetchKeyRef.current = null;
+                            // 🚫 reset da flag de carregamento
+                            setCompetenciasHoleriteLoaded(false);
                           }}
                           disabled={isAnyLoading}
                         >
@@ -1256,6 +1282,8 @@ export default function DocumentList() {
                     <p className="text-center">
                       Carregando períodos disponíveis...
                     </p>
+                  ) : !competenciasHoleriteLoaded ? (
+                    <></>
                   ) : anosDisponiveis.length === 0 ? (
                     <p className="text-center text-gray-300">
                       Nenhum período de holerite encontrado para a seleção
@@ -1566,6 +1594,8 @@ export default function DocumentList() {
                               setSelectedYearGen(null);
                               setDocuments([]);
                               setPaginaAtual(1);
+                              // 🚫 reset da flag para evitar "flash"
+                              setCompetenciasGenLoaded(false);
                             }}
                             disabled={isAnyLoading}
                           >
@@ -1580,6 +1610,8 @@ export default function DocumentList() {
                     <p className="text-center mb-6">
                       Carregando períodos disponíveis...
                     </p>
+                  ) : !competenciasGenLoaded ? (
+                    <></>
                   ) : anosDisponiveisGen.length === 0 ? (
                     <p className="text-center mb-6 text-gray-300">
                       Nenhum período de {nomeDocumento} encontrado para sua
