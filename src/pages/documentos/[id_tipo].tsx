@@ -508,7 +508,7 @@ export default function DocumentList() {
     if (!selectedEmpresaId) return;
 
     const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
-    const matriculaEfetiva = requerEscolherMatricula
+     const matriculaEfetiva = requerEscolherMatricula
       ? selectedMatricula
       : arr[0];
     if (!matriculaEfetiva) return;
@@ -858,7 +858,7 @@ export default function DocumentList() {
           cpf: user?.gestor
             ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
             : meCpf,
-          matricula: matForPreview,
+        matricula: matForPreview,
           competencia: docHolerite.anomes,
           lote: docHolerite.id_documento,
         };
@@ -1318,26 +1318,23 @@ export default function DocumentList() {
             <>
               {user?.gestor ? (
                 <div
-                  className={`w-fit mx-auto grid gap-4 ${gestorGridCols} mb-6`}
+                  className={`w-fit mx-auto grid gap-4 sm:grid-cols-4 ${gestorGridCols} mb-6`}
                 >
-                  {tipoDocumento === "holerite" && (
-                    <div className="flex flex-col">
-                      <input
-                        type="text"
-                        placeholder="CPF"
-                        required
-                        className={`bg-[#2c2c40] text-white border p-2 rounded ${
-                          cpfError ? "border-red-500" : "border-gray-600"
-                        } ${
-                          isAnyLoading ? "opacity-50 cursor-not-allowed" : ""
-                        }`}
-                        value={cpf}
-                        onChange={handleCpfChange}
-                        maxLength={14}
-                        disabled={isAnyLoading}
-                      />
-                    </div>
-                  )}
+                  {/* ✅ CPF agora aparece para gestor em qualquer tipo de documento */}
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      placeholder="CPF"
+                      required
+                      className={`bg-[#2c2c40] text-white border p-2 rounded ${
+                        cpfError ? "border-red-500" : "border-gray-600"
+                      } ${isAnyLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                      value={cpf}
+                      onChange={handleCpfChange}
+                      maxLength={14}
+                      disabled={isAnyLoading}
+                    />
+                  </div>
                   <input
                     type="text"
                     placeholder="Matrícula"
@@ -1463,6 +1460,8 @@ export default function DocumentList() {
                               : anomes.length === 6
                               ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}` // "202402" -> "2024-02"
                               : anomes, // já "YYYY-MM"
+                            // ✅ envia cpf no payload raiz quando gestor (pedido)
+                            cpf: cpfNumbers,
                           };
 
                           const res = await api.post<{
