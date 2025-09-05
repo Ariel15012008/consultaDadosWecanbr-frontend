@@ -505,10 +505,17 @@ export default function DocumentList() {
   // ================================================
   // Buscar COMPETÊNCIAS após escolher empresa(/matrícula) - holerite
   // ================================================
+  // Define showInitialBanner to control initial loading banner display
+  const showInitialBanner =
+    !user?.gestor &&
+    ((tipoDocumento === "holerite" && !competenciasHoleriteLoaded) ||
+      (tipoDocumento !== "holerite" && !competenciasGenLoaded));
+
   useEffect(() => {
     const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
     if (!showDiscoveryFlow) return;
     if (!selectedEmpresaId) return;
+
 
     const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
     const matriculaEfetiva = requerEscolherMatricula
@@ -1106,6 +1113,9 @@ export default function DocumentList() {
               ? "Holerite"
               : `Buscar ${nomeDocumento}`}
           </h2>
+            {showInitialBanner && (
+            <p className="text-center mb-6">Carregando documentos...</p>
+          )}
 
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}
           {showDiscoveryFlow ? (
