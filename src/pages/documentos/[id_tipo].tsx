@@ -115,7 +115,7 @@ const makeYYYYMMLabel = (ano: number, mes: string) => `${ano}-${mes}`;
 const makeYYYYMMValue = (ano: number, mes: string | number) =>
   `${ano}${String(mes).padStart(2, "0")}`;
 
-// 🔄 SUBSTITUIR APENAS ESTA FUNÇÃO
+// 🔄 mensagens amigáveis por status (evita “Not Found” cru)
 const extractErrorMessage = (err: any, fallback = "Ocorreu um erro.") => {
   const status = err?.response?.status as number | undefined;
 
@@ -232,6 +232,17 @@ export default function DocumentList() {
     null
   );
 
+  // === NOVO: seleção para documentos genéricos (não holerite) ===
+  const [selectedEmpresaIdGen, setSelectedEmpresaIdGen] = useState<
+    string | null
+  >(null);
+  const [selectedEmpresaNomeGen, setSelectedEmpresaNomeGen] = useState<
+    string | null
+  >(null);
+  const [selectedMatriculaGen, setSelectedMatriculaGen] = useState<
+    string | null
+  >(null);
+
   const empresasMap = useMemo(() => {
     const map = new Map<string, { nome: string; matriculas: string[] }>();
     for (const d of empresasDoUsuario) {
@@ -266,6 +277,18 @@ export default function DocumentList() {
     return (empresasMap.get(selectedEmpresaId)?.matriculas.length ?? 0) > 1;
   }, [selectedEmpresaId, empresasMap]);
 
+  // === NOVO: helpers para genéricos ===
+  const matriculasDaEmpresaSelecionadaGen = useMemo(() => {
+    if (!selectedEmpresaIdGen) return [];
+    const item = empresasMap.get(selectedEmpresaIdGen);
+    return item?.matriculas ?? [];
+  }, [selectedEmpresaIdGen, empresasMap]);
+
+  const requerEscolherMatriculaGen = useMemo(() => {
+    if (!selectedEmpresaIdGen) return false;
+    return (empresasMap.get(selectedEmpresaIdGen)?.matriculas.length ?? 0) > 1;
+  }, [selectedEmpresaIdGen, empresasMap]);
+
   // ================================================
   // DISCOVERY de competências (holerite)
   // ================================================
@@ -273,7 +296,6 @@ export default function DocumentList() {
   const [competencias, setCompetencias] = useState<CompetenciaItem[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const lastFetchKeyRef = useRef<string | null>(null);
-  // ✅ flags para controlar quando exibir "Nenhum período..."
   const [competenciasHoleriteLoaded, setCompetenciasHoleriteLoaded] =
     useState(false);
 
@@ -293,17 +315,12 @@ export default function DocumentList() {
   }, [competencias, selectedYear]);
 
   // ================================================
-  // Genéricos (não gestor): matrícula do /me + colaborador/CPF
+  // Genéricos (não gestor): empresa + matrícula do /me + colaborador/CPF
   // ================================================
   const [isLoadingCompetenciasGen, setIsLoadingCompetenciasGen] =
     useState(false);
   const [competenciasGen, setCompetenciasGen] = useState<CompetenciaItem[]>([]);
   const [selectedYearGen, setSelectedYearGen] = useState<number | null>(null);
-
-  const [matriculasGen, setMatriculasGen] = useState<string[]>([]);
-  const [selectedMatriculaGen, setSelectedMatriculaGen] = useState<
-    string | null
-  >(null);
   const [competenciasGenLoaded, setCompetenciasGenLoaded] = useState(false);
 
   const anosDisponiveisGen = useMemo(() => {
@@ -404,7 +421,7 @@ export default function DocumentList() {
   ]);
 
   // ================================================
-  // [ALTERAÇÃO] Carregar /user/me para NÃO GESTOR (CPF + dados)
+  // Carregar /user/me para NÃO GESTOR (CPF + dados)
   // ================================================
   useEffect(() => {
     const shouldRun = !userLoading && user && !user.gestor;
@@ -431,11 +448,7 @@ export default function DocumentList() {
         }));
         setEmpresasDoUsuario(dadosList);
 
-        const matrList = Array.from(
-          new Set(dadosList.map((d) => d.matricula).filter(Boolean))
-        );
-        setMatriculasGen(matrList);
-
+        // Auto-seleção por empresa (para holerite e genéricos)
         if (dadosList.length > 0) {
           const porEmpresa = new Map<string, EmpresaMatricula[]>();
           for (const d of dadosList) {
@@ -445,6 +458,7 @@ export default function DocumentList() {
           }
           const empresas = Array.from(porEmpresa.entries());
 
+          // holerite
           if (empresas.length === 1) {
             const [empresaId, arr] = empresas[0];
             setSelectedEmpresaId(empresaId);
@@ -459,17 +473,28 @@ export default function DocumentList() {
             setSelectedEmpresaNome(null);
             setSelectedMatricula(null);
           }
+
+          // genéricos (novo)
+          if (empresas.length === 1) {
+            const [empresaId, arr] = empresas[0];
+            setSelectedEmpresaIdGen(empresaId);
+            setSelectedEmpresaNomeGen(arr[0].nome);
+            if (arr.length === 1) {
+              setSelectedMatriculaGen(arr[0].matricula);
+            } else {
+              setSelectedMatriculaGen(null);
+            }
+          } else {
+            setSelectedEmpresaIdGen(null);
+            setSelectedEmpresaNomeGen(null);
+            setSelectedMatriculaGen(null);
+          }
         } else {
           setSelectedEmpresaId(null);
           setSelectedEmpresaNome(null);
           setSelectedMatricula(null);
-        }
-
-        if (matrList.length === 1) {
-          setSelectedMatriculaGen(matrList[0]);
-        } else if (matrList.length === 0) {
-          setSelectedMatriculaGen(null);
-        } else {
+          setSelectedEmpresaIdGen(null);
+          setSelectedEmpresaNomeGen(null);
           setSelectedMatriculaGen(null);
         }
 
@@ -481,18 +506,12 @@ export default function DocumentList() {
         setDocuments([]);
         setPaginaAtual(1);
         lastFetchKeyRef.current = null;
-        // reset de “loaded” p/ evitar flash
         setCompetenciasHoleriteLoaded(false);
         setCompetenciasGenLoaded(false);
       } catch (err: any) {
         console.error("Falha ao carregar /user/me:", err);
         if (!user?.gestor) {
           setMeCpf(onlyDigits((user as any)?.cpf || ""));
-          const dados = ((user as any)?.dados ?? []) as EmpresaMatricula[];
-          setEmpresasDoUsuario(dados);
-          setMatriculasGen(
-            Array.from(new Set(dados.map((d) => d.matricula).filter(Boolean)))
-          );
         }
       } finally {
         setMeLoading(false);
@@ -512,7 +531,6 @@ export default function DocumentList() {
 
   // ================================================
   // Buscar COMPETÊNCIAS após escolher empresa(/matrícula) - holerite
-  // (com AbortController para evitar duplicidade no StrictMode)
   // ================================================
   useEffect(() => {
     const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
@@ -597,7 +615,6 @@ export default function DocumentList() {
     };
 
     run();
-
     return () => controller.abort();
   }, [
     user,
@@ -611,16 +628,20 @@ export default function DocumentList() {
   ]);
 
   // ================================================
-  // Genéricos: carregar competências (matrícula do /me + colaborador/CPF)
-  // (com AbortController para evitar duplicidade no StrictMode)
+  // Genéricos: carregar competências (AGORA exige empresa + matrícula efetiva)
   // ================================================
   useEffect(() => {
     const deveRodarDiscoveryGen =
       !userLoading && user && !user.gestor && tipoDocumento !== "holerite";
     if (!deveRodarDiscoveryGen) return;
 
-    const matr = selectedMatriculaGen || "";
-    if (!matr) return;
+    if (!selectedEmpresaIdGen) return;
+
+    const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+    const matriculaEfetivaGen = requerEscolherMatriculaGen
+      ? selectedMatriculaGen
+      : arr[0];
+    if (!matriculaEfetivaGen) return;
 
     const controller = new AbortController();
 
@@ -633,7 +654,7 @@ export default function DocumentList() {
 
         const cp = [
           { nome: "tipodedoc", valor: nomeDocumento },
-          { nome: "matricula", valor: matr },
+          { nome: "matricula", valor: matriculaEfetivaGen },
           { nome: "colaborador", valor: meCpf },
         ];
 
@@ -688,7 +709,6 @@ export default function DocumentList() {
     };
 
     run();
-
     return () => controller.abort();
   }, [
     userLoading,
@@ -696,7 +716,10 @@ export default function DocumentList() {
     tipoDocumento,
     nomeDocumento,
     templateId,
+    selectedEmpresaIdGen,
     selectedMatriculaGen,
+    requerEscolherMatriculaGen,
+    empresasMap,
     meCpf,
   ]);
 
@@ -768,10 +791,18 @@ export default function DocumentList() {
 
   // ==========================================
   // Genéricos: buscar documentos de um mês -> abre prévia do primeiro
+  // (AGORA usa empresa + matrícula efetiva)
   // ==========================================
   const buscarGenericoPorAnoMes = async (ano: number, mes: string) => {
-    const matr = selectedMatriculaGen || "";
-    if (!matr) {
+    if (!selectedEmpresaIdGen) {
+      toast.error("Selecione a empresa para continuar.");
+      return;
+    }
+    const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+    const matriculaEfetivaGen = requerEscolherMatriculaGen
+      ? selectedMatriculaGen
+      : arr[0];
+    if (!matriculaEfetivaGen) {
       toast.error("Selecione a matrícula para continuar.");
       return;
     }
@@ -783,7 +814,7 @@ export default function DocumentList() {
     try {
       const cp = [
         { nome: "tipodedoc", valor: nomeDocumento },
-        { nome: "matricula", valor: matr },
+        { nome: "matricula", valor: matriculaEfetivaGen },
         { nome: "colaborador", valor: meCpf },
       ];
 
@@ -1150,7 +1181,7 @@ export default function DocumentList() {
               : `Buscar ${nomeDocumento}`}
           </h2>
 
-          {showInitialBanner && tipoDocumento === "holerite" && (
+          {showInitialBanner && (
             <p className="text-center mb-6">Carregando documentos...</p>
           )}
 
@@ -1302,13 +1333,14 @@ export default function DocumentList() {
                     <p className="text-center text-gray-400">
                       Selecione a matrícula para carregar os períodos.
                     </p>
-                  ) : isLoadingCompetencias ? (
-                    <p className="text-center">Carregando períodos disponíveis...</p>
-                  ) : !competenciasHoleriteLoaded ? (
-                    <p className="text-center">Carregando períodos disponíveis...</p>
+                  ) : isLoadingCompetencias || !competenciasHoleriteLoaded ? (
+                    <p className="text-center">
+                      Carregando períodos disponíveis...
+                    </p>
                   ) : anosDisponiveis.length === 0 ? (
                     <p className="text-center text-gray-300">
-                      Nenhum período de holerite encontrado para a seleção atual.
+                      Nenhum período de holerite encontrado para a seleção
+                      atual.
                     </p>
                   ) : !selectedYear ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -1362,14 +1394,227 @@ export default function DocumentList() {
                 </section>
               </div>
             </>
+          ) : showDiscoveryFlowGenerico ? (
+            // ===================== NOVO DISCOVERY (NÃO GESTOR / GENÉRICOS) =====================
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                {/* ====== ESQUERDA — EMPRESA (GEN) ====== */}
+                <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Empresa
+                  </h3>
+                  {!selectedEmpresaIdGen ? (
+                    empresasUnicas.length === 0 ? (
+                      <p className="text-center text-gray-400">
+                        Nenhuma empresa encontrada.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2">
+                        {empresasUnicas.map((e) => (
+                          <Button
+                            key={e.id}
+                            variant="default"
+                            title={e.nome}
+                            className="w-full h-11 min-w-0 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            onClick={() => {
+                              setSelectedEmpresaIdGen(e.id);
+                              setSelectedEmpresaNomeGen(e.nome);
+                              setSelectedMatriculaGen(null);
+                              setCompetenciasGen([]);
+                              setSelectedYearGen(null);
+                              setDocuments([]);
+                              setPaginaAtual(1);
+                              setCompetenciasGenLoaded(false);
+                            }}
+                            disabled={isAnyLoading}
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span className="truncate">{e.nome}</span>
+                              {e.qtdMatriculas > 1 && (
+                                <span className="ml-1 shrink-0 text-xs opacity-90 bg-black/20 rounded px-2 py-0.5">
+                                  {e.qtdMatriculas} matr.
+                                </span>
+                              )}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="text-sm text-gray-300 text-center">
+                        Selecionada:{" "}
+                        <span className="font-semibold text-white">
+                          {selectedEmpresaNomeGen}
+                        </span>
+                      </div>
+                      <Button
+                        variant="default"
+                        className="w-full h-10 border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        onClick={() => {
+                          setSelectedEmpresaIdGen(null);
+                          setSelectedEmpresaNomeGen(null);
+                          setSelectedMatriculaGen(null);
+                          setCompetenciasGen([]);
+                          setSelectedYearGen(null);
+                          setDocuments([]);
+                          setPaginaAtual(1);
+                          setCompetenciasGenLoaded(false);
+                        }}
+                        disabled={isAnyLoading}
+                      >
+                        Trocar empresa
+                      </Button>
+                    </div>
+                  )}
+                </section>
+
+                {/* ====== DIREITA — MATRÍCULA (GEN) ====== */}
+                <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Matrícula
+                  </h3>
+                  {requerEscolherMatriculaGen ? (
+                    !selectedMatriculaGen ? (
+                      <div
+                        className="grid grid-cols-1 gap-2 overflow-y-auto pr-1"
+                        style={{ maxHeight: "148px" }}
+                      >
+                        {matriculasDaEmpresaSelecionadaGen.map((m) => (
+                          <Button
+                            key={m}
+                            variant="default"
+                            className="w-full h-11 bg-teal-600 hover:bg-teal-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            onClick={() => {
+                              setSelectedMatriculaGen(m);
+                              setCompetenciasGen([]);
+                              setSelectedYearGen(null);
+                              setCompetenciasGenLoaded(false);
+                            }}
+                            disabled={isAnyLoading}
+                          >
+                            Matrícula {m}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="text-sm text-gray-300 text-center">
+                          Selecionada:{" "}
+                          <span className="font-semibold text-white">
+                            {selectedMatriculaGen}
+                          </span>
+                        </div>
+                        <Button
+                          variant="default"
+                          className="w-full h-10 border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => {
+                            setSelectedMatriculaGen(null);
+                            setCompetenciasGen([]);
+                            setSelectedYearGen(null);
+                            setDocuments([]);
+                            setPaginaAtual(1);
+                            setCompetenciasGenLoaded(false);
+                          }}
+                          disabled={isAnyLoading}
+                        >
+                          Trocar matrícula
+                        </Button>
+                      </div>
+                    )
+                  ) : selectedEmpresaIdGen ? (
+                    <p className="text-sm text-gray-400 text-center">
+                      Nenhuma escolha de matrícula necessária.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center">
+                      Selecione uma empresa acima.
+                    </p>
+                  )}
+                </section>
+
+                {/* ====== ABAIXO — ANOS & MESES (GEN) ====== */}
+                <section className="md:col-span-2 bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Períodos (anos e meses)
+                  </h3>
+                  {!selectedEmpresaIdGen ? (
+                    <p className="text-center text-gray-400">
+                      Selecione uma empresa para carregar os períodos.
+                    </p>
+                  ) : requerEscolherMatriculaGen && !selectedMatriculaGen ? (
+                    <p className="text-center text-gray-400">
+                      Selecione a matrícula para carregar os períodos.
+                    </p>
+                  ) : isLoadingCompetenciasGen || !competenciasGenLoaded ? (
+                    <p className="text-center">
+                      Carregando períodos disponíveis...
+                    </p>
+                  ) : anosDisponiveisGen.length === 0 ? (
+                    <p className="text-center text-gray-300">
+                      Nenhum período de {nomeDocumento} encontrado para a
+                      seleção atual.
+                    </p>
+                  ) : !selectedYearGen ? (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                      {anosDisponiveisGen.map((ano) => (
+                        <Button
+                          key={ano}
+                          variant="default"
+                          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => setSelectedYearGen(ano)}
+                          disabled={isAnyLoading}
+                        >
+                          {ano}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
+                        {mesesDoAnoSelecionadoGen.map((mm) => (
+                          <Button
+                            key={mm}
+                            variant="default"
+                            className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            onClick={() =>
+                              buscarGenericoPorAnoMes(selectedYearGen, mm)
+                            }
+                            disabled={isAnyLoading}
+                          >
+                            {isAnyLoading
+                              ? "Buscando..."
+                              : makeYYYYMMLabel(selectedYearGen, mm)}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="flex justify-center">
+                        <Button
+                          variant="default"
+                          className="border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => {
+                            setSelectedYearGen(null);
+                            setDocuments([]);
+                            setPaginaAtual(1);
+                          }}
+                          disabled={isAnyLoading}
+                        >
+                          Escolher outro ano
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </section>
+              </div>
+            </>
           ) : (
-            // ===================== FLUXO (GESTOR) OU (NÃO GESTOR / GENÉRICOS) =====================
+            // ===================== FLUXO (GESTOR) =====================
             <>
               {user?.gestor ? (
                 <div
-                  className={`w-fit mx-auto grid gap-4 sm:grid-cols-4 ${gestorGridCols} mb-6`}
+                  className={`w-fit mx-auto grid gap-4 ${gestorGridCols} mb-6`}
                 >
-                  {/* CPF para gestor em qualquer tipo */}
+                  {/* CPF para gestor */}
                   <div className="flex flex-col">
                     <input
                       type="text"
@@ -1518,14 +1763,21 @@ export default function DocumentList() {
                             documentos: DocumentoGenerico[];
                           }>("/documents/search", payload);
 
-                          const documentos = res.data.documentos || [];
+                          // ✅ DEPOIS — usa total_encontrado para a contagem
+                          const { documentos = [], total_encontrado = 0 } =
+                            res.data;
                           setDocuments(documentos);
 
-                          if (documentos.length > 0) {
+                          const qtd =
+                            typeof total_encontrado === "number"
+                              ? total_encontrado
+                              : documentos.length;
+
+                          if (qtd > 0) {
                             toast.success(
-                              `${documentos.length} documento(s) encontrado(s)!`,
+                              `${qtd} documento(s) encontrado(s)!`,
                               {
-                                description: `Foram localizados ${documentos.length} documentos do tipo ${nomeDocumento}.`,
+                                description: `Foram localizados ${qtd} documentos do tipo ${nomeDocumento}.`,
                               }
                             );
                           } else {
@@ -1593,179 +1845,7 @@ export default function DocumentList() {
                     {isAnyLoading ? "Buscando..." : "Buscar"}
                   </Button>
                 </div>
-              ) : showDiscoveryFlowGenerico ? (
-                <>
-                  {/* seletor quando o /me retorna várias matrículas */}
-                  {matriculasGen.length > 1 && !selectedMatriculaGen && (
-                    <div className="bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
-                      <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
-                        Selecione a matrícula
-                      </h3>
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        {matriculasGen.map((m) => (
-                          <Button
-                            key={m}
-                            variant="default"
-                            className="bg-teal-600 hover:bg-teal-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            onClick={() => {
-                              setSelectedMatriculaGen(m);
-                              setCompetenciasGen([]);
-                              setSelectedYearGen(null);
-                              setDocuments([]);
-                              setPaginaAtual(1);
-                              setCompetenciasGenLoaded(false);
-                            }}
-                            disabled={isAnyLoading}
-                          >
-                            Matrícula {m}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {isLoadingCompetenciasGen ? (
-                    <p className="text-center mb-6">
-                      Carregando períodos disponíveis...
-                    </p>
-                  ) : !competenciasGenLoaded ? (
-                    <p className="text-center mb-6">
-                      Carregando períodos disponíveis...
-                    </p>
-                  ) : anosDisponiveisGen.length === 0 ? (
-                    <p className="text-center mb-6 text-gray-300">
-                      Nenhum período de {nomeDocumento} encontrado para sua
-                      conta.
-                    </p>
-                  ) : !selectedYearGen ? (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 justify-items-stretch mb-6 px-4">
-                      {anosDisponiveisGen.map((ano) => (
-                        <Button
-                          key={ano}
-                          variant="default"
-                          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                          onClick={() => setSelectedYearGen(ano)}
-                          disabled={isAnyLoading}
-                        >
-                          {ano}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap gap-3 justify-center mb-4 px-4">
-                        {mesesDoAnoSelecionadoGen.map((mm) => (
-                          <Button
-                            key={mm}
-                            variant="default"
-                            className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            onClick={() =>
-                              buscarGenericoPorAnoMes(selectedYearGen, mm)
-                            }
-                            disabled={isAnyLoading}
-                          >
-                            {isAnyLoading
-                              ? "Buscando..."
-                              : makeYYYYMMLabel(selectedYearGen, mm)}
-                          </Button>
-                        ))}
-                      </div>
-                      <div className="flex justify-center mb-6">
-                        <Button
-                          variant="default"
-                          className="border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                          onClick={() => {
-                            setSelectedYearGen(null);
-                            setDocuments([]);
-                            setPaginaAtual(1);
-                          }}
-                          disabled={isAnyLoading}
-                        >
-                          Escolher outro ano
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
-                  <div className="w-full max-w-xs">
-                    <CustomMonthPicker
-                      value={anomes}
-                      onChange={setAnomes}
-                      placeholder="Selecionar período"
-                    />
-                  </div>
-                  <Button
-                    onClick={async () => {
-                      if (!anomes) {
-                        toast.error("Período obrigatório");
-                        return;
-                      }
-
-                      if (!selectedMatriculaGen) {
-                        toast.error("Selecione a matrícula para continuar.");
-                        return;
-                      }
-
-                      setIsLoading(true);
-
-                      try {
-                        const cp = [
-                          { nome: "tipodedoc", valor: nomeDocumento },
-                          { nome: "matricula", valor: selectedMatriculaGen },
-                          { nome: "colaborador", valor: meCpf },
-                        ];
-
-                        const payload = {
-                          id_template: Number(templateId),
-                          cp,
-                          campo_anomes: "anomes",
-                          anomes: anomes.includes("/")
-                            ? `${anomes.split("/")[1]}-${anomes
-                                .split("/")[0]
-                                .padStart(2, "0")}`
-                            : anomes.length === 6
-                            ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
-                            : anomes,
-                        };
-
-                        const res = await api.post<{
-                          total_bruto: number;
-                          ultimos_6_meses: string[];
-                          total_encontrado: number;
-                          documentos: DocumentoGenerico[];
-                        }>("/documents/search", payload);
-
-                        const documentos = res.data.documentos || [];
-                        setDocuments(documentos);
-                        setPaginaAtual(1);
-
-                        if (documentos.length > 0) {
-                          toast.success(
-                            `${documentos.length} documento(s) encontrado(s)!`
-                          );
-                        } else {
-                          toast.warning("Nenhum documento encontrado.");
-                        }
-                      } catch (err: any) {
-                        toast.error("Erro ao buscar documentos", {
-                          description: extractErrorMessage(
-                            err,
-                            "Falha ao buscar documentos."
-                          ),
-                        });
-                      } finally {
-                        setIsLoading(false);
-                      }
-                    }}
-                    disabled={isAnyLoading || !anomes}
-                    className="bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed w-full sm:w-auto"
-                  >
-                    {isAnyLoading ? "Buscando..." : "Buscar"}
-                  </Button>
-                </div>
-              )}
+              ) : null}
             </>
           )}
 
