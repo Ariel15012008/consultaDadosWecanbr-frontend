@@ -1154,7 +1154,7 @@ export default function DocumentList() {
   const showDiscoveryFlowGenerico =
     !user?.gestor && tipoDocumento !== "holerite";
   const gestorGridCols =
-    tipoDocumento === "holerite" ? "sm:grid-cols-4" : "sm:grid-cols-3";
+    tipoDocumento === "holerite" ? "sm:grid-cols-4" : "sm:grid-cols-4";
 
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden">
