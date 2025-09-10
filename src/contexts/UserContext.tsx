@@ -12,7 +12,7 @@ import Cookies from "js-cookie";
 import api from "@/utils/axiosInstance";
 
 // ================================================
-// ALTERAÇÃO: Tipos para suportar 'dados[]' do /user/me
+// Tipos para suportar 'dados[]' do /user/me
 // ================================================
 interface EmpresaMatricula {
   id: string;        // cliente
@@ -23,11 +23,9 @@ interface EmpresaMatricula {
 interface User {
   nome: string;
   email: string;
-  matricula?: string; // pode existir para compatibilidade, mas nem sempre é única
+  matricula?: string;
   gestor: boolean;
   cpf: string;
-
-  // ALTERAÇÃO: novos campos vindos do /user/me
   cliente?: string;
   centro_de_custo?: string;
   dados?: EmpresaMatricula[];
@@ -54,25 +52,32 @@ export function UserProvider({ children }: UserProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
-  // ================================================
-  // ALTERAÇÃO: corrigido "30 dias"
-  // (antes estava 60 * 1000 = 1min)
-  // ================================================
+  // 30 dias em ms
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+
+  // 🔧 ALTERAÇÃO: helpers para manter o "marcador" do refresh
+  const touchLoggedUserCookie = () => {
+    Cookies.set("logged_user", Date.now().toString());
+  };
+  const ensureLoggedUserCookie = () => {
+    if (!Cookies.get("logged_user")) touchLoggedUserCookie();
+  };
 
   const silentAuth = async () => {
     setIsLoading(true);
     try {
       const res = await api.get("/user/me");
       if (res.status === 200) {
-        // ALTERAÇÃO: setUser com payload completo (inclui dados[])
         setUser(res.data as User);
         setIsAuthenticated(true);
+
+        // 🔧 ALTERAÇÃO: garante existência do marcador de sessão
+        ensureLoggedUserCookie();
       } else {
         setUser(null);
         setIsAuthenticated(false);
       }
-    } catch (error) {
+    } catch {
       setUser(null);
       setIsAuthenticated(false);
     } finally {
@@ -86,13 +91,18 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const logout = async () => {
     try {
+      // Observação: se os cookies HttpOnly forem usados no backend,
+      // remover via js-cookie não afeta o cookie HttpOnly (ok).
       Cookies.remove("access_token");
       Cookies.remove("logged_user");
+
       await api.post("/user/logout");
+
       setIsAuthenticated(false);
       setUser(null);
       didLogout.current = true;
-      window.history.replaceState(null, "", "/");
+
+      // 🔧 ALTERAÇÃO: navegação única e centralizada no contexto
       navigate("/", { replace: true });
     } catch (error) {
       console.error("Erro no logout:", error);
@@ -103,6 +113,7 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!didLogout.current) {
       silentAuth();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -111,13 +122,15 @@ export function UserProvider({ children }: UserProviderProps) {
     const interval = setInterval(async () => {
       const timestamp = Cookies.get("logged_user");
       if (!timestamp) return;
+
       const loggedTime = parseInt(timestamp, 10);
       if (!Number.isFinite(loggedTime)) return;
 
+      // quando passar de 30 dias, tenta refresh
       if (Date.now() - loggedTime > thirtyDays) {
         try {
           await api.post("/user/refresh");
-          Cookies.set("logged_user", Date.now().toString());
+          touchLoggedUserCookie();
         } catch {
           await logout();
         }
@@ -125,7 +138,7 @@ export function UserProvider({ children }: UserProviderProps) {
     }, 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value: UserContextType = {
     user,

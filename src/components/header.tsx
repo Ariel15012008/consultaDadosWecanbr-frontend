@@ -1,5 +1,4 @@
-// src/components/Header.tsx
-
+// src/components/header.tsx
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,10 +24,9 @@ export default function Header() {
   const { user, isAuthenticated, isLoading, logout } = useUser();
   const navigate = useNavigate();
 
+  // 🔧 ALTERAÇÃO: sem reload forçado; redirect centralizado no contexto
   const handleLogout = async () => {
     await logout();
-    // Em vez de apenas navegar, força um reload completo
-    window.location.href = "/";
   };
 
   return (
@@ -63,10 +61,7 @@ export default function Header() {
         <div className="hidden md:flex items-center">
           {isAuthenticated ? (
             <DropdownMenu>
-              <DropdownMenuTrigger
-                asChild
-                className="hover:cursor-pointer "
-              >
+              <DropdownMenuTrigger asChild className="hover:cursor-pointer ">
                 <Button
                   variant="ghost"
                   className="flex items-center bg-transparent hover:bg-blue-700 mr-8"
@@ -76,7 +71,7 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56 bg-white border border-blue-100 hover:cursor-pointer ">
-                {/*
+                {/* 
                 <DropdownMenuItem
                   className="hover:cursor-pointer hover:bg-gray-200"
                   onClick={() => navigate("/perfil")}

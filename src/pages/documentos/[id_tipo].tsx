@@ -19,6 +19,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
 import { toast, Toaster } from "sonner";
+import LoadingScreen from "@/components/ui/loadingScreen";
 
 // ================================================
 // Tipagens auxiliares
@@ -526,8 +527,8 @@ export default function DocumentList() {
   // ================================================
   const showInitialBanner =
     !user?.gestor &&
-    ((tipoDocumento === "holerite" && !competenciasHoleriteLoaded) ||
-      (tipoDocumento !== "holerite" && !competenciasGenLoaded));
+    ((tipoDocumento === "holerite" && meLoading) ||
+      (tipoDocumento !== "holerite" && meLoading));
 
   // ================================================
   // Buscar COMPETÊNCIAS após escolher empresa(/matrícula) - holerite
@@ -1139,13 +1140,11 @@ export default function DocumentList() {
     }
   };
 
-  if (userLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 text-white text-xl font-bold">
-        Carregando...
-      </div>
-    );
-  }
+const isBootingPage = userLoading; // apenas o contexto global
+if (isBootingPage) {
+  return <LoadingScreen />;
+}
+
 
   // ================================================
   // UI condicional
@@ -1182,7 +1181,7 @@ export default function DocumentList() {
           </h2>
 
           {showInitialBanner && (
-            <p className="text-center mb-6">Carregando documentos...</p>
+            <p className="text-center mb-6">Carregando dados</p>
           )}
 
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}

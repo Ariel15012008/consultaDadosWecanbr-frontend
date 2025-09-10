@@ -1,13 +1,16 @@
-// src/pages/Home.tsx
+// src/pages/home/Home.tsx
 "use client";
 
-import avatar from '@/assets/Avatar de Recepição.png';
+import avatar from "@/assets/Avatar de Recepição.png";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText } from "lucide-react";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
+import LoadingScreen from "@/components/ui/loadingScreen";
 import api from "@/utils/axiosInstance";
+import { useUser } from "@/contexts/UserContext";
+import { toast } from "sonner";
 
 interface Documento {
   id: number;
@@ -20,58 +23,76 @@ interface TemplateGED {
 
 export default function Home() {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
-  const [templates, setTemplates] = useState<TemplateGED[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [loadingUser, setLoadingUser] = useState(true);
+  const [, setTemplates] = useState<TemplateGED[]>([]);
+  const [listsLoaded, setListsLoaded] = useState(false); // 🔧 ALTERAÇÃO
+
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading: userLoading } = useUser();
 
   useEffect(() => {
     document.title = "Portal do funcionário";
+  }, []);
 
-    const verificarSessao = async () => {
+  useEffect(() => {
+    if (userLoading || !isAuthenticated) return;
+
+    const controller = new AbortController();
+    setListsLoaded(false);
+
+    (async () => {
       try {
-        await api.get("/user/me");
-        setIsAuthenticated(true);
-
         const [resDocs, resTemplates] = await Promise.all([
-          api.get<Documento[]>("/documents"),
-          api.get<TemplateGED[]>("/searchdocuments/templates"),
+          api.get<Documento[]>("/documents", { signal: controller.signal }),
+          api.get<TemplateGED[]>("/searchdocuments/templates", {
+            signal: controller.signal,
+          }),
         ]);
 
-        // Ordenação alfabética por nome
-        const documentosOrdenados = resDocs.data.sort((a, b) =>
+        const documentosOrdenados = [...resDocs.data].sort((a, b) =>
           a.nome.localeCompare(b.nome)
         );
         setDocumentos(documentosOrdenados);
         setTemplates(resTemplates.data);
-      } catch (error) {
-        setIsAuthenticated(false);
-        console.warn("Usuário não autenticado:", error);
-      } finally {
-        setLoadingUser(false);
+
+        setListsLoaded(true); // 🔧 ALTERAÇÃO — só aqui marca que carregou
+      } catch (error: any) {
+        if (
+          controller.signal.aborted ||
+          error?.code === "ERR_CANCELED" ||
+          error?.name === "CanceledError"
+        ) {
+          return;
+        }
+        toast.error("Falha ao carregar opções", {
+          description:
+            "Não foi possível carregar a lista de documentos. Tente novamente.",
+        });
+        console.warn("Erro ao carregar documentos/templates:", error);
       }
-    };
+    })();
 
-    verificarSessao();
-  }, []);
+    return () => controller.abort();
+  }, [isAuthenticated, userLoading]);
 
-  // Função para determinar o id_template baseado no nome do documento
+  const DEFAULT_TEMPLATE_ID = "3";
+  const DOC_TEMPLATE_RULES: Array<{ match: (n: string) => boolean; id: string }> = [
+    {
+      match: (n) =>
+        /recibo\s*va|vale\s*alimenta(ç|c)[aã]o/i.test(n ?? ""),
+      id: "3",
+    },
+  ];
+
   const getTemplateId = (nomeDocumento: string): string => {
-    // Você pode ajustar essa lógica conforme sua necessidade
-    // Por exemplo, se tiver um mapeamento específico ou buscar no array de templates
-    const template = templates.find(t => 
-      // Ajuste essa condição conforme a relação entre documento e template
-      nomeDocumento.toLowerCase().includes('recibo va') ? t.id_tipo === '3' : false
-    );
-    return template?.id_tipo || '3'; // Default para um template genérico
+    const rule = DOC_TEMPLATE_RULES.find((r) => r.match(nomeDocumento));
+    return rule?.id || DEFAULT_TEMPLATE_ID;
   };
 
-  if (loadingUser) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 text-white text-xl font-bold">
-        Carregando...
-      </div>
-    );
+  // 🔧 ALTERAÇÃO — LOADER TOTAL DA PÁGINA:
+  // 1) enquanto ainda estamos checando o /user/me → loader
+  // 2) se autenticado mas listas ainda não carregaram → loader
+  if (userLoading || (isAuthenticated && !listsLoaded)) {
+    return <LoadingScreen />;
   }
 
   return (
@@ -80,9 +101,39 @@ export default function Home() {
       <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 z-0" />
 
       <main className="relative z-10 flex flex-col items-center flex-grow w-full pt-32">
-        {isAuthenticated === null ? (
-          null
-        ) : !isAuthenticated ? (
+        {isAuthenticated ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-6xl mx-auto px-4 pb-10">
+            {documentos.map(({ id, nome }) => (
+              <div
+                key={id}
+                className="bg-[#1e1e2f] text-white rounded-lg cursor-pointer hover:shadow-xl transition-all hover:translate-x-1"
+                onClick={() => {
+                  const lower = (nome || "").toLowerCase();
+                  const isHolerite =
+                    lower.includes("holerite") ||
+                    lower.includes("folha") ||
+                    lower.includes("pagamento");
+
+                  if (isHolerite) {
+                    navigate("/documentos?tipo=holerite");
+                  } else {
+                    const templateId = getTemplateId(nome);
+                    navigate(
+                      `/documentos?tipo=generico&template=${templateId}&documento=${encodeURIComponent(
+                        nome
+                      )}`
+                    );
+                  }
+                }}
+              >
+                <div className="flex flex-col items-center justify-center p-6">
+                  <FileText size={40} className="mb-2" />
+                  <h3 className="text-lg font-semibold text-center">{nome}</h3>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
           <div className="p-4 w-full">
             <div className="bg-[#1e1e2f] text-white rounded-xl shadow-2xl w-full max-w-4xl p-6 mx-auto">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4 text-center sm:text-left">
@@ -103,34 +154,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-6xl mx-auto px-4 pb-10">
-            {documentos.map(({ id, nome }) => (
-              <div
-                key={id}
-                className="bg-[#1e1e2f] text-white rounded-lg cursor-pointer hover:shadow-xl transition-all hover:translate-x-1"
-                onClick={() => {
-                  // Passa o tipo de documento e template para a DocumentList
-                  const isHolerite = nome.toLowerCase().includes('holerite') || 
-                                   nome.toLowerCase().includes('folha') ||
-                                   nome.toLowerCase().includes('pagamento');
-                  if (isHolerite) {
-                    // Para holerite, navega sem parâmetros específicos (usa fluxo atual)
-                    navigate("/documentos?tipo=holerite");
-                  } else {
-                    // Para outros documentos, passa o template e o tipo
-                    const templateId = getTemplateId(nome);
-                    navigate(`/documentos?tipo=generico&template=${templateId}&documento=${encodeURIComponent(nome)}`);
-                  }
-                }}
-              >
-                <div className="flex flex-col items-center justify-center p-6">
-                  <FileText size={40} className="mb-2" />
-                  <h3 className="text-lg font-semibold text-center">{nome}</h3>
-                </div>
-              </div>
-            ))}
           </div>
         )}
       </main>
