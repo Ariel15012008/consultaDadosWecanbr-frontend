@@ -1168,7 +1168,6 @@ if (isBootingPage) {
             variant="default"
             onClick={() => navigate("/")}
             className="mb-4 text-white hover:text-gray-300"
-            disabled={isAnyLoading}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Voltar
