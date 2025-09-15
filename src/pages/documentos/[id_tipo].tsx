@@ -916,8 +916,8 @@ export default function DocumentList() {
         } else if (selectedEmpresaId) {
           const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
           matForPreview = requerEscolherMatricula
-            ? (selectedMatricula ?? "")
-            : (arr[0] ?? "");
+            ? selectedMatricula ?? ""
+            : arr[0] ?? "";
         }
 
         const payload: any = {
@@ -1260,11 +1260,12 @@ export default function DocumentList() {
                   )}
                 </section>
 
-                {/* DIREITA — MATRÍCULA */}
+                {/* ====== DIREITA — MATRÍCULA ====== */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Matrícula
                   </h3>
+
                   {requerEscolherMatricula ? (
                     !selectedMatricula ? (
                       <div
@@ -1312,10 +1313,25 @@ export default function DocumentList() {
                         </Button>
                       </div>
                     )
-                  ) : (
+                  ) : !selectedEmpresaId ? (
                     <p className="text-sm text-gray-400 text-center">
-                      Nenhuma escolha de matrícula necessária.
+                      Selecione uma empresa acima.
                     </p>
+                  ) : (
+                    // ✅ Só 1 matrícula: mostra botão desabilitado com a matrícula efetiva
+                    <div className="space-y-2">
+                      <Button
+                        variant="default"
+                        disabled
+                        className="w-full h-11 bg-teal-600 opacity-70 cursor-not-allowed"
+                      >
+                        Matrícula {matriculasDaEmpresaSelecionada[0]}
+                      </Button>
+                      <p className="text-xs text-center text-gray-400">
+                        Selecionada automaticamente (empresa com uma única
+                        matrícula).
+                      </p>
+                    </div>
                   )}
                 </section>
 
@@ -1333,7 +1349,9 @@ export default function DocumentList() {
                       Selecione a matrícula para carregar os períodos.
                     </p>
                   ) : isLoadingCompetencias || !competenciasHoleriteLoaded ? (
-                    <p className="text-center">Carregando períodos disponíveis...</p>
+                    <p className="text-center">
+                      Carregando períodos disponíveis...
+                    </p>
                   ) : anosDisponiveis.length === 0 ? (
                     <p className="text-center text-gray-300">
                       Nenhum período de holerite encontrado para a seleção
@@ -1466,11 +1484,12 @@ export default function DocumentList() {
                   )}
                 </section>
 
-                {/* MATRÍCULA (GEN) */}
+                {/* ====== DIREITA — MATRÍCULA (GEN) ====== */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Matrícula
                   </h3>
+
                   {requerEscolherMatriculaGen ? (
                     !selectedMatriculaGen ? (
                       <div
@@ -1520,9 +1539,20 @@ export default function DocumentList() {
                       </div>
                     )
                   ) : selectedEmpresaIdGen ? (
-                    <p className="text-sm text-gray-400 text-center">
-                      Nenhuma escolha de matrícula necessária.
-                    </p>
+                    // ✅ Só 1 matrícula: mostra botão desabilitado com a matrícula efetiva
+                    <div className="space-y-2">
+                      <Button
+                        variant="default"
+                        disabled
+                        className="w-full h-11 bg-teal-600 opacity-70 cursor-not-allowed"
+                      >
+                        Matrícula {matriculasDaEmpresaSelecionadaGen[0]}
+                      </Button>
+                      <p className="text-xs text-center text-gray-400">
+                        Selecionada automaticamente (empresa com uma única
+                        matrícula).
+                      </p>
+                    </div>
                   ) : (
                     <p className="text-sm text-gray-400 text-center">
                       Selecione uma empresa acima.
@@ -1544,7 +1574,9 @@ export default function DocumentList() {
                       Selecione a matrícula para carregar os períodos.
                     </p>
                   ) : isLoadingCompetenciasGen || !competenciasGenLoaded ? (
-                    <p className="text-center">Carregando períodos disponíveis...</p>
+                    <p className="text-center">
+                      Carregando períodos disponíveis...
+                    </p>
                   ) : anosDisponiveisGen.length === 0 ? (
                     <p className="text-center text-gray-300">
                       Nenhum período de {nomeDocumento} encontrado para a
