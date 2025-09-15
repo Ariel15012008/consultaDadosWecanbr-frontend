@@ -19,7 +19,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
 import { toast, Toaster } from "sonner";
-import LoadingScreen from "@/components/ui/loadingScreen";
+import LoadingScreen from "@/components/ui/loadingScreen"; // <- import corrigido
 
 // ================================================
 // Tipagens auxiliares
@@ -116,7 +116,7 @@ const makeYYYYMMLabel = (ano: number, mes: string) => `${ano}-${mes}`;
 const makeYYYYMMValue = (ano: number, mes: string | number) =>
   `${ano}${String(mes).padStart(2, "0")}`;
 
-// 🔄 mensagens amigáveis por status (evita “Not Found” cru)
+// 🔄 mensagens amigáveis por status
 const extractErrorMessage = (err: any, fallback = "Ocorreu um erro.") => {
   const status = err?.response?.status as number | undefined;
 
@@ -475,7 +475,7 @@ export default function DocumentList() {
             setSelectedMatricula(null);
           }
 
-          // genéricos (novo)
+          // genéricos
           if (empresas.length === 1) {
             const [empresaId, arr] = empresas[0];
             setSelectedEmpresaIdGen(empresaId);
@@ -521,14 +521,6 @@ export default function DocumentList() {
 
     run();
   }, [userLoading, user]);
-
-  // ================================================
-  // Define banner inicial
-  // ================================================
-  const showInitialBanner =
-    !user?.gestor &&
-    ((tipoDocumento === "holerite" && meLoading) ||
-      (tipoDocumento !== "holerite" && meLoading));
 
   // ================================================
   // Buscar COMPETÊNCIAS após escolher empresa(/matrícula) - holerite
@@ -629,7 +621,7 @@ export default function DocumentList() {
   ]);
 
   // ================================================
-  // Genéricos: carregar competências (AGORA exige empresa + matrícula efetiva)
+  // Genéricos: carregar competências (empresa + matrícula)
   // ================================================
   useEffect(() => {
     const deveRodarDiscoveryGen =
@@ -725,7 +717,7 @@ export default function DocumentList() {
   ]);
 
   // ==========================================
-  // Holerite: buscar de um mês (click) -> abre prévia
+  // Holerite: buscar mês -> prévia
   // ==========================================
   const buscarHoleritePorAnoMes = async (ano: number, mes: string) => {
     if (!selectedEmpresaId) {
@@ -791,8 +783,7 @@ export default function DocumentList() {
   };
 
   // ==========================================
-  // Genéricos: buscar documentos de um mês -> abre prévia do primeiro
-  // (AGORA usa empresa + matrícula efetiva)
+  // Genéricos: buscar mês -> prévia do primeiro
   // ==========================================
   const buscarGenericoPorAnoMes = async (ano: number, mes: string) => {
     if (!selectedEmpresaIdGen) {
@@ -925,8 +916,8 @@ export default function DocumentList() {
         } else if (selectedEmpresaId) {
           const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
           matForPreview = requerEscolherMatricula
-            ? selectedMatricula ?? ""
-            : arr[0] ?? "";
+            ? (selectedMatricula ?? "")
+            : (arr[0] ?? "");
         }
 
         const payload: any = {
@@ -1140,14 +1131,16 @@ export default function DocumentList() {
     }
   };
 
-const isBootingPage = userLoading; // apenas o contexto global
-if (isBootingPage) {
-  return <LoadingScreen />;
-}
-
+  // loader só dentro do card roxo
+  const showCardLoader =
+    userLoading ||
+    meLoading ||
+    isLoading ||
+    isLoadingCompetencias ||
+    isLoadingCompetenciasGen;
 
   // ================================================
-  // UI condicional
+  // UI
   // ================================================
   const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
   const showDiscoveryFlowGenerico =
@@ -1163,7 +1156,17 @@ if (isBootingPage) {
       <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300 z-0" />
 
       <main className="relative z-10 flex flex-col flex-grow items-center pt-32 px-4 pb-10">
-        <div className="w-full max-w-6xl bg-[#1e1e2f] text-white rounded-xl shadow-2xl p-6">
+        {/* card roxo (agora relative para o loader interno) */}
+        <div className="relative w-full max-w-6xl bg-[#1e1e2f] text-white rounded-xl shadow-2xl p-6">
+          {/* loader cobrindo apenas o card */}
+          {showCardLoader && (
+            <LoadingScreen
+              variant="container"
+              message="Carregando..."
+              subtext="Preparando seus dados."
+            />
+          )}
+
           <Button
             variant="default"
             onClick={() => navigate("/")}
@@ -1179,15 +1182,13 @@ if (isBootingPage) {
               : `Buscar ${nomeDocumento}`}
           </h2>
 
-          {showInitialBanner && (
-            <p className="text-center mb-6">Carregando dados</p>
-          )}
+          {/* ==== (REMOVIDO) banner azul antigo ==== */}
 
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}
           {showDiscoveryFlow ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-                {/* ====== ESQUERDA — EMPRESA ====== */}
+                {/* ESQUERDA — EMPRESA */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Empresa
@@ -1259,7 +1260,7 @@ if (isBootingPage) {
                   )}
                 </section>
 
-                {/* ====== DIREITA — MATRÍCULA ====== */}
+                {/* DIREITA — MATRÍCULA */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Matrícula
@@ -1318,7 +1319,7 @@ if (isBootingPage) {
                   )}
                 </section>
 
-                {/* ====== ABAIXO — ANOS & MESES ====== */}
+                {/* ANOS & MESES */}
                 <section className="md:col-span-2 bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Períodos (anos e meses)
@@ -1332,9 +1333,7 @@ if (isBootingPage) {
                       Selecione a matrícula para carregar os períodos.
                     </p>
                   ) : isLoadingCompetencias || !competenciasHoleriteLoaded ? (
-                    <p className="text-center">
-                      Carregando períodos disponíveis...
-                    </p>
+                    <p className="text-center">Carregando períodos disponíveis...</p>
                   ) : anosDisponiveis.length === 0 ? (
                     <p className="text-center text-gray-300">
                       Nenhum período de holerite encontrado para a seleção
@@ -1393,10 +1392,10 @@ if (isBootingPage) {
               </div>
             </>
           ) : showDiscoveryFlowGenerico ? (
-            // ===================== NOVO DISCOVERY (NÃO GESTOR / GENÉRICOS) =====================
+            // ===================== DISCOVERY (NÃO GESTOR / GENÉRICOS) =====================
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-                {/* ====== ESQUERDA — EMPRESA (GEN) ====== */}
+                {/* EMPRESA (GEN) */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Empresa
@@ -1467,7 +1466,7 @@ if (isBootingPage) {
                   )}
                 </section>
 
-                {/* ====== DIREITA — MATRÍCULA (GEN) ====== */}
+                {/* MATRÍCULA (GEN) */}
                 <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Matrícula
@@ -1531,7 +1530,7 @@ if (isBootingPage) {
                   )}
                 </section>
 
-                {/* ====== ABAIXO — ANOS & MESES (GEN) ====== */}
+                {/* ANOS & MESES (GEN) */}
                 <section className="md:col-span-2 bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Períodos (anos e meses)
@@ -1545,9 +1544,7 @@ if (isBootingPage) {
                       Selecione a matrícula para carregar os períodos.
                     </p>
                   ) : isLoadingCompetenciasGen || !competenciasGenLoaded ? (
-                    <p className="text-center">
-                      Carregando períodos disponíveis...
-                    </p>
+                    <p className="text-center">Carregando períodos disponíveis...</p>
                   ) : anosDisponiveisGen.length === 0 ? (
                     <p className="text-center text-gray-300">
                       Nenhum período de {nomeDocumento} encontrado para a
@@ -1761,7 +1758,6 @@ if (isBootingPage) {
                             documentos: DocumentoGenerico[];
                           }>("/documents/search", payload);
 
-                          // ✅ DEPOIS — usa total_encontrado para a contagem
                           const { documentos = [], total_encontrado = 0 } =
                             res.data;
                           setDocuments(documentos);
