@@ -764,8 +764,8 @@ export default function DocumentList() {
           description: `Período ${toYYYYDashMM(documento.anomes)} localizado.`,
         });
 
-        setIsLoading(false);
-        await visualizarDocumento(documento);
+        // setIsLoading(false); // ❌ removido
+        await visualizarDocumento(documento); // ✅ CHANGED: aguarda a visualização (loader ficará ativo)
         return;
       } else {
         toast.warning("Nenhum holerite encontrado para o mês selecionado.");
@@ -778,7 +778,7 @@ export default function DocumentList() {
         ),
       });
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // ✅ CHANGED: desliga loading só no finally (após a tentativa de abrir)
     }
   };
 
@@ -832,8 +832,8 @@ export default function DocumentList() {
           description: `Período ${ano}-${mes} para ${nomeDocumento}.`,
         });
 
-        setIsLoading(false);
-        await visualizarDocumento(documentos[0]);
+        // setIsLoading(false); // ❌ removido
+        await visualizarDocumento(documentos[0]); // ✅ CHANGED: aguarda a visualização (loader ativo)
         return;
       } else {
         toast.warning("Nenhum documento encontrado para o mês selecionado.");
@@ -891,7 +891,7 @@ export default function DocumentList() {
 
       toast.error(title, { description });
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // ✅ CHANGED
     }
   };
 
@@ -1137,7 +1137,8 @@ export default function DocumentList() {
     meLoading ||
     isLoading ||
     isLoadingCompetencias ||
-    isLoadingCompetenciasGen;
+    isLoadingCompetenciasGen ||
+    !!loadingPreviewId; // ✅ CHANGED: mantém o overlay enquanto monta e navega
 
   // ================================================
   // UI
@@ -1181,8 +1182,6 @@ export default function DocumentList() {
               ? "Holerite"
               : `Buscar ${nomeDocumento}`}
           </h2>
-
-          {/* ==== (REMOVIDO) banner azul antigo ==== */}
 
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}
           {showDiscoveryFlow ? (
