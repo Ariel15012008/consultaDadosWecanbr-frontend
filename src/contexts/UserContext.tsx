@@ -45,19 +45,26 @@ interface UserProviderProps {
   children: ReactNode;
 }
 
+// ====== CONFIG por ambiente ======
+const REVALIDATE_ON_FOCUS =
+  (import.meta.env.VITE_AUTH_REVALIDATE_ON_FOCUS ?? "true") === "true";
+const MIN_FOCUS_REVALIDATION_MS = Number(
+  import.meta.env.VITE_AUTH_FOCUS_THROTTLE_MS ?? 300_000 // 5 min
+);
+
 export function UserProvider({ children }: UserProviderProps) {
   const navigate = useNavigate();
 
   const [user, setUser] = useState<User | null>(null);
   const userRef = useRef<User | null>(null); // evita setState desnecessário
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, _setIsAuthenticated] = useState(false);
+  const isAuthRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
   // Controle de revalidação em foco
   const inflightRef = useRef<Promise<void> | null>(null);
   const lastSyncRef = useRef<number>(0);
-  const MIN_FOCUS_REVALIDATION_MS = 60_000; // 60s
 
   // 30 dias em ms
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
@@ -67,14 +74,33 @@ export function UserProvider({ children }: UserProviderProps) {
     Cookies.set("logged_user", Date.now().toString());
   };
 
+  // -------- comparação estável/deep para evitar troca de ref desnecessária -----
+  const stable = (obj: any): any => {
+    if (Array.isArray(obj)) return obj.map(stable);
+    if (obj && typeof obj === "object") {
+      const sorted: Record<string, any> = {};
+      Object.keys(obj)
+        .sort()
+        .forEach((k) => (sorted[k] = stable(obj[k])));
+      return sorted;
+    }
+    return obj;
+  };
+  const eqUser = (a: User | null, b: User | null) =>
+    JSON.stringify(stable(a)) === JSON.stringify(stable(b));
+
   const assignUserIfChanged = (u: User | null) => {
     const prev = userRef.current;
-    const changed =
-      JSON.stringify(prev ?? null) !== JSON.stringify(u ?? null);
-
-    if (changed) {
+    if (!eqUser(prev, u)) {
       userRef.current = u;
       setUser(u);
+    }
+  };
+
+  const setIsAuthenticatedSafe = (next: boolean) => {
+    if (isAuthRef.current !== next) {
+      isAuthRef.current = next;
+      _setIsAuthenticated(next);
     }
   };
 
@@ -88,15 +114,16 @@ export function UserProvider({ children }: UserProviderProps) {
       if (res.status === 200) {
         const data = res.data as User;
         assignUserIfChanged(data);
-        setIsAuthenticated(true);
+        setIsAuthenticatedSafe(true);
+        // atualiza marcador local
         touchLoggedUserCookie();
       } else {
         assignUserIfChanged(null);
-        setIsAuthenticated(false);
+        setIsAuthenticatedSafe(false);
       }
     } catch {
       assignUserIfChanged(null);
-      setIsAuthenticated(false);
+      setIsAuthenticatedSafe(false);
     } finally {
       if (!background) setIsLoading(false);
       lastSyncRef.current = Date.now();
@@ -118,7 +145,7 @@ export function UserProvider({ children }: UserProviderProps) {
     } catch {
       // ignora erro no logout do servidor
     } finally {
-      setIsAuthenticated(false);
+      setIsAuthenticatedSafe(false);
       assignUserIfChanged(null);
       didLogout.current = true;
       // sinaliza outras abas
@@ -139,6 +166,8 @@ export function UserProvider({ children }: UserProviderProps) {
 
   // revalidar ao ganhar foco / voltar visível — em BACKGROUND + THROTTLE
   useEffect(() => {
+    if (!REVALIDATE_ON_FOCUS) return;
+
     const tryBackgroundSync = () => {
       const now = Date.now();
       const elapsed = now - lastSyncRef.current;
@@ -179,7 +208,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
   // renovação por heurística de "inatividade" longa (30 dias)
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthRef.current) return;
 
     const interval = setInterval(async () => {
       const timestamp = Cookies.get("logged_user");
@@ -199,11 +228,11 @@ export function UserProvider({ children }: UserProviderProps) {
     }, 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // roda uma vez; depende de isAuthRef internamente
 
   const value: UserContextType = {
     user,
-    isAuthenticated,
+    isAuthenticated: isAuthRef.current,
     isLoading,   // agora só verdadeiro no boot inicial
     logout,
     refreshUser,
