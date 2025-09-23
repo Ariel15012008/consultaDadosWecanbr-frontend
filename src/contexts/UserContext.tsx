@@ -47,10 +47,17 @@ interface UserProviderProps {
 
 export function UserProvider({ children }: UserProviderProps) {
   const navigate = useNavigate();
+
   const [user, setUser] = useState<User | null>(null);
+  const userRef = useRef<User | null>(null); // evita setState desnecessário
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
+
+  // Controle de revalidação em foco
+  const inflightRef = useRef<Promise<void> | null>(null);
+  const lastSyncRef = useRef<number>(0);
+  const MIN_FOCUS_REVALIDATION_MS = 60_000; // 60s
 
   // 30 dias em ms
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
@@ -60,29 +67,45 @@ export function UserProvider({ children }: UserProviderProps) {
     Cookies.set("logged_user", Date.now().toString());
   };
 
-  const silentAuth = async () => {
-    setIsLoading(true);
+  const assignUserIfChanged = (u: User | null) => {
+    const prev = userRef.current;
+    const changed =
+      JSON.stringify(prev ?? null) !== JSON.stringify(u ?? null);
+
+    if (changed) {
+      userRef.current = u;
+      setUser(u);
+    }
+  };
+
+  // fetch /user/me com opção de background (não alterar isLoading)
+  const fetchMe = async (opts?: { background?: boolean }) => {
+    const background = !!opts?.background;
+
+    if (!background) setIsLoading(true);
     try {
       const res = await api.get("/user/me");
       if (res.status === 200) {
-        setUser(res.data as User);
+        const data = res.data as User;
+        assignUserIfChanged(data);
         setIsAuthenticated(true);
-        // atualiza sempre que validar com sucesso
         touchLoggedUserCookie();
       } else {
-        setUser(null);
+        assignUserIfChanged(null);
         setIsAuthenticated(false);
       }
     } catch {
-      setUser(null);
+      assignUserIfChanged(null);
       setIsAuthenticated(false);
     } finally {
-      setIsLoading(false);
+      if (!background) setIsLoading(false);
+      lastSyncRef.current = Date.now();
+      inflightRef.current = null;
     }
   };
 
   const refreshUser = async () => {
-    await silentAuth();
+    await fetchMe({ background: false });
   };
 
   const logout = async () => {
@@ -96,7 +119,7 @@ export function UserProvider({ children }: UserProviderProps) {
       // ignora erro no logout do servidor
     } finally {
       setIsAuthenticated(false);
-      setUser(null);
+      assignUserIfChanged(null);
       didLogout.current = true;
       // sinaliza outras abas
       try {
@@ -106,20 +129,32 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
-  // boot inicial
+  // boot inicial (com loading visível)
   useEffect(() => {
     if (!didLogout.current) {
-      silentAuth();
+      fetchMe({ background: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // revalidar ao ganhar foco / voltar visível
+  // revalidar ao ganhar foco / voltar visível — em BACKGROUND + THROTTLE
   useEffect(() => {
-    const onFocus = () => silentAuth();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") silentAuth();
+    const tryBackgroundSync = () => {
+      const now = Date.now();
+      const elapsed = now - lastSyncRef.current;
+
+      // respeita throttle e deduplica chamadas
+      if (elapsed < MIN_FOCUS_REVALIDATION_MS) return;
+      if (inflightRef.current) return;
+
+      inflightRef.current = fetchMe({ background: true });
     };
+
+    const onFocus = () => tryBackgroundSync();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tryBackgroundSync();
+    };
+
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -131,13 +166,18 @@ export function UserProvider({ children }: UserProviderProps) {
   // escutar mudanças de auth em outras abas
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "auth:changed") silentAuth();
+      if (e.key === "auth:changed") {
+        // sincroniza em background para não “piscar”
+        if (!inflightRef.current) {
+          inflightRef.current = fetchMe({ background: true });
+        }
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // renovação por heurística de "inatividade" longa
+  // renovação por heurística de "inatividade" longa (30 dias)
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -164,7 +204,7 @@ export function UserProvider({ children }: UserProviderProps) {
   const value: UserContextType = {
     user,
     isAuthenticated,
-    isLoading,
+    isLoading,   // agora só verdadeiro no boot inicial
     logout,
     refreshUser,
   };
