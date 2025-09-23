@@ -14,7 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { BiLogOut /* BiUser */ } from "react-icons/bi";
+import { BiLogOut } from "react-icons/bi";
 import { IoPersonCircle } from "react-icons/io5";
 import { RxHamburgerMenu } from "react-icons/rx";
 import { HiMail, HiHome } from "react-icons/hi";
@@ -24,10 +24,25 @@ export default function Header() {
   const { user, isAuthenticated, isLoading, logout } = useUser();
   const navigate = useNavigate();
 
-  // 🔧 ALTERAÇÃO: sem reload forçado; redirect centralizado no contexto
   const handleLogout = async () => {
     await logout();
   };
+
+  // EVITA piscar: enquanto carrega sessão, não exibe "Entrar"
+  if (isLoading) {
+    return (
+      <header className="fixed top-0 w-full bg-gradient-to-r from-blue-800 to-blue-400 text-white shadow-md z-50">
+        <div className="container mx-auto flex items-center justify-between pt-4 pb-4 pl-1">
+          <span className="bg-white ml-4 text-blue-600 px-2 py-1 rounded">
+            SuperRH
+          </span>
+          <div className="flex items-center gap-4 mr-4">
+            <span className="h-8 w-24 rounded animate-pulse bg-white/30" />
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="fixed top-0 w-full bg-gradient-to-r from-blue-800 to-blue-400 text-white shadow-md z-50">
@@ -48,14 +63,6 @@ export default function Header() {
           >
             <HiHome className="mr-1" /> Início
           </Link>
-          {/* 
-          <Link
-            to="/contato"
-            className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50"
-          >
-            <HiMail className="mr-1" /> Contato
-          </Link>
-          */}
         </nav>
 
         <div className="hidden md:flex items-center">
@@ -71,14 +78,6 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56 bg-white border border-blue-100 hover:cursor-pointer ">
-                {/* 
-                <DropdownMenuItem
-                  className="hover:cursor-pointer hover:bg-gray-200"
-                  onClick={() => navigate("/perfil")}
-                >
-                  <BiUser className="mr-2" /> Perfil
-                </DropdownMenuItem>
-                */}
                 <DropdownMenuItem
                   onClick={handleLogout}
                   className="text-red-600 hover:cursor-pointer hover:bg-gray-200"
@@ -113,18 +112,12 @@ export default function Header() {
                 <div className="flex flex-col items-center text-center p-4 bg-blue-700 rounded-lg space-y-1">
                   <IoPersonCircle className="text-4xl mb-1" />
                   <div className="max-w-full break-words">
-                    {isLoading ? (
-                      <p className="text-white text-sm">Carregando...</p>
-                    ) : (
-                      <>
-                        <p className="font-semibold text-white text-sm">
-                          {user?.nome}
-                        </p>
-                        <p className="text-xs text-blue-200 truncate">
-                          {user?.email}
-                        </p>
-                      </>
-                    )}
+                    <p className="font-semibold text-white text-sm">
+                      {user?.nome}
+                    </p>
+                    <p className="text-xs text-blue-200 truncate">
+                      {user?.email}
+                    </p>
                   </div>
                 </div>
               )}

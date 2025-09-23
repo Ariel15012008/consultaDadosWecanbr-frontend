@@ -5,7 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type ReactNode
+  type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import Cookies from "js-cookie";
@@ -55,12 +55,9 @@ export function UserProvider({ children }: UserProviderProps) {
   // 30 dias em ms
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
-  // 🔧 ALTERAÇÃO: helpers para manter o "marcador" do refresh
+  // "marcador" de sessão local (não-Httponly) para heurísticas de renovação
   const touchLoggedUserCookie = () => {
     Cookies.set("logged_user", Date.now().toString());
-  };
-  const ensureLoggedUserCookie = () => {
-    if (!Cookies.get("logged_user")) touchLoggedUserCookie();
   };
 
   const silentAuth = async () => {
@@ -70,9 +67,8 @@ export function UserProvider({ children }: UserProviderProps) {
       if (res.status === 200) {
         setUser(res.data as User);
         setIsAuthenticated(true);
-
-        // 🔧 ALTERAÇÃO: garante existência do marcador de sessão
-        ensureLoggedUserCookie();
+        // atualiza sempre que validar com sucesso
+        touchLoggedUserCookie();
       } else {
         setUser(null);
         setIsAuthenticated(false);
@@ -91,24 +87,26 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const logout = async () => {
     try {
-      // Observação: se os cookies HttpOnly forem usados no backend,
-      // remover via js-cookie não afeta o cookie HttpOnly (ok).
+      // remover cookies não HttpOnly (apenas marcadores locais)
       Cookies.remove("access_token");
       Cookies.remove("logged_user");
 
       await api.post("/user/logout");
-
+    } catch {
+      // ignora erro no logout do servidor
+    } finally {
       setIsAuthenticated(false);
       setUser(null);
       didLogout.current = true;
-
-      // 🔧 ALTERAÇÃO: navegação única e centralizada no contexto
+      // sinaliza outras abas
+      try {
+        localStorage.setItem("auth:changed", String(Date.now()));
+      } catch {}
       navigate("/", { replace: true });
-    } catch (error) {
-      console.error("Erro no logout:", error);
     }
   };
 
+  // boot inicial
   useEffect(() => {
     if (!didLogout.current) {
       silentAuth();
@@ -116,6 +114,30 @@ export function UserProvider({ children }: UserProviderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // revalidar ao ganhar foco / voltar visível
+  useEffect(() => {
+    const onFocus = () => silentAuth();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") silentAuth();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // escutar mudanças de auth em outras abas
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "auth:changed") silentAuth();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // renovação por heurística de "inatividade" longa
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -126,7 +148,6 @@ export function UserProvider({ children }: UserProviderProps) {
       const loggedTime = parseInt(timestamp, 10);
       if (!Number.isFinite(loggedTime)) return;
 
-      // quando passar de 30 dias, tenta refresh
       if (Date.now() - loggedTime > thirtyDays) {
         try {
           await api.post("/user/refresh");
@@ -148,11 +169,7 @@ export function UserProvider({ children }: UserProviderProps) {
     refreshUser,
   };
 
-  return (
-    <UserContext.Provider value={value}>
-      {children}
-    </UserContext.Provider>
-  );
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }
 
 export function useUser() {

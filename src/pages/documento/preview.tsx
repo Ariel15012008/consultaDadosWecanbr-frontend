@@ -407,11 +407,11 @@ export default function PreviewDocumento() {
       <div className="flex justify-center items-center p-8 md:p-16">
         <Button
           onClick={handleDownload}
-          className="bg-green-600 hover:bg-green-500 w-full sm:w-44 h-10"
+          className="bg-green-600 hover:bg-green-500 h-10"
           disabled={isDownloading}
         >
           <Download className="mr-2 w-4 h-4" />
-          {isDownloading ? "Gerando PDF..." : "Baixar Holerite"}
+          {isDownloading ? "Gerando PDF..." : "Aceitar e baixar holerite"}
         </Button>
       </div>
       <Footer />
