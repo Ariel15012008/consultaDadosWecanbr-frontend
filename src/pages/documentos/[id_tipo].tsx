@@ -1666,7 +1666,7 @@ export default function DocumentList() {
                     disabled={isAnyLoading}
                   />
                   <div className="w-full max-w-xs">
-                    <CustomMonthPicker
+                    <CustomMonthPicker 
                       value={anomes}
                       onChange={setAnomes}
                       placeholder="Selecionar período"
