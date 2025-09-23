@@ -57,7 +57,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const [user, setUser] = useState<User | null>(null);
   const userRef = useRef<User | null>(null); // evita setState desnecessário
-  const [isAuthenticated, _setIsAuthenticated] = useState(false);
+  const [, _setIsAuthenticated] = useState(false);
   const isAuthRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
