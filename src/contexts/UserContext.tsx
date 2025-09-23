@@ -69,10 +69,6 @@ export function UserProvider({ children }: UserProviderProps) {
   // 30 dias em ms
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
-  // "marcador" de sessão local (não-Httponly) para heurísticas de renovação
-  const touchLoggedUserCookie = () => {
-    Cookies.set("logged_user", Date.now().toString());
-  };
 
   // -------- comparação estável/deep para evitar troca de ref desnecessária -----
   const stable = (obj: any): any => {
@@ -116,7 +112,6 @@ export function UserProvider({ children }: UserProviderProps) {
         assignUserIfChanged(data);
         setIsAuthenticatedSafe(true);
         // atualiza marcador local
-        touchLoggedUserCookie();
       } else {
         assignUserIfChanged(null);
         setIsAuthenticatedSafe(false);
@@ -220,7 +215,6 @@ export function UserProvider({ children }: UserProviderProps) {
       if (Date.now() - loggedTime > thirtyDays) {
         try {
           await api.post("/user/refresh");
-          touchLoggedUserCookie();
         } catch {
           await logout();
         }

@@ -20,6 +20,9 @@ import { RxHamburgerMenu } from "react-icons/rx";
 import { HiMail, HiHome } from "react-icons/hi";
 import { useUser } from "@/contexts/UserContext";
 
+const FORCE_FULL_RELOAD_ON_LOGIN =
+  (import.meta.env.VITE_FORCE_FULL_RELOAD_ON_LOGIN ?? "true") === "true";
+
 export default function Header() {
   const { user, isAuthenticated, isLoading, logout } = useUser();
   const navigate = useNavigate();
@@ -28,7 +31,21 @@ export default function Header() {
     await logout();
   };
 
-  // EVITA piscar: enquanto carrega sessão, não exibe "Entrar"
+  // 👉 Força RELOAD completo ao ir para /login, garantindo rebootstrap do app
+  const handleGoToLogin = () => {
+    if (FORCE_FULL_RELOAD_ON_LOGIN) {
+      const url = new URL("/login", window.location.origin);
+      // cache-buster para evitar qualquer “stale” de navegação
+      url.searchParams.set("t", String(Date.now()));
+      // reload hard (derruba o SPA e re-sincroniza com cookies HttpOnly)
+      window.location.href = url.toString();
+      return;
+    }
+    // fallback: navegação SPA (caso queira desligar via .env)
+    navigate("/login");
+  };
+
+  // Enquanto a sessão inicial é verificada, evita piscar mostrando skeleton
   if (isLoading) {
     return (
       <header className="fixed top-0 w-full bg-gradient-to-r from-blue-800 to-blue-400 text-white shadow-md z-50">
@@ -63,6 +80,9 @@ export default function Header() {
           >
             <HiHome className="mr-1" /> Início
           </Link>
+          {/* <Link to="/contato" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
+            <HiMail className="mr-1" /> Contato
+          </Link> */}
         </nav>
 
         <div className="hidden md:flex items-center">
@@ -88,7 +108,7 @@ export default function Header() {
             </DropdownMenu>
           ) : (
             <Button
-              onClick={() => navigate("/login")}
+              onClick={handleGoToLogin}
               className="bg-white text-blue-600 hover:bg-blue-50 mr-4"
             >
               Entrar
@@ -121,6 +141,7 @@ export default function Header() {
                   </div>
                 </div>
               )}
+
               <Link
                 to="/"
                 className="flex items-center p-2 hover:text-[#31d5db] rounded-lg text-white"
@@ -143,7 +164,7 @@ export default function Header() {
                 </button>
               ) : (
                 <button
-                  onClick={() => navigate("/login")}
+                  onClick={handleGoToLogin}
                   className="w-full flex items-center justify-center p-2 bg-white text-blue-600 rounded-lg hover:bg-blue-100"
                 >
                   Entrar
