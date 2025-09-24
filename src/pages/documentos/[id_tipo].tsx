@@ -765,7 +765,7 @@ export default function DocumentList() {
         });
 
         // setIsLoading(false); // ❌ removido
-        await visualizarDocumento(documento); // ✅ CHANGED: aguarda a visualização (loader ficará ativo)
+        await visualizarDocumento(documento); // ✅ mantém loader ativo
         return;
       } else {
         toast.warning("Nenhum holerite encontrado para o mês selecionado.");
@@ -778,7 +778,7 @@ export default function DocumentList() {
         ),
       });
     } finally {
-      setIsLoading(false); // ✅ CHANGED: desliga loading só no finally (após a tentativa de abrir)
+      setIsLoading(false); // ✅ desliga loading no finally
     }
   };
 
@@ -833,7 +833,7 @@ export default function DocumentList() {
         });
 
         // setIsLoading(false); // ❌ removido
-        await visualizarDocumento(documentos[0]); // ✅ CHANGED: aguarda a visualização (loader ativo)
+        await visualizarDocumento(documentos[0]); // ✅ loader ativo
         return;
       } else {
         toast.warning("Nenhum documento encontrado para o mês selecionado.");
@@ -924,10 +924,10 @@ export default function DocumentList() {
           cpf: user?.gestor
             ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
             : meCpf,
-          matricula: matForPreview,
-          competencia: docHolerite.anomes,
-          lote: docHolerite.id_documento,
         };
+        payload.matricula = matForPreview;
+        payload.competencia = docHolerite.anomes;
+        payload.lote = docHolerite.id_documento;
 
         const res = await withRetry(
           () =>
@@ -948,7 +948,14 @@ export default function DocumentList() {
           setLoadingPreviewId(null);
           previewAbortRef.current = null;
 
-          navigate("/documento/preview", { state: res.data });
+          // ✅ ALTERAÇÃO: passar tipo e competencia_forced para o preview
+          navigate("/documento/preview", {
+            state: {
+              ...res.data,
+              tipo: "holerite",
+              competencia_forced: docHolerite.anomes, // YYYYMM clicado
+            },
+          });
           toast.success("Documento aberto com sucesso!");
         } else {
           throw new Error("Não foi possível gerar o PDF do holerite");
@@ -1054,29 +1061,29 @@ export default function DocumentList() {
             break;
           case 413:
             title = "Documento muito grande";
-            description = "Tente novamente mais tarde ou contate o suporte.";
+            description: "Tente novamente mais tarde ou contate o suporte.";
             break;
           case 415:
           case 422:
             title = "Requisição inválida";
-            description =
+            description:
               "Os dados informados não foram aceitos pelo servidor.";
             break;
           case 429:
             title = "Muitas tentativas";
-            description =
+            description:
               "Você atingiu o limite momentâneo. Aguarde e tente novamente.";
             break;
           case 500:
             title = "Erro interno do servidor";
-            description =
+            description:
               "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
             break;
           case 502:
           case 503:
           case 504:
             title = "Instabilidade no serviço";
-            description =
+            description:
               "O servidor está indisponível no momento. Tente novamente.";
             break;
           default:
@@ -1138,7 +1145,7 @@ export default function DocumentList() {
     isLoading ||
     isLoadingCompetencias ||
     isLoadingCompetenciasGen ||
-    !!loadingPreviewId; // ✅ CHANGED: mantém o overlay enquanto monta e navega
+    !!loadingPreviewId; // ✅ mantém o overlay enquanto monta e navega
 
   // ================================================
   // UI
@@ -1666,7 +1673,7 @@ export default function DocumentList() {
                     disabled={isAnyLoading}
                   />
                   <div className="w-full max-w-xs">
-                    <CustomMonthPicker 
+                    <CustomMonthPicker
                       value={anomes}
                       onChange={setAnomes}
                       placeholder="Selecionar período"

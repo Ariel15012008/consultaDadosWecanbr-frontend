@@ -1,3 +1,4 @@
+// src/pages/PreviewDocumento.tsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -7,8 +8,10 @@ import Footer from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Download } from "lucide-react"
 import { useUser } from "@/contexts/UserContext"
+import api from "@/utils/axiosInstance"
+import { toast } from "sonner"
 
-// Tipos para Holerite (mantidos como estavam)
+// Tipos para Holerite
 interface Cabecalho {
   empresa: string
   filial: string
@@ -21,7 +24,7 @@ interface Cabecalho {
   nome: string
   funcao_nome: string
   admissao: string
-  competencia: string
+  competencia: string // pode vir "YYYY", "YYYYMM" ou "YYYY-MM"
   lote: number
 }
 
@@ -59,16 +62,16 @@ interface DocumentoGenerico {
   colaborador: string
   regional: string
   cr: string
-  anomes: string
-  tipodedoc: string
+  anomes: string        // pode vir "YYYY-MM" ou "YYYYMM"
+  tipodedoc: string     // <-- nome do documento
   status: string
   observacao: string
   datadepagamento: string
   matricula: string
-  _norm_anomes: string
+  _norm_anomes: string  // label formatado para UI
 }
 
-// Utilitários para holerite (mantidos como estavam)
+// Utils
 function padLeft(value: string | number, width: number): string {
   return String(value).trim().padStart(width, "0")
 }
@@ -94,19 +97,42 @@ function fmtRef(value: number): string {
       })
 }
 
+// Normaliza para "YYYYMM"
+function normalizeCompetencia(v: string | undefined | null): string {
+  const s = String(v ?? "").trim()
+  if (!s) return ""
+  if (/^\d{6}$/.test(s)) return s               // "YYYYMM"
+  if (/^\d{4}-\d{2}$/.test(s)) return s.replace("-", "") // "YYYY-MM" -> "YYYYMM"
+  if (/^\d{2}\/\d{4}$/.test(s)) {               // "MM/YYYY" -> "YYYYMM"
+    const [mm, yyyy] = s.split("/")
+    return `${yyyy}${mm.padStart(2,"0")}`
+  }
+  // fallback: só dígitos
+  return s.replace(/\D/g, "")
+}
+
+// remove prefixo do base64
+function cleanBase64Pdf(b64: string): string {
+  return b64.replace(/^data:application\/pdf;base64,/, "")
+}
+
 export default function PreviewDocumento() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { isLoading: userLoading } = useUser()
+  const { user, isLoading: userLoading } = useUser()
   const [isDownloading, setIsDownloading] = useState(false)
 
   const state = location.state as {
+    // comum
     pdf_base64: string
+    tipo?: "holerite" | "generico"
+    // holerite
     cabecalho?: Cabecalho
     eventos?: Evento[]
     rodape?: Rodape
+    competencia_forced?: string // <-- YYYYMM vindo da DocumentList
+    // generico
     documento_info?: DocumentoGenerico
-    tipo?: "holerite" | "generico"
   } | null
 
   useEffect(() => {
@@ -125,8 +151,7 @@ export default function PreviewDocumento() {
 
     try {
       setIsDownloading(true)
-      // Converter base64 para blob
-      const byteCharacters = atob(state.pdf_base64)
+      const byteCharacters = atob(cleanBase64Pdf(state.pdf_base64))
       const byteNumbers = new Array(byteCharacters.length)
       for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i)
@@ -137,11 +162,17 @@ export default function PreviewDocumento() {
       const link = document.createElement("a")
       link.href = url
 
-      // Nome do arquivo baseado no tipo
       if (state.tipo === "generico" && state.documento_info) {
-        link.download = `${state.documento_info.nomearquivo}`
+        const nome =
+          state.documento_info.nomearquivo ||
+          state.documento_info.tipodedoc ||
+          "documento"
+        link.download = `${nome}.pdf`
       } else if (state.cabecalho) {
-        link.download = `holerite_${state.cabecalho.matricula}_${state.cabecalho.competencia}.pdf`
+        const comp =
+          normalizeCompetencia(state.competencia_forced) ||
+          normalizeCompetencia(state.cabecalho.competencia)
+        link.download = `holerite_${state.cabecalho.matricula}_${comp || "YYYYMM"}.pdf`
       } else {
         link.download = "documento.pdf"
       }
@@ -156,6 +187,90 @@ export default function PreviewDocumento() {
     } catch (e) {
       console.error("Erro ao baixar PDF:", e)
       alert("Erro ao baixar o PDF.")
+      setIsDownloading(false)
+    }
+  }
+
+  // confirma no backend e depois baixa
+  const handleAcceptAndDownload = async () => {
+    if (!state?.pdf_base64) {
+      toast.error("PDF não disponível para confirmar.")
+      return
+    }
+
+    // ---- tipo_doc: nome real nos genéricos, 'holerite' para holerite
+    const tipo_doc =
+      state?.tipo === "holerite"
+        ? "holerite"
+        : (state?.documento_info?.tipodedoc || "generico")
+
+    // ---- matrícula / competência / unidade
+    let matricula = ""
+    let competencia = ""
+    let unidade = ""
+
+    if (state?.tipo === "holerite" && state?.cabecalho) {
+      matricula = String(state.cabecalho.matricula ?? "")
+      // PRIORIDADE: competencia_forced (YYYYMM) vinda da lista
+      competencia =
+        normalizeCompetencia(state.competencia_forced) ||
+        normalizeCompetencia(state.cabecalho.competencia)
+
+      // Se ainda não for YYYYMM, aborta para não gravar só o ano
+      if (!/^\d{6}$/.test(competencia)) {
+        toast.error("Competência do holerite inválida", {
+          description:
+            "Não foi possível identificar o mês (formato esperado: YYYYMM). Abra o holerite pelo mês desejado e tente novamente.",
+        })
+        return
+      }
+      unidade = state.cabecalho.cliente_nome || state.cabecalho.cliente || ""
+    } else if (state?.documento_info) {
+      matricula = String(state.documento_info.matricula ?? "")
+      competencia = normalizeCompetencia(
+        state.documento_info.anomes || state.documento_info._norm_anomes
+      )
+      unidade = state.documento_info.cliente || ""
+    }
+
+    // CPF do contexto
+    const cpfDigits = String((user as any)?.cpf ?? "").replace(/\D/g, "") || ""
+
+    if (!matricula) {
+      toast.error("Matrícula não encontrada para confirmar o documento.")
+      return
+    }
+    if (!competencia || !/^\d{6}$/.test(competencia)) {
+      toast.error("Competência inválida para confirmar o documento.")
+      return
+    }
+    if (!cpfDigits || cpfDigits.length !== 11) {
+      toast.error("CPF do usuário indisponível ou inválido.")
+      return
+    }
+
+    const payload = {
+      aceito: true,
+      tipo_doc,                                  // <-- agora com nome real no genérico
+      base64: cleanBase64Pdf(state.pdf_base64),
+      matricula,
+      cpf: cpfDigits,
+      unidade,
+      competencia,                               // sempre YYYYMM
+    }
+
+    try {
+      setIsDownloading(true)
+      await api.post("/status-doc", payload)
+      toast.success("Documento confirmado com sucesso.")
+      await handleDownload()
+    } catch (err: any) {
+      console.error("Falha ao confirmar /status-doc:", err)
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Não foi possível confirmar o documento."
+      toast.error("Erro ao confirmar", { description: msg })
       setIsDownloading(false)
     }
   }
@@ -183,7 +298,7 @@ export default function PreviewDocumento() {
     )
   }
 
-  // ========== RENDERIZAÇÃO PARA DOCUMENTOS GENÉRICOS ==========
+  // ======== GENÉRICO ========
   if (state.tipo === "generico" && state.documento_info) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
@@ -195,30 +310,26 @@ export default function PreviewDocumento() {
             </Button>
           </div>
 
-          {/* Container do PDF */}
+          {/* PDF */}
           <div
             className="relative overflow-hidden border rounded-lg bg-white mx-auto"
-            style={{
-              width: "100%",
-              maxWidth: "900px",
-              height: "600px",
-            }}
+            style={{ width: "100%", maxWidth: "900px", height: "600px" }}
           >
             <iframe
-              src={`data:application/pdf;base64,${state.pdf_base64}`}
+              src={`data:application/pdf;base64,${cleanBase64Pdf(state.pdf_base64)}`}
               className="w-full h-full border-0"
               title="Visualizador de PDF"
             />
           </div>
 
-          <div className="flex justify-center items-center pb-8 pt-4">
+          <div className="flex justify-center items-center pb-8 pt-4 gap-3">
             <Button
-              onClick={handleDownload}
-              className="bg-green-600 hover:bg-green-500 w-full sm:w-44 h-10"
+              onClick={handleAcceptAndDownload}
+              className="bg-green-600 hover:bg-green-500 w-full sm:w-56 h-10"
               disabled={isDownloading}
             >
               <Download className="mr-2 w-4 h-4" />
-              {isDownloading ? "Baixando..." : "Baixar Documento"}
+              {isDownloading ? "Confirmando..." : "Aceitar e baixar documento"}
             </Button>
           </div>
         </main>
@@ -227,7 +338,7 @@ export default function PreviewDocumento() {
     )
   }
 
-  // ========== RENDERIZAÇÃO PARA HOLERITE (mantida como estava) ==========
+  // ======== HOLERITE ========
   if (!state.cabecalho || !state.eventos || !state.rodape) {
     return (
       <div className="flex flex-col min-h-screen">
@@ -293,7 +404,10 @@ export default function PreviewDocumento() {
             <strong className="pb-1 md:pb-2">Admissão</strong> {cabecalho.admissao}
           </div>
           <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Competência</strong> {cabecalho.competencia}
+            <strong className="pb-1 md:pb-2">Competência</strong>{" "}
+            {state.competencia_forced
+              ? `${state.competencia_forced.slice(0,4)}-${state.competencia_forced.slice(4,6)}`
+              : cabecalho.competencia}
           </div>
         </div>
 
@@ -303,9 +417,7 @@ export default function PreviewDocumento() {
           <table className="w-full border-collapse text-xs md:text-sm">
             <thead>
               <tr className="bg-gray-100">
-                {/* [RESPONSIVO] o texto muda conforme o breakpoint sm (640px) */}
                 <th className="p-1 md:p-2 text-left border-r-[1px]">
-                  {/* Cód. é igual nos dois, mas mantive a estrutura pra consistência */}
                   <span className="sm:hidden">Cód.</span>
                   <span className="hidden sm:inline">Cód.</span>
                 </th>
@@ -343,15 +455,13 @@ export default function PreviewDocumento() {
 
         <div className="bg-gray-300 w-full h-[1px] my-2"></div>
 
-        {/* Seção de Totais */}
+        {/* Totais */}
         <div className="my-4 md:my-6 flex flex-col sm:flex-row justify-between text-xs md:text-sm">
-          {/* Versão desktop */}
           <div className="hidden sm:flex justify-end sm:justify-start xl:pl-[700px]">
             <div className="flex flex-col text-right">
               <strong>Total Vencimentos:</strong> {fmtNum(rodape.total_vencimentos)}
             </div>
           </div>
-          {/* Versão mobile */}
           <div className="sm:hidden flex flex-col gap-2">
             <div className="flex justify-between">
               <strong>Total Vencimentos:</strong>
@@ -366,7 +476,6 @@ export default function PreviewDocumento() {
               <span>{fmtNum(rodape.valor_liquido)}</span>
             </div>
           </div>
-          {/* Versão desktop */}
           <div className="hidden sm:flex flex-col text-right">
             <div className="flex flex-col text-right">
               <strong>Total Descontos:</strong> {fmtNum(rodape.total_descontos)}
@@ -406,12 +515,12 @@ export default function PreviewDocumento() {
 
       <div className="flex justify-center items-center p-8 md:p-16">
         <Button
-          onClick={handleDownload}
+          onClick={handleAcceptAndDownload}
           className="bg-green-600 hover:bg-green-500 h-10"
           disabled={isDownloading}
         >
           <Download className="mr-2 w-4 h-4" />
-          {isDownloading ? "Gerando PDF..." : "Aceitar e baixar holerite"}
+          {isDownloading ? "Confirmando..." : "Aceitar e baixar holerite"}
         </Button>
       </div>
       <Footer />
