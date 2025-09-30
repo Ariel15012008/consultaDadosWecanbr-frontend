@@ -1,4 +1,3 @@
-// src/pages/DocumentList.tsx
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -19,7 +18,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
 import { toast, Toaster } from "sonner";
-import LoadingScreen from "@/components/ui/loadingScreen"; // <- import corrigido
+import LoadingScreen from "@/components/ui/loadingScreen";
 
 // ================================================
 // Tipagens auxiliares
@@ -49,6 +48,7 @@ interface CabecalhoHolerite {
   admissao: string;
   competencia: string;
   lote: number;
+  uuid?: string;
 }
 
 interface EventoHolerite {
@@ -116,7 +116,18 @@ const makeYYYYMMLabel = (ano: number, mes: string) => `${ano}-${mes}`;
 const makeYYYYMMValue = (ano: number, mes: string | number) =>
   `${ano}${String(mes).padStart(2, "0")}`;
 
-// 🔄 mensagens amigáveis por status
+// normaliza qualquer entrada para YYYYMM
+const normalizeYYYYMM = (s: string) => {
+  if (/^\d{6}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}$/.test(s)) return s.replace("-", "");
+  if (/^\d{2}\/\d{4}$/.test(s)) {
+    const [mm, yyyy] = s.split("/");
+    return `${yyyy}${mm.padStart(2, "0")}`;
+  }
+  return s.replace(/\D/g, "");
+};
+
+// mensagens amigáveis por status
 const extractErrorMessage = (err: any, fallback = "Ocorreu um erro.") => {
   const status = err?.response?.status as number | undefined;
 
@@ -233,7 +244,7 @@ export default function DocumentList() {
     null
   );
 
-  // === NOVO: seleção para documentos genéricos (não holerite) ===
+  // === genéricos (não holerite) ===
   const [selectedEmpresaIdGen, setSelectedEmpresaIdGen] = useState<
     string | null
   >(null);
@@ -278,7 +289,7 @@ export default function DocumentList() {
     return (empresasMap.get(selectedEmpresaId)?.matriculas.length ?? 0) > 1;
   }, [selectedEmpresaId, empresasMap]);
 
-  // === NOVO: helpers para genéricos ===
+  // === helpers para genéricos ===
   const matriculasDaEmpresaSelecionadaGen = useMemo(() => {
     if (!selectedEmpresaIdGen) return [];
     const item = empresasMap.get(selectedEmpresaIdGen);
@@ -751,12 +762,14 @@ export default function DocumentList() {
         cabecalho: CabecalhoHolerite;
         eventos: EventoHolerite[];
         rodape: RodapeHolerite;
+        pdf_base64?: string;
+        uuid?: string;
       }>("/documents/holerite/buscar", payload);
 
       if (res.data && res.data.cabecalho) {
         const documento: DocumentoHolerite = {
           id_documento: String(res.data.cabecalho.lote || "1"),
-          anomes: res.data.cabecalho.competencia || competenciaYYYYMM,
+          anomes: competenciaYYYYMM,
         };
         setDocuments([documento]);
         sessionStorage.setItem("holeriteData", JSON.stringify(res.data));
@@ -764,8 +777,7 @@ export default function DocumentList() {
           description: `Período ${toYYYYDashMM(documento.anomes)} localizado.`,
         });
 
-        // setIsLoading(false); // ❌ removido
-        await visualizarDocumento(documento); // ✅ mantém loader ativo
+        await visualizarDocumento(documento);
         return;
       } else {
         toast.warning("Nenhum holerite encontrado para o mês selecionado.");
@@ -778,7 +790,7 @@ export default function DocumentList() {
         ),
       });
     } finally {
-      setIsLoading(false); // ✅ desliga loading no finally
+      setIsLoading(false);
     }
   };
 
@@ -832,8 +844,7 @@ export default function DocumentList() {
           description: `Período ${ano}-${mes} para ${nomeDocumento}.`,
         });
 
-        // setIsLoading(false); // ❌ removido
-        await visualizarDocumento(documentos[0]); // ✅ loader ativo
+        await visualizarDocumento(documentos[0]);
         return;
       } else {
         toast.warning("Nenhum documento encontrado para o mês selecionado.");
@@ -891,7 +902,7 @@ export default function DocumentList() {
 
       toast.error(title, { description });
     } finally {
-      setIsLoading(false); // ✅ CHANGED
+      setIsLoading(false);
     }
   };
 
@@ -920,14 +931,17 @@ export default function DocumentList() {
             : arr[0] ?? "";
         }
 
+        // garantir YYYYMM sempre
+        const competenciaYYYYMM = normalizeYYYYMM(docHolerite.anomes);
+
         const payload: any = {
           cpf: user?.gestor
             ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
             : meCpf,
+          matricula: matForPreview,
+          competencia: competenciaYYYYMM,
+          lote: docHolerite.id_documento,
         };
-        payload.matricula = matForPreview;
-        payload.competencia = docHolerite.anomes;
-        payload.lote = docHolerite.id_documento;
 
         const res = await withRetry(
           () =>
@@ -936,6 +950,7 @@ export default function DocumentList() {
               eventos: EventoHolerite[];
               rodape: RodapeHolerite;
               pdf_base64: string;
+              uuid?: string;
             }>("/documents/holerite/montar", payload, {
               timeout: 45000,
               signal: controller.signal,
@@ -948,12 +963,15 @@ export default function DocumentList() {
           setLoadingPreviewId(null);
           previewAbortRef.current = null;
 
-          // ✅ ALTERAÇÃO: passar tipo e competencia_forced para o preview
+          // enviar uuid pro Preview (pra ele consultar /status-doc/consultar)
+          const uuid = res.data.uuid || res.data.cabecalho?.uuid;
+
           navigate("/documento/preview", {
             state: {
               ...res.data,
               tipo: "holerite",
-              competencia_forced: docHolerite.anomes, // YYYYMM clicado
+              competencia_forced: competenciaYYYYMM, // YYYYMM clicado
+              uuid,
             },
           });
           toast.success("Documento aberto com sucesso!");
@@ -994,10 +1012,11 @@ export default function DocumentList() {
           setLoadingPreviewId(null);
           previewAbortRef.current = null;
 
+          // ⚠️ Aqui não consultamos aceite. Isso será feito no Preview usando id_ged = id_documento
           navigate("/documento/preview", {
             state: {
               pdf_base64: pdfBase64,
-              documento_info: docGenerico,
+              documento_info: docGenerico, // contém id_documento
               tipo: "generico",
             },
           });
@@ -1061,29 +1080,29 @@ export default function DocumentList() {
             break;
           case 413:
             title = "Documento muito grande";
-            description: "Tente novamente mais tarde ou contate o suporte.";
+            description = "Tente novamente mais tarde ou contate o suporte.";
             break;
           case 415:
           case 422:
             title = "Requisição inválida";
-            description:
+            description =
               "Os dados informados não foram aceitos pelo servidor.";
             break;
           case 429:
             title = "Muitas tentativas";
-            description:
+            description =
               "Você atingiu o limite momentâneo. Aguarde e tente novamente.";
             break;
           case 500:
             title = "Erro interno do servidor";
-            description:
+            description =
               "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
             break;
           case 502:
           case 503:
           case 504:
             title = "Instabilidade no serviço";
-            description:
+            description =
               "O servidor está indisponível no momento. Tente novamente.";
             break;
           default:
@@ -1138,14 +1157,13 @@ export default function DocumentList() {
     }
   };
 
-  // loader só dentro do card roxo
   const showCardLoader =
     userLoading ||
     meLoading ||
     isLoading ||
     isLoadingCompetencias ||
     isLoadingCompetenciasGen ||
-    !!loadingPreviewId; // ✅ mantém o overlay enquanto monta e navega
+    !!loadingPreviewId;
 
   // ================================================
   // UI
@@ -1324,7 +1342,7 @@ export default function DocumentList() {
                       Selecione uma empresa acima.
                     </p>
                   ) : (
-                    // ✅ Só 1 matrícula: mostra botão desabilitado com a matrícula efetiva
+                    // Só 1 matrícula
                     <div className="space-y-2">
                       <Button
                         variant="default"
@@ -1545,7 +1563,7 @@ export default function DocumentList() {
                       </div>
                     )
                   ) : selectedEmpresaIdGen ? (
-                    // ✅ Só 1 matrícula: mostra botão desabilitado com a matrícula efetiva
+                    // Só 1 matrícula
                     <div className="space-y-2">
                       <Button
                         variant="default"
@@ -1661,6 +1679,9 @@ export default function DocumentList() {
                       maxLength={14}
                       disabled={isAnyLoading}
                     />
+                    {cpfError && (
+                      <span className="text-red-400 text-xs mt-1">{cpfError}</span>
+                    )}
                   </div>
                   <input
                     type="text"
@@ -1743,13 +1764,16 @@ export default function DocumentList() {
                           }>("/documents/holerite/buscar", payload);
 
                           if (res.data && res.data.cabecalho) {
+                            const competenciaYYYYMM = normalizeYYYYMM(
+                              res.data.cabecalho.competencia ||
+                                formatCompetencia(anomes)
+                            );
+
                             const documento: DocumentoHolerite = {
                               id_documento: String(
                                 res.data.cabecalho.lote || "1"
                               ),
-                              anomes:
-                                res.data.cabecalho.competencia ||
-                                formatCompetencia(anomes),
+                              anomes: competenciaYYYYMM,
                             };
                             setDocuments([documento]);
                             sessionStorage.setItem(
