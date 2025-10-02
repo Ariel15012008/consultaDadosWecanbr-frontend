@@ -255,7 +255,8 @@ export default function PreviewDocumento() {
     }
     if (isAceito) {
       return (
-        <span className="inline-flex items-center gap-2">
+         <span className="inline-flex items-center gap-2 ml-auto self-end sm:self-auto pb-2 sm:pb-0">
+          <p className="text-green-500">Aceito</p>
           <FaCheckCircle className="w-10 h-10 text-green-500" aria-label="Documento aceito" />
         </span>
       );
@@ -429,7 +430,7 @@ export default function PreviewDocumento() {
         <Header />
         <main className="flex-grow p-4 md:p-8 bg-[#1e1e2f] text-white text-center">
           <div className="flex items-center justify-between mb-4">
-            <Button variant="ghost" onClick={() => navigate(-1)} className="flex items-center gap-2">
+            <Button variant="default" onClick={() => navigate(-1)} className="flex items-center gap-2">
               <ArrowLeft /> Voltar
             </Button>
             {renderAceitoBadge()}
@@ -448,8 +449,8 @@ export default function PreviewDocumento() {
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
         <Header />
         <main className="flex-grow p-8 pt-24">
-          <div className="flex flex-col md:flex-row justify-between items-start rounded-lg">
-            <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 flex items-center gap-2 text-white ">
+          <div className="flex md:flex-row justify-between items-start rounded-lg">
+            <Button variant="default" onClick={() => navigate(-1)} className="mb-4 flex items-center gap-2 text-white ">
               <ArrowLeft /> Voltar
             </Button>
 
@@ -493,7 +494,7 @@ export default function PreviewDocumento() {
         <Header />
         <main className="flex-grow p-4 md:p-8 bg-[#1e1e2f] text-white text-center">
           <div className="flex items-center justify-between mb-4">
-            <Button variant="ghost" onClick={() => navigate(-1)} className="flex items-center gap-2">
+            <Button variant="default" onClick={() => navigate(-1)} className="flex items-center gap-2">
               <ArrowLeft /> Voltar
             </Button>
             {renderAceitoBadge()}
@@ -515,7 +516,7 @@ export default function PreviewDocumento() {
       <main className="flex-grow p-8 max-sm:p-2 max-sm:pt-24 pt-24 bg-white">
         {/* Linha topo: Voltar / Check/Spinner */}
         <div className="flex items-center justify-between mb-4">
-          <Button variant="ghost" onClick={() => navigate(-1)} className="flex items-center gap-2 text-white ">
+          <Button variant="default" onClick={() => navigate(-1)} className="flex items-center gap-2 text-white ">
             <ArrowLeft /> Voltar
           </Button>
 
