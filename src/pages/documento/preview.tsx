@@ -396,7 +396,7 @@ export default function PreviewDocumento() {
       payload.uuid = String(uuid);
     }
     if (state?.tipo === "generico" && id_ged) {
-      payload.id_ged = String(id_ged); // **STRING** para evitar 422
+      payload.id_ged = String(id_ged);
     }
 
     try {

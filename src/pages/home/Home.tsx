@@ -2,7 +2,7 @@
 "use client";
 
 import avatar from "@/assets/Avatar de Recepição.png";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText } from "lucide-react";
 import Header from "@/components/header";
@@ -24,7 +24,7 @@ interface TemplateGED {
 export default function Home() {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [, setTemplates] = useState<TemplateGED[]>([]);
-  const [listsLoaded, setListsLoaded] = useState(false); // 🔧 ALTERAÇÃO
+  const [listsLoaded, setListsLoaded] = useState(false);
 
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: userLoading } = useUser();
@@ -53,8 +53,7 @@ export default function Home() {
         );
         setDocumentos(documentosOrdenados);
         setTemplates(resTemplates.data);
-
-        setListsLoaded(true); // 🔧 ALTERAÇÃO — só aqui marca que carregou
+        setListsLoaded(true);
       } catch (error: any) {
         if (
           controller.signal.aborted ||
@@ -88,9 +87,17 @@ export default function Home() {
     return rule?.id || DEFAULT_TEMPLATE_ID;
   };
 
-  // 🔧 ALTERAÇÃO — LOADER TOTAL DA PÁGINA:
-  // 1) enquanto ainda estamos checando o /user/me → loader
-  // 2) se autenticado mas listas ainda não carregaram → loader
+  // ✅ mover o useMemo antes de qualquer return condicional
+  const gridCols = useMemo(() => {
+    const total = documentos.length;
+    if (total <= 2) return "grid-cols-1 sm:grid-cols-2";
+    if (total === 3) return "grid-cols-1 sm:grid-cols-3";
+    if (total === 4) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-4";
+    if (total === 5) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5";
+    return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+  }, [documentos]);
+
+  // 🔧 Loader total da página — vem DEPOIS dos hooks
   if (userLoading || (isAuthenticated && !listsLoaded)) {
     return <LoadingScreen />;
   }
@@ -102,7 +109,9 @@ export default function Home() {
 
       <main className="relative z-10 flex flex-col items-center flex-grow w-full pt-32">
         {isAuthenticated ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-6xl mx-auto px-4 pb-10">
+          <div
+            className={`grid justify-center items-center gap-6 w-full max-w-6xl mx-auto px-4 pb-10 ${gridCols}`}
+          >
             {documentos.map(({ id, nome }) => (
               <div
                 key={id}
