@@ -1,4 +1,13 @@
+// src/pages/PreviewDocumento.tsx
 "use client";
+
+/**
+ * Preview unificado para Holerite, Benefícios e Genérico.
+ * - Benefícios agora usa exatamente o mesmo layout/cores/estrutura do Holerite (mesmo main branco, gradiente, grids, tabela, responsividade).
+ * - Apenas os dados mudam (títulos e campos).
+ * - Aceite/baixar: se houver pdf_base64, mantém os mesmos botões e fluxo de confirmação.
+ * - Normalização de "cabeçalho" (com acento) -> cabecalho via helper getCabecalho.
+ */
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -24,7 +33,7 @@ interface Cabecalho {
   nome: string;
   funcao_nome: string;
   admissao: string;
-  competencia: string; // pode vir "YYYY", "YYYYMM" ou "YYYY-MM"
+  competencia: string; // "YYYY", "YYYYMM" ou "YYYY-MM"
   lote: number;
   uuid?: string;
 }
@@ -34,7 +43,7 @@ interface Evento {
   evento_nome: string;
   referencia: number;
   valor: number;
-  tipo: string;
+  tipo: string; // "V" | "D"
 }
 
 interface Rodape {
@@ -53,7 +62,7 @@ interface Rodape {
 // Tipos para documentos genéricos
 interface DocumentoGenerico {
   id_documento: string;
-  id_ged?: string; // string! será usado no /status-doc/consultar e /status-doc
+  id_ged?: string;
   situacao: string;
   nomearquivo: string;
   versao1: string;
@@ -80,7 +89,7 @@ function padLeft(value: string | number, width: number): string {
 }
 
 function fmtNum(value: number): string {
-  return value.toLocaleString("pt-BR", {
+  return Number(value || 0).toLocaleString("pt-BR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -94,7 +103,7 @@ function truncate(text: string | undefined | null, maxLen: number): string {
 function fmtRef(value: number): string {
   return value === 0
     ? ""
-    : value.toLocaleString("pt-BR", {
+    : Number(value || 0).toLocaleString("pt-BR", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
@@ -120,6 +129,14 @@ function cleanBase64Pdf(b64: string): string {
 const asStr = (v: unknown) =>
   v === null || v === undefined ? undefined : String(v);
 
+// Helper: normaliza cabecalho (aceita "cabeçalho" e "cabecalho")
+function getCabecalho(obj: any): any {
+  if (!obj) return undefined;
+  if (obj.cabecalho) return obj.cabecalho;
+  if (obj["cabeçalho"]) return obj["cabeçalho"];
+  return undefined;
+}
+
 type PreviewState =
   | ({
       pdf_base64: string;
@@ -129,12 +146,34 @@ type PreviewState =
       rodape: Rodape;
       competencia_forced?: string; // YYYYMM
       aceito?: boolean;
-      uuid?: string; // pode vir do montar
+      uuid?: string;
     })
   | ({
       pdf_base64: string;
       tipo: "generico";
       documento_info: DocumentoGenerico;
+    })
+  | ({
+      // Benefícios
+      tipo: "beneficios";
+      pdf_base64?: string;     // opcional: se o back mandar
+      cabecalho?: any;         // normalizado via getCabecalho
+      ["cabeçalho"]?: any;
+      beneficios?: Array<{
+        empresa: number;
+        filial: number;
+        cliente: number;
+        matricula: number | string;
+        cpf: string;
+        competencia: string;   // YYYYMM
+        lote: number;
+        evento: number;
+        evento_nome: string;
+        referencia: number;
+        valor: number;
+        tipo: "V" | "D";
+      }>;
+      competencia_forced?: string; // YYYYMM
     });
 
 export default function PreviewDocumento() {
@@ -146,8 +185,11 @@ export default function PreviewDocumento() {
   const state = (location.state as PreviewState | null) || null;
 
   useEffect(() => {
-    if (state?.tipo === "generico" && state?.documento_info) {
-      document.title = `${state.documento_info.tipodedoc} - ${state.documento_info._norm_anomes}`;
+    if (!state) return;
+    if (state?.tipo === "generico" && (state as any)?.documento_info) {
+      document.title = `${(state as any).documento_info.tipodedoc} - ${(state as any).documento_info._norm_anomes}`;
+    } else if (state?.tipo === "beneficios") {
+      document.title = "Demonstrativo de Benefícios";
     } else {
       document.title = "Recibo de Pagamento de Salário";
     }
@@ -160,8 +202,8 @@ export default function PreviewDocumento() {
   // fonte “legada” (fallback) — só usada se não houver retorno da consulta
   const legacyAceito = useMemo(() => {
     if (!state) return false;
-    if (state.tipo === "generico") return !!state.documento_info?.aceito;
-    if (typeof state.aceito !== "undefined") return !!state.aceito;
+    if ((state as any).tipo === "generico") return !!(state as any).documento_info?.aceito;
+    if (typeof (state as any).aceito !== "undefined") return !!(state as any).aceito;
     try {
       const raw = sessionStorage.getItem("holeriteData");
       if (!raw) return false;
@@ -175,9 +217,10 @@ export default function PreviewDocumento() {
   // prioridade: resultado da consulta > legacyAceito
   const isAceito = aceiteFlag === true ? true : (aceiteFlag === false ? false : legacyAceito);
 
-  // [NOVO] consulta /status-doc/consultar:
+  // consulta /status-doc/consultar:
   // - holerite: via uuid
-  // - genérico: via id_ged (string) = id_documento
+  // - beneficios: via uuid (no cabecalho)
+  // - genérico: via id_ged
   useEffect(() => {
     if (!state) return;
 
@@ -187,22 +230,31 @@ export default function PreviewDocumento() {
       try {
         setAceiteLoading(true);
 
-        if (state.tipo === "holerite") {
-          // tentar pegar uuid do state/cabecalho/sessionStorage
-          let uuid = state.uuid || state.cabecalho?.uuid;
-          if (!uuid) {
-            try {
-              const raw = sessionStorage.getItem("holeriteData");
-              if (raw) {
-                const j = JSON.parse(raw);
-                uuid = j?.uuid || j?.cabecalho?.uuid;
-              }
-            } catch {}
+        if (state.tipo === "holerite" || state.tipo === "beneficios") {
+          // tentar pegar uuid do state/cabecalho/sessionStorage (holerite)
+          let uuid: string | undefined;
+
+          if (state.tipo === "holerite") {
+            uuid = (state as any).uuid || (state as any).cabecalho?.uuid;
+            if (!uuid) {
+              try {
+                const raw = sessionStorage.getItem("holeriteData");
+                if (raw) {
+                  const j = JSON.parse(raw);
+                  uuid = j?.uuid || getCabecalho(j)?.uuid;
+                }
+              } catch {}
+            }
+          } else {
+            const cab = getCabecalho(state);
+            uuid = cab?.uuid;
           }
+
           if (!uuid) {
             setAceiteFlag(null);
             return;
           }
+
           const res = await api.post<{ id: number; aceito: boolean }>(
             "/status-doc/consultar",
             { uuid: String(uuid) }
@@ -214,8 +266,8 @@ export default function PreviewDocumento() {
 
         // genérico
         const idGed =
-          asStr(state.documento_info?.id_ged) ??
-          asStr(state.documento_info?.id_documento);
+          asStr((state as any)?.documento_info?.id_ged) ??
+          asStr((state as any)?.documento_info?.id_documento);
 
         if (!idGed) {
           setAceiteFlag(null);
@@ -265,14 +317,14 @@ export default function PreviewDocumento() {
   };
 
   const handleDownload = async () => {
-    if (!state?.pdf_base64) {
+    if (!(state as any)?.pdf_base64) {
       alert("PDF não disponível.");
       return;
     }
 
     try {
       setIsDownloading(true);
-      const byteCharacters = atob(cleanBase64Pdf(state.pdf_base64));
+      const byteCharacters = atob(cleanBase64Pdf((state as any).pdf_base64));
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
@@ -283,17 +335,23 @@ export default function PreviewDocumento() {
       const link = document.createElement("a");
       link.href = url;
 
-      if (state.tipo === "generico" && state.documento_info) {
+      if ((state as any).tipo === "generico" && (state as any).documento_info) {
         const nome =
-          state.documento_info.nomearquivo ||
-          state.documento_info.tipodedoc ||
+          (state as any).documento_info.nomearquivo ||
+          (state as any).documento_info.tipodedoc ||
           "documento";
         link.download = `${nome}.pdf`;
-      } else if (state.tipo === "holerite" && state.cabecalho) {
+      } else if ((state as any).tipo === "holerite" && (state as any).cabecalho) {
         const comp =
           normalizeCompetencia((state as any).competencia_forced) ||
-          normalizeCompetencia(state.cabecalho.competencia);
-        link.download = `holerite_${state.cabecalho.matricula}_${comp || "YYYYMM"}.pdf`;
+          normalizeCompetencia((state as any).cabecalho.competencia);
+        link.download = `holerite_${(state as any).cabecalho.matricula}_${comp || "YYYYMM"}.pdf`;
+      } else if ((state as any).tipo === "beneficios") {
+        const cab = getCabecalho(state);
+        const comp =
+          normalizeCompetencia((state as any).competencia_forced) ||
+          normalizeCompetencia(cab?.competencia);
+        link.download = `beneficios_${cab?.matricula ?? "mat"}_${comp || "YYYYMM"}.pdf`;
       } else {
         link.download = "documento.pdf";
       }
@@ -314,55 +372,55 @@ export default function PreviewDocumento() {
 
   // confirma no backend (uuid ou id_ged) e depois baixa
   const handleAcceptAndDownload = async () => {
-    if (!state?.pdf_base64) {
+    if (!(state as any)?.pdf_base64) {
       toast.error("PDF não disponível para confirmar.");
       return;
     }
 
     const tipo_doc =
-      state?.tipo === "holerite"
+      (state as any)?.tipo === "holerite"
         ? "holerite"
+        : (state as any)?.tipo === "beneficios"
+        ? "beneficios"
         : (state as any)?.documento_info?.tipodedoc || "generico";
 
-    // matrícula / competência / unidade (holerite vs genérico)
+    // matrícula / competência / unidade (holerite/beneficios vs genérico)
     let matricula = "";
     let competencia = "";
     let unidade = "";
     let uuid: string | undefined;
     let id_ged: string | undefined;
 
-    if (state?.tipo === "holerite" && state?.cabecalho) {
-      matricula = String(state.cabecalho.matricula ?? "");
+    if ((state as any)?.tipo === "holerite" && (state as any)?.cabecalho) {
+      matricula = String((state as any).cabecalho.matricula ?? "");
       competencia =
         normalizeCompetencia((state as any).competencia_forced) ||
-        normalizeCompetencia(state.cabecalho.competencia);
-
-      if (!/^\d{6}$/.test(competencia)) {
-        toast.error("Competência do holerite inválida", {
-          description:
-            "Não foi possível identificar o mês (formato esperado: YYYYMM). Abra o holerite pelo mês desejado e tente novamente.",
-        });
-        return;
-      }
-      unidade = state.cabecalho.cliente_nome || (state.cabecalho as any).cliente || "";
-      uuid = state.uuid || state.cabecalho?.uuid;
+        normalizeCompetencia((state as any).cabecalho.competencia);
+      unidade = (state as any).cabecalho.cliente_nome || (state as any).cabecalho.cliente || "";
+      uuid = (state as any).uuid || (state as any).cabecalho?.uuid;
       if (!uuid) {
         try {
           const raw = sessionStorage.getItem("holeriteData");
           if (raw) {
             const j = JSON.parse(raw);
-            uuid = j?.uuid || j?.cabecalho?.uuid;
+            uuid = j?.uuid || getCabecalho(j)?.uuid;
           }
         } catch {}
       }
-    } else if (state?.tipo === "generico" && state?.documento_info) {
-      const info = state.documento_info;
+    } else if ((state as any)?.tipo === "beneficios") {
+      const cab = getCabecalho(state);
+      matricula = String(cab?.matricula ?? "");
+      competencia =
+        normalizeCompetencia((state as any).competencia_forced) ||
+        normalizeCompetencia(cab?.competencia);
+      unidade = cab?.cliente_nome || cab?.cliente || "";
+      uuid = cab?.uuid;
+    } else if ((state as any)?.tipo === "generico" && (state as any)?.documento_info) {
+      const info = (state as any).documento_info;
       matricula = String(info.matricula ?? "");
       competencia = normalizeCompetencia(info.anomes || info._norm_anomes);
       unidade = info.cliente || "";
-      id_ged =
-        asStr(info.id_ged) ??
-        asStr(info.id_documento); // sempre string
+      id_ged = asStr(info.id_ged) ?? asStr(info.id_documento);
     }
 
     // CPF do contexto
@@ -384,18 +442,18 @@ export default function PreviewDocumento() {
     const payload: any = {
       aceito: true,
       tipo_doc,
-      base64: cleanBase64Pdf(state.pdf_base64),
+      base64: cleanBase64Pdf((state as any).pdf_base64),
       matricula: String(matricula),
       cpf: String(cpfDigits),
       unidade: String(unidade || ""),
       competencia: String(competencia),
     };
 
-    // adiciona identificador certo
-    if (state?.tipo === "holerite" && uuid) {
+    // identificadores
+    if (((state as any)?.tipo === "holerite" || (state as any)?.tipo === "beneficios") && uuid) {
       payload.uuid = String(uuid);
     }
-    if (state?.tipo === "generico" && id_ged) {
+    if ((state as any)?.tipo === "generico" && id_ged) {
       payload.id_ged = String(id_ged);
     }
 
@@ -424,7 +482,8 @@ export default function PreviewDocumento() {
     );
   }
 
-  if (!state || !state.pdf_base64) {
+  // Guard: só bloqueia quando NÃO for benefícios e não houver PDF
+  if (!state || (!(state as any).pdf_base64 && (state as any).tipo !== "beneficios")) {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
@@ -444,7 +503,7 @@ export default function PreviewDocumento() {
   }
 
   // ======== GENÉRICO ========
-  if (state.tipo === "generico" && state.documento_info) {
+  if ((state as any).tipo === "generico" && (state as any).documento_info) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
         <Header />
@@ -463,7 +522,7 @@ export default function PreviewDocumento() {
             style={{ width: "100%", maxWidth: "900px", height: "600px" }}
           >
             <iframe
-              src={`data:application/pdf;base64,${cleanBase64Pdf(state.pdf_base64)}`}
+              src={`data:application/pdf;base64,${cleanBase64Pdf((state as any).pdf_base64)}`}
               className="w-full h-full border-0"
               title="Visualizador de PDF"
             />
@@ -487,8 +546,194 @@ export default function PreviewDocumento() {
     );
   }
 
+  // ======== BENEFÍCIOS — Layout idêntico ao Holerite ========
+  if ((state as any).tipo === "beneficios") {
+    const cab = getCabecalho(state) || {};
+    const lista = (state as any).beneficios ?? [];
+
+    // Totais para preencher a seção idêntica à do holerite
+    const totV = lista.reduce((s: number, b: any) => s + (b?.tipo === "V" ? Number(b.valor || 0) : 0), 0);
+    const totD = lista.reduce((s: number, b: any) => s + (b?.tipo === "D" ? Number(b.valor || 0) : 0), 0);
+    const valLiq = totV - totD;
+
+    return (
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
+        <Header />
+        <main className="flex-grow p-4 max-sm:p-2 max-sm:pt-24 pt-24 bg-white">
+          {/* Linha topo: Voltar / Check/Spinner (igual holerite) */}
+          <div className="flex items-center justify-between mb-4">
+            <Button variant="default" onClick={() => navigate(-1)} className="flex items-center gap-2 text-white ">
+              <ArrowLeft /> Voltar
+            </Button>
+            {renderAceitoBadge()}
+          </div>
+
+          {/* Cabeçalho (estrutura idêntica; muda apenas o título) */}
+          <div className="mb-6 flex flex-col md:flex-row justify-between items-start">
+            <div className="flex flex-col">
+              <h1 className="text-lg md:text-xl font-bold">Demonstrativo de Benefícios</h1>
+              <div className="text-sm md:text-base">
+                <strong>Empresa:</strong>{" "}
+                {cab?.empresa !== undefined ? `${padLeft(cab.empresa, 3)} - ${cab?.filial ?? ""} ` : ""}
+                {cab?.empresa_nome ?? ""}
+                {cab?.empresa_cnpj && (
+                  <div className="block md:hidden text-xs pr-4 whitespace-nowrap overflow-x-auto">
+                    <strong>Nº Inscrição:</strong> {cab.empresa_cnpj}
+                  </div>
+                )}
+              </div>
+              <div className="text-sm md:text-base mt-2">
+                <strong>Cliente:</strong>{" "}
+                {(cab?.cliente ?? "") + (cab?.cliente_nome ? ` ${cab.cliente_nome}` : "")}
+                {cab?.cliente_cnpj && (
+                  <div className="block md:hidden text-xs whitespace-nowrap overflow-x-auto">
+                    <strong>Nº Inscrição:</strong> {cab.cliente_cnpj}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CNPJs (desktop) */}
+            <div className="text-xs md:text-sm text-left md:text-right md:pt-7 whitespace-nowrap">
+              {cab?.empresa_cnpj && (
+                <div className="hidden md:block">
+                  <strong>Nº Inscrição:</strong> {cab.empresa_cnpj}
+                </div>
+              )}
+              {cab?.cliente_cnpj && (
+                <div className="hidden md:block">
+                  <strong>Nº Inscrição:</strong> {cab.cliente_cnpj}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Grid infos (idêntico ao holerite) */}
+          <div className="mb-6 text-xs md:text-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
+            <div className="flex flex-col">
+              <strong className="pb-1 md:pb-2">Código</strong> {cab?.matricula ? padLeft(cab.matricula, 6) : "-"}
+            </div>
+            <div className="flex flex-col">
+              <strong className="pb-1 md:pb-2">Nome do Funcionário</strong> {cab?.nome ? truncate(cab.nome, 30) : "-"}
+            </div>
+            <div className="flex flex-col">
+              <strong className="pb-1 md:pb-2">Função</strong> {cab?.funcao_nome ?? "-"}
+            </div>
+            <div className="flex flex-col">
+              <strong className="pb-1 md:pb-2">Admissão</strong> {cab?.admissao ?? "-"}
+            </div>
+            <div className="flex flex-col">
+              <strong className="pb-1 md:pb-2">Competência</strong>{" "}
+              {(
+                (state as any).competencia_forced ||
+                cab?.competencia ||
+                ""
+              ).toString().replace(/(\d{4})(\d{2})/, "$1-$2")}
+            </div>
+          </div>
+
+          <div className="bg-gray-300 w-full h-[1px] my-2"></div>
+
+          {/* Tabela (mesma estrutura do holerite; dados dos benefícios) */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-xs md:text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="p-1 md:p-2 text-left border-r-[1px]">
+                    <span className="sm:hidden">Cód.</span>
+                    <span className="hidden sm:inline">Cód.</span>
+                  </th>
+                  <th className="p-1 md:p-2 text-center border-r-[1px]">
+                    <span className="sm:hidden">Descr</span>
+                    <span className="hidden sm:inline">Descrição</span>
+                  </th>
+                  <th className="p-1 md:p-2 text-center border-r-[1px]">
+                    <span className="sm:hidden">Ref</span>
+                    <span className="hidden sm:inline">Referência</span>
+                  </th>
+                  <th className="p-1 md:p-2 text-center border-r-[1px]">
+                    <span className="sm:hidden">Venci</span>
+                    <span className="hidden sm:inline">Vencimentos</span>
+                  </th>
+                  <th className="p-1 md:p-2 text-center">
+                    <span className="sm:hidden">Desc</span>
+                    <span className="hidden sm:inline">Descontos</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((b: any, idx: number) => (
+                  <tr key={idx} className={idx % 2 ? "bg-gray-100" : "bg-white"}>
+                    <td className="p-1 md:p-2 border-r-[1px]">{b.evento}</td>
+                    <td className="p-1 md:p-2 border-r-[1px]">{truncate(b.evento_nome, 35)}</td>
+                    <td className="p-1 md:p-2 text-center border-r-[1px]">{b?.referencia ? fmtRef(Number(b.referencia)) : ""}</td>
+                    <td className="p-1 md:p-2 text-center border-r-[1px]">{b?.tipo === "V" ? fmtNum(Number(b.valor || 0)) : ""}</td>
+                    <td className="p-1 md:p-2 text-center">{b?.tipo === "D" ? fmtNum(Number(b.valor || 0)) : ""}</td>
+                  </tr>
+                ))}
+                {(!lista || lista.length === 0) && (
+                  <tr>
+                    <td colSpan={5} className="text-center p-3">Sem lançamentos.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-gray-300 w-full h-[1px] my-2"></div>
+
+          {/* Totais (igual ao holerite) */}
+          <div className="my-4 md:my-6 flex flex-col sm:flex-row justify-between text-xs md:text-sm">
+            <div className="hidden sm:flex justify-end sm:justify-start xl:pl-[700px]">
+              <div className="flex flex-col text-right">
+                <strong>Total Vencimentos:</strong> {fmtNum(totV)}
+              </div>
+            </div>
+            <div className="sm:hidden flex flex-col gap-2">
+              <div className="flex justify-between">
+                <strong>Total Vencimentos:</strong>
+                <span>{fmtNum(totV)}</span>
+              </div>
+              <div className="flex justify-between">
+                <strong>Total Descontos:</strong>
+                <span>{fmtNum(totD)}</span>
+              </div>
+              <div className="flex justify-between">
+                <strong>Valor Líquido:</strong>
+                <span>{fmtNum(valLiq)}</span>
+              </div>
+            </div>
+            <div className="hidden sm:flex flex-col text-right">
+              <div className="flex flex-col text-right">
+                <strong>Total Descontos:</strong> {fmtNum(totD)}
+              </div>
+              <div className="pt-2 md:pt-4">
+                <strong>Valor Líquido:</strong> {fmtNum(valLiq)}
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* Botão inferior (idêntico ao holerite) — só aparece se houver PDF */}
+        {(state as any).pdf_base64 && (
+          <div className="flex justify-center items-center p-8 md:p-16">
+            <Button
+              onClick={isAceito ? handleDownload : handleAcceptAndDownload}
+              className="bg-green-600 hover:bg-green-500 h-10"
+              disabled={isDownloading}
+            >
+              <Download className="mr-2 w-4 h-4" />
+              {isDownloading ? "Confirmando..." : (isAceito ? "Baixar demonstrativo" : "Aceitar e baixar demonstrativo")}
+            </Button>
+          </div>
+        )}
+        <Footer />
+      </div>
+    );
+  }
+
   // ======== HOLERITE ========
-  if (state.tipo === "holerite" && (!state.cabecalho || !state.eventos || !state.rodape)) {
+  if ((state as any).tipo === "holerite" && (!(state as any).cabecalho || !(state as any).eventos || !(state as any).rodape)) {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
@@ -507,8 +752,8 @@ export default function PreviewDocumento() {
     );
   }
 
-  if (state.tipo !== "holerite") return null;
-  const { cabecalho, eventos, rodape } = state;
+  if ((state as any).tipo !== "holerite") return null;
+  const { cabecalho, eventos, rodape } = state as any;
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
@@ -564,7 +809,7 @@ export default function PreviewDocumento() {
           </div>
           <div className="flex flex-col">
             <strong className="pb-1 md:pb-2">Competência</strong>{" "}
-            {state.tipo === "holerite" && (state as any).competencia_forced
+            {(state as any).competencia_forced
               ? `${(state as any).competencia_forced.slice(0,4)}-${(state as any).competencia_forced.slice(4,6)}`
               : cabecalho.competencia}
           </div>
@@ -599,7 +844,7 @@ export default function PreviewDocumento() {
               </tr>
             </thead>
             <tbody>
-              {eventos.map((e: Evento, idx: number) => (
+              {(eventos as Evento[]).map((e: Evento, idx: number) => (
                 <tr key={idx} className={idx % 2 ? "bg-gray-100" : "bg-white"}>
                   <td className="p-1 md:p-2 border-r-[1px]">{e.evento}</td>
                   <td className="p-1 md:p-2 border-r-[1px]">{truncate(e.evento_nome, 35)}</td>

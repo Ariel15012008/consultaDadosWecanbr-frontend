@@ -1,3 +1,4 @@
+// src/pages/DocumentList.tsx
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -30,6 +31,11 @@ interface EmpresaMatricula {
 }
 
 interface DocumentoHolerite {
+  id_documento: string;
+  anomes: string;
+}
+
+interface DocumentoBeneficio {
   id_documento: string;
   anomes: string;
 }
@@ -93,7 +99,7 @@ interface DocumentoGenerico {
   _norm_anomes: string;
 }
 
-type DocumentoUnion = DocumentoHolerite | DocumentoGenerico;
+type DocumentoUnion = DocumentoHolerite | DocumentoGenerico | DocumentoBeneficio;
 
 // ================================================
 // CONTRATO: lista de competências (modo discovery)
@@ -196,9 +202,22 @@ export default function DocumentList() {
   const { user, isLoading: userLoading } = useUser();
   const [searchParams] = useSearchParams();
 
-  const tipoDocumento = searchParams.get("tipo") || "holerite";
+  // ===== Opção 2: normalizar parametros e mapear generico+Beneficios => beneficios
+  const normalize = (s: string) =>
+    (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  const tipoParam = normalize(searchParams.get("tipo") || "holerite");
+  const nomeDocumentoRaw = searchParams.get("documento") || "";
+  const docParam = normalize(nomeDocumentoRaw);
+
+  const tipoDocumento =
+    tipoParam === "beneficios" ||
+    (tipoParam === "generico" && /^beneficios?$/.test(docParam))
+      ? "beneficios"
+      : tipoParam;
+
   const templateId = searchParams.get("template") || "3";
-  const nomeDocumento = searchParams.get("documento") || "";
+  const nomeDocumento = nomeDocumentoRaw;
 
   // ================================================
   // ESTADOS GERAIS
@@ -244,7 +263,7 @@ export default function DocumentList() {
     null
   );
 
-  // === genéricos (não holerite) ===
+  // === genéricos/benefícios (não holerite) ===
   const [selectedEmpresaIdGen, setSelectedEmpresaIdGen] = useState<
     string | null
   >(null);
@@ -289,7 +308,7 @@ export default function DocumentList() {
     return (empresasMap.get(selectedEmpresaId)?.matriculas.length ?? 0) > 1;
   }, [selectedEmpresaId, empresasMap]);
 
-  // === helpers para genéricos ===
+  // === helpers para genéricos/benefícios ===
   const matriculasDaEmpresaSelecionadaGen = useMemo(() => {
     if (!selectedEmpresaIdGen) return [];
     const item = empresasMap.get(selectedEmpresaIdGen);
@@ -349,6 +368,30 @@ export default function DocumentList() {
     const unicos = Array.from(new Set(meses));
     return unicos.sort((a, b) => Number(b) - Number(a));
   }, [competenciasGen, selectedYearGen]);
+
+  // ================================================
+  // Benefícios (não gestor): discovery por empresa/matrícula
+  // ================================================
+  const [isLoadingCompetenciasBen, setIsLoadingCompetenciasBen] =
+    useState(false);
+  const [competenciasBen, setCompetenciasBen] = useState<CompetenciaItem[]>([]);
+  const [selectedYearBen, setSelectedYearBen] = useState<number | null>(null);
+  const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
+
+  const anosDisponiveisBen = useMemo(() => {
+    const setAnos = new Set<number>();
+    competenciasBen.forEach((c) => setAnos.add(c.ano));
+    return Array.from(setAnos).sort((a, b) => b - a);
+  }, [competenciasBen]);
+
+  const mesesDoAnoSelecionadoBen = useMemo(() => {
+    if (!selectedYearBen) return [];
+    const meses = competenciasBen
+      .filter((c) => c.ano === selectedYearBen)
+      .map((c) => c.mes);
+    const unicos = Array.from(new Set(meses));
+    return unicos.sort((a, b) => Number(b) - Number(a));
+  }, [competenciasBen, selectedYearBen]);
 
   // ================================================
   // CPF helpers (gestor)
@@ -419,6 +462,7 @@ export default function DocumentList() {
       isLoading ||
       isLoadingCompetencias ||
       isLoadingCompetenciasGen ||
+      isLoadingCompetenciasBen ||
       !!loadingPreviewId ||
       userLoading ||
       meLoading
@@ -427,6 +471,7 @@ export default function DocumentList() {
     isLoading,
     isLoadingCompetencias,
     isLoadingCompetenciasGen,
+    isLoadingCompetenciasBen,
     loadingPreviewId,
     userLoading,
     meLoading,
@@ -460,7 +505,7 @@ export default function DocumentList() {
         }));
         setEmpresasDoUsuario(dadosList);
 
-        // Auto-seleção por empresa (para holerite e genéricos)
+        // Auto-seleção por empresa (para holerite e genéricos/benefícios)
         if (dadosList.length > 0) {
           const porEmpresa = new Map<string, EmpresaMatricula[]>();
           for (const d of dadosList) {
@@ -486,7 +531,7 @@ export default function DocumentList() {
             setSelectedMatricula(null);
           }
 
-          // genéricos
+          // genéricos/benefícios
           if (empresas.length === 1) {
             const [empresaId, arr] = empresas[0];
             setSelectedEmpresaIdGen(empresaId);
@@ -515,11 +560,14 @@ export default function DocumentList() {
         setSelectedYear(null);
         setCompetenciasGen([]);
         setSelectedYearGen(null);
+        setCompetenciasBen([]);
+        setSelectedYearBen(null);
         setDocuments([]);
         setPaginaAtual(1);
         lastFetchKeyRef.current = null;
         setCompetenciasHoleriteLoaded(false);
         setCompetenciasGenLoaded(false);
+        setCompetenciasBenLoaded(false);
       } catch (err: any) {
         console.error("Falha ao carregar /user/me:", err);
         if (!user?.gestor) {
@@ -632,11 +680,15 @@ export default function DocumentList() {
   ]);
 
   // ================================================
-  // Genéricos: carregar competências (empresa + matrícula)
+  // Genéricos: carregar competências (empresa + matrícula) [EXCETO benefícios]
   // ================================================
   useEffect(() => {
     const deveRodarDiscoveryGen =
-      !userLoading && user && !user.gestor && tipoDocumento !== "holerite";
+      !userLoading &&
+      user &&
+      !user.gestor &&
+      tipoDocumento !== "holerite" &&
+      tipoDocumento !== "beneficios";
     if (!deveRodarDiscoveryGen) return;
 
     if (!selectedEmpresaIdGen) return;
@@ -727,6 +779,91 @@ export default function DocumentList() {
     meCpf,
   ]);
 
+  // ================================================
+  // Benefícios: carregar competências (empresa + matrícula)
+  // ================================================
+  useEffect(() => {
+    const deveRodarDiscoveryBen =
+      !userLoading && user && !user.gestor && tipoDocumento === "beneficios";
+    if (!deveRodarDiscoveryBen) return;
+
+    if (!selectedEmpresaIdGen) return;
+
+    const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+    const matriculaEfetivaGen = requerEscolherMatriculaGen
+      ? selectedMatriculaGen
+      : arr[0];
+    if (!matriculaEfetivaGen) return;
+
+    const controller = new AbortController();
+
+    const run = async () => {
+      try {
+        setIsLoadingCompetenciasBen(true);
+        setDocuments([]);
+        setPaginaAtual(1);
+        setCompetenciasBenLoaded(false);
+
+        const payload = {
+          cpf: meCpf,
+          matricula: matriculaEfetivaGen,
+        };
+
+        const res = await api.post<{ competencias: { ano: number; mes: number }[] }>(
+          "/documents/beneficios/competencias",
+          payload,
+          { signal: controller.signal }
+        );
+
+        if (controller.signal.aborted) return;
+
+        const lista = (res.data?.competencias ?? []).map((x) => ({
+          ano: x.ano,
+          mes: String(x.mes).padStart(2, "0"),
+        })) as CompetenciaItem[];
+
+        setCompetenciasBen(lista);
+
+        if (!lista.length) {
+          toast.warning(`Nenhum período de benefícios encontrado.`);
+        } else {
+          toast.success(`Períodos disponíveis de benefícios carregados.`);
+        }
+      } catch (err: any) {
+        if (
+          controller.signal.aborted ||
+          err?.code === "ERR_CANCELED" ||
+          err?.name === "CanceledError"
+        ) {
+          return;
+        }
+        toast.error("Erro ao carregar períodos de benefícios", {
+          description: extractErrorMessage(
+            err,
+            "Falha ao consultar períodos disponíveis."
+          ),
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingCompetenciasBen(false);
+          setCompetenciasBenLoaded(true);
+        }
+      }
+    };
+
+    run();
+    return () => controller.abort();
+  }, [
+    userLoading,
+    user,
+    tipoDocumento,
+    selectedEmpresaIdGen,
+    selectedMatriculaGen,
+    requerEscolherMatriculaGen,
+    empresasMap,
+    meCpf,
+  ]);
+
   // ==========================================
   // Holerite: buscar mês -> prévia
   // ==========================================
@@ -766,6 +903,10 @@ export default function DocumentList() {
         uuid?: string;
       }>("/documents/holerite/buscar", payload);
 
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("holerite/buscar ->", res.data);
+      }
+
       if (res.data && res.data.cabecalho) {
         const documento: DocumentoHolerite = {
           id_documento: String(res.data.cabecalho.lote || "1"),
@@ -784,6 +925,100 @@ export default function DocumentList() {
       }
     } catch (err: any) {
       toast.error("Erro ao buscar holerite", {
+        description: extractErrorMessage(
+          err,
+          "Falha ao consultar o período escolhido."
+        ),
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ==========================================
+  // Benefícios: buscar mês -> prévia
+  // (ALTERADO: critério menos rígido + tipos opcionais)
+// ==========================================
+  const buscarBeneficiosPorAnoMes = async (ano: number, mes: string) => {
+    if (!selectedEmpresaIdGen) {
+      toast.error("Selecione a empresa para continuar.");
+      return;
+    }
+    const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+    const matriculaEfetivaGen = requerEscolherMatriculaGen
+      ? selectedMatriculaGen
+      : arr[0];
+    if (!matriculaEfetivaGen) {
+      toast.error("Selecione a matrícula para continuar.");
+      return;
+    }
+
+    const competenciaYYYYMM = makeYYYYMMValue(ano, mes);
+
+    setIsLoading(true);
+    setDocuments([]);
+    setPaginaAtual(1);
+
+    try {
+      const payload = {
+        cpf: meCpf,
+        matricula: matriculaEfetivaGen,
+        competencia: competenciaYYYYMM,
+      };
+
+      const res = await api.post<{
+        cpf?: string;
+        matricula?: string | number;
+        competencia?: string;
+        cabecalho?: {
+          empresa?: number;
+          filial?: number;
+          empresa_nome?: string;
+          empresa_cnpj?: string;
+          cliente?: number;
+          cliente_nome?: string;
+          cliente_cnpj?: string;
+          matricula?: number | string;
+          nome?: string;
+          funcao_nome?: string;
+          admissao?: string;
+          competencia?: string;
+          lote?: number;
+          uuid?: string;
+        };
+        beneficios?: any[];
+      }>("/documents/beneficios/buscar", payload);
+
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("beneficios/buscar ->", res.data);
+      }
+
+      const hasCabecalho =
+        !!res.data?.cabecalho &&
+        Object.keys(res.data.cabecalho || {}).length > 0;
+
+      const hasBeneficios =
+        Array.isArray(res.data?.beneficios) &&
+        (res.data.beneficios as any[]).length > 0;
+
+      if (hasCabecalho || hasBeneficios) {
+        const documento: DocumentoBeneficio = {
+          id_documento: String(res.data.cabecalho?.lote ?? "1"),
+          anomes: competenciaYYYYMM,
+        };
+        setDocuments([documento]);
+        sessionStorage.setItem("beneficiosData", JSON.stringify(res.data));
+        toast.success("Benefícios encontrados!", {
+          description: `Período ${toYYYYDashMM(documento.anomes)} localizado.`,
+        });
+
+        await visualizarDocumento(documento);
+        return;
+      } else {
+        toast.warning("Nenhum benefício encontrado para o mês selecionado.");
+      }
+    } catch (err: any) {
+      toast.error("Erro ao buscar benefícios", {
         description: extractErrorMessage(
           err,
           "Falha ao consultar o período escolhido."
@@ -963,20 +1198,83 @@ export default function DocumentList() {
           setLoadingPreviewId(null);
           previewAbortRef.current = null;
 
-          // enviar uuid pro Preview (pra ele consultar /status-doc/consultar)
           const uuid = res.data.uuid || res.data.cabecalho?.uuid;
 
           navigate("/documento/preview", {
             state: {
               ...res.data,
               tipo: "holerite",
-              competencia_forced: competenciaYYYYMM, // YYYYMM clicado
+              competencia_forced: competenciaYYYYMM,
               uuid,
             },
           });
           toast.success("Documento aberto com sucesso!");
         } else {
           throw new Error("Não foi possível gerar o PDF do holerite");
+        }
+      } else if (tipoDocumento === "beneficios") {
+        const docBen = doc as DocumentoBeneficio;
+
+        // matricula efetiva
+        let matForPreview = "";
+        if (user?.gestor) {
+          matForPreview = matricula;
+        } else if (selectedEmpresaIdGen) {
+          const arr =
+            empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+          matForPreview = requerEscolherMatriculaGen
+            ? selectedMatriculaGen ?? ""
+            : arr[0] ?? "";
+        }
+
+        const competenciaYYYYMM = normalizeYYYYMM(docBen.anomes);
+
+        const payload = {
+          cpf: user?.gestor
+            ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
+            : meCpf,
+          matricula: matForPreview,
+          competencia: competenciaYYYYMM,
+        };
+
+        const res = await withRetry(
+          () =>
+            api.post<{
+              cpf: string;
+              matricula: string;
+              competencia: string;
+              cabecalho?: {
+                lote?: number;
+                uuid?: string;
+                [k: string]: any;
+              };
+              beneficios?: any[];
+            }>(
+              "/documents/beneficios/buscar",
+              payload,
+              {
+                timeout: 45000,
+                signal: controller.signal,
+              }
+            ),
+          2,
+          700
+        );
+
+        if (res.data) {
+          setLoadingPreviewId(null);
+          previewAbortRef.current = null;
+
+          navigate("/documento/preview", {
+            state: {
+              ...res.data,
+              tipo: "beneficios",
+              competencia_forced: competenciaYYYYMM,
+            },
+          });
+          toast.success("Documento de benefícios aberto!");
+        } else {
+          throw new Error("Não foi possível obter os dados de benefícios");
         }
       } else {
         const docGenerico = doc as DocumentoGenerico;
@@ -1012,11 +1310,10 @@ export default function DocumentList() {
           setLoadingPreviewId(null);
           previewAbortRef.current = null;
 
-          // ⚠️ Aqui não consultamos aceite. Isso será feito no Preview usando id_ged = id_documento
           navigate("/documento/preview", {
             state: {
               pdf_base64: pdfBase64,
-              documento_info: docGenerico, // contém id_documento
+              documento_info: docGenerico,
               tipo: "generico",
             },
           });
@@ -1128,6 +1425,16 @@ export default function DocumentList() {
           <td className="px-4 py-2 text-center">{docHolerite.id_documento}</td>
         </>
       );
+    } else if (tipoDocumento === "beneficios") {
+      const docBen = doc as DocumentoBeneficio;
+      return (
+        <>
+          <td className="px-4 py-2 text-left">
+            {toYYYYDashMM(docBen.anomes)}
+          </td>
+          <td className="px-4 py-2 text-center">{docBen.id_documento}</td>
+        </>
+      );
     } else {
       const docGenerico = doc as DocumentoGenerico;
       return (
@@ -1140,6 +1447,14 @@ export default function DocumentList() {
 
   const renderTableHeader = () => {
     if (tipoDocumento === "holerite") {
+      return (
+        <>
+          <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
+          <th className="py-3 text-center min-w-[100px]">Lote</th>
+          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+        </>
+      );
+    } else if (tipoDocumento === "beneficios") {
       return (
         <>
           <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
@@ -1163,16 +1478,21 @@ export default function DocumentList() {
     isLoading ||
     isLoadingCompetencias ||
     isLoadingCompetenciasGen ||
+    isLoadingCompetenciasBen ||
     !!loadingPreviewId;
 
   // ================================================
   // UI
   // ================================================
   const showDiscoveryFlow = !user?.gestor && tipoDocumento === "holerite";
+  const showDiscoveryFlowBeneficios =
+    !user?.gestor && tipoDocumento === "beneficios";
   const showDiscoveryFlowGenerico =
-    !user?.gestor && tipoDocumento !== "holerite";
+    !user?.gestor && tipoDocumento !== "holerite" && tipoDocumento !== "beneficios";
   const gestorGridCols =
-    tipoDocumento === "holerite" ? "sm:grid-cols-4" : "sm:grid-cols-4";
+    tipoDocumento === "holerite" || tipoDocumento === "beneficios"
+      ? "sm:grid-cols-4"
+      : "sm:grid-cols-4";
 
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden">
@@ -1205,6 +1525,8 @@ export default function DocumentList() {
           <h2 className="text-xl font-bold mb-6 text-center">
             {tipoDocumento === "holerite"
               ? "Holerite"
+              : tipoDocumento === "beneficios"
+              ? "Benefícios"
               : `Buscar ${nomeDocumento}`}
           </h2>
 
@@ -1433,6 +1755,231 @@ export default function DocumentList() {
                 </section>
               </div>
             </>
+          ) : showDiscoveryFlowBeneficios ? (
+            // ===================== DISCOVERY (NÃO GESTOR / BENEFÍCIOS) =====================
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                {/* EMPRESA (BEN) */}
+                <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Empresa
+                  </h3>
+                  {!selectedEmpresaIdGen ? (
+                    empresasUnicas.length === 0 ? (
+                      <p className="text-center text-gray-400">
+                        Nenhuma empresa encontrada.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2">
+                        {empresasUnicas.map((e) => (
+                          <Button
+                            key={e.id}
+                            variant="default"
+                            title={e.nome}
+                            className="w-full h-11 min-w-0 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            onClick={() => {
+                              setSelectedEmpresaIdGen(e.id);
+                              setSelectedEmpresaNomeGen(e.nome);
+                              setSelectedMatriculaGen(null);
+                              setCompetenciasBen([]);
+                              setSelectedYearBen(null);
+                              setDocuments([]);
+                              setPaginaAtual(1);
+                              setCompetenciasBenLoaded(false);
+                            }}
+                            disabled={isAnyLoading}
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span className="truncate">{e.nome}</span>
+                              {e.qtdMatriculas > 1 && (
+                                <span className="ml-1 shrink-0 text-xs opacity-90 bg-black/20 rounded px-2 py-0.5">
+                                  {e.qtdMatriculas} matr.
+                                </span>
+                              )}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="text-sm text-gray-300 text-center">
+                        Selecionada:{" "}
+                        <span className="font-semibold text-white">
+                          {selectedEmpresaNomeGen}
+                        </span>
+                      </div>
+                      <Button
+                        variant="default"
+                        className="w-full h-10 border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        onClick={() => {
+                          setSelectedEmpresaIdGen(null);
+                          setSelectedEmpresaNomeGen(null);
+                          setSelectedMatriculaGen(null);
+                          setCompetenciasBen([]);
+                          setSelectedYearBen(null);
+                          setDocuments([]);
+                          setPaginaAtual(1);
+                          setCompetenciasBenLoaded(false);
+                        }}
+                        disabled={isAnyLoading}
+                      >
+                        Trocar empresa
+                      </Button>
+                    </div>
+                  )}
+                </section>
+
+                {/* ====== DIREITA — MATRÍCULA (BEN) ====== */}
+                <section className="bg-[#151527] border border-gray-700 rounded-lg p-4 m-3 h-full flex flex-col">
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Matrícula
+                  </h3>
+
+                  {requerEscolherMatriculaGen ? (
+                    !selectedMatriculaGen ? (
+                      <div
+                        className="grid grid-cols-1 gap-2 overflow-y-auto pr-1"
+                        style={{ maxHeight: "148px" }}
+                      >
+                        {matriculasDaEmpresaSelecionadaGen.map((m) => (
+                          <Button
+                            key={m}
+                            variant="default"
+                            className="w-full h-11 bg-teal-600 hover:bg-teal-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            onClick={() => {
+                              setSelectedMatriculaGen(m);
+                              setCompetenciasBen([]);
+                              setSelectedYearBen(null);
+                              setCompetenciasBenLoaded(false);
+                            }}
+                            disabled={isAnyLoading}
+                          >
+                            Matrícula {m}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="text-sm text-gray-300 text-center">
+                          Selecionada:{" "}
+                          <span className="font-semibold text-white">
+                            {selectedMatriculaGen}
+                          </span>
+                        </div>
+                        <Button
+                          variant="default"
+                          className="w-full h-10 border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => {
+                            setSelectedMatriculaGen(null);
+                            setCompetenciasBen([]);
+                            setSelectedYearBen(null);
+                            setDocuments([]);
+                            setPaginaAtual(1);
+                            setCompetenciasBenLoaded(false);
+                          }}
+                          disabled={isAnyLoading}
+                        >
+                          Trocar matrícula
+                        </Button>
+                      </div>
+                    )
+                  ) : selectedEmpresaIdGen ? (
+                    // Só 1 matrícula
+                    <div className="space-y-2">
+                      <Button
+                        variant="default"
+                        disabled
+                        className="w-full h-11 bg-teal-600 opacity-70 cursor-not-allowed"
+                      >
+                        Matrícula {matriculasDaEmpresaSelecionadaGen[0]}
+                      </Button>
+                      <p className="text-xs text-center text-gray-400">
+                        Selecionada automaticamente (empresa com uma única
+                        matrícula).
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center">
+                      Selecione uma empresa acima.
+                    </p>
+                  )}
+                </section>
+
+                {/* ANOS & MESES (BEN) */}
+                <section className="md:col-span-2 bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Períodos (anos e meses)
+                  </h3>
+                  {!selectedEmpresaIdGen ? (
+                    <p className="text-center text-gray-400">
+                      Selecione uma empresa para carregar os períodos.
+                    </p>
+                  ) : requerEscolherMatriculaGen && !selectedMatriculaGen ? (
+                    <p className="text-center text-gray-400">
+                      Selecione a matrícula para carregar os períodos.
+                    </p>
+                  ) : isLoadingCompetenciasBen || !competenciasBenLoaded ? (
+                    <p className="text-center">
+                      Carregando períodos disponíveis...
+                    </p>
+                  ) : anosDisponiveisBen.length === 0 ? (
+                    <p className="text-center text-gray-300">
+                      Nenhum período de benefícios encontrado para a seleção
+                      atual.
+                    </p>
+                  ) : !selectedYearBen ? (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                      {anosDisponiveisBen.map((ano) => (
+                        <Button
+                          key={ano}
+                          variant="default"
+                          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => setSelectedYearBen(ano)}
+                          disabled={isAnyLoading}
+                        >
+                          {ano}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
+                        {mesesDoAnoSelecionadoBen.map((mm) => (
+                          <Button
+                            key={mm}
+                            variant="default"
+                            className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            onClick={() =>
+                              buscarBeneficiosPorAnoMes(selectedYearBen, mm)
+                            }
+                            disabled={isAnyLoading}
+                          >
+                            {isAnyLoading
+                              ? "Buscando..."
+                              : makeYYYYMMLabel(selectedYearBen, mm)}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="flex justify-center">
+                        <Button
+                          variant="default"
+                          className="border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => {
+                            setSelectedYearBen(null);
+                            setDocuments([]);
+                            setPaginaAtual(1);
+                          }}
+                          disabled={isAnyLoading}
+                        >
+                          Escolher outro ano
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </section>
+              </div>
+            </>
           ) : showDiscoveryFlowGenerico ? (
             // ===================== DISCOVERY (NÃO GESTOR / GENÉRICOS) =====================
             <>
@@ -1552,8 +2099,6 @@ export default function DocumentList() {
                             setSelectedMatriculaGen(null);
                             setCompetenciasGen([]);
                             setSelectedYearGen(null);
-                            setDocuments([]);
-                            setPaginaAtual(1);
                             setCompetenciasGenLoaded(false);
                           }}
                           disabled={isAnyLoading}
@@ -1792,6 +2337,61 @@ export default function DocumentList() {
                                 "Não foi localizado holerite para o período informado.",
                             });
                           }
+                        } else if (tipoDocumento === "beneficios") {
+                          const payload = {
+                            cpf: cpfNumbers,
+                            matricula: matricula.trim(),
+                            competencia: formatCompetencia(anomes),
+                          };
+
+                          const res = await api.post<{
+                            cpf?: string;
+                            matricula?: string | number;
+                            competencia?: string;
+                            cabecalho?: { lote?: number; [k: string]: any };
+                            beneficios?: any[];
+                          }>(
+                            "/documents/beneficios/buscar",
+                            payload
+                          );
+
+                          if (process.env.NODE_ENV !== "production") {
+                            console.debug("beneficios/buscar (gestor) ->", res.data);
+                          }
+
+                          const hasCabecalho =
+                            !!res.data?.cabecalho &&
+                            Object.keys(res.data.cabecalho || {}).length > 0;
+
+                          const hasBeneficios =
+                            Array.isArray(res.data?.beneficios) &&
+                            (res.data.beneficios as any[]).length > 0;
+
+                          if (hasCabecalho || hasBeneficios) {
+                            const competenciaYYYYMM =
+                              normalizeYYYYMM(res.data.competencia || formatCompetencia(anomes));
+
+                            const documento: DocumentoBeneficio = {
+                              id_documento: String(res.data.cabecalho?.lote ?? "1"),
+                              anomes: competenciaYYYYMM,
+                            };
+                            setDocuments([documento]);
+                            sessionStorage.setItem(
+                              "beneficiosData",
+                              JSON.stringify(res.data)
+                            );
+                            toast.success("Benefícios encontrados!", {
+                              description: `Documento do período ${toYYYYDashMM(
+                                documento.anomes
+                              )} localizado.`,
+                            });
+                          } else {
+                            setDocuments([]);
+                            toast.warning("Nenhum benefício encontrado", {
+                              description:
+                                "Não foi localizado documento de benefícios para o período informado.",
+                            });
+                          }
                         } else {
                           const cp = [
                             { nome: "tipodedoc", valor: nomeDocumento },
@@ -1916,7 +2516,11 @@ export default function DocumentList() {
                   {documentosVisiveis.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={tipoDocumento === "holerite" ? 3 : 2}
+                        colSpan={
+                          tipoDocumento === "holerite" || tipoDocumento === "beneficios"
+                            ? 3
+                            : 2
+                        }
                         className="text-center py-4 text-gray-400"
                       >
                         Nenhum documento encontrado.
