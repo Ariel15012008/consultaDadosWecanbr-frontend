@@ -99,7 +99,10 @@ interface DocumentoGenerico {
   _norm_anomes: string;
 }
 
-type DocumentoUnion = DocumentoHolerite | DocumentoGenerico | DocumentoBeneficio;
+type DocumentoUnion =
+  | DocumentoHolerite
+  | DocumentoGenerico
+  | DocumentoBeneficio;
 
 // ================================================
 // CONTRATO: lista de competências (modo discovery)
@@ -197,6 +200,12 @@ async function withRetry<T>(
   throw lastErr;
 }
 
+// =====================================================
+// [ALTERAÇÃO] Helper para normalizar "cabecalho" / "cabeçalho"
+// =====================================================
+const getCabecalhoNormalized = (obj: any) =>
+  obj?.cabecalho ?? obj?.["cabeçalho"];
+
 export default function DocumentList() {
   const navigate = useNavigate();
   const { user, isLoading: userLoading } = useUser();
@@ -204,7 +213,11 @@ export default function DocumentList() {
 
   // ===== Opção 2: normalizar parametros e mapear generico+Beneficios => beneficios
   const normalize = (s: string) =>
-    (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    (s || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
 
   const tipoParam = normalize(searchParams.get("tipo") || "holerite");
   const nomeDocumentoRaw = searchParams.get("documento") || "";
@@ -809,11 +822,12 @@ export default function DocumentList() {
           matricula: matriculaEfetivaGen,
         };
 
-        const res = await api.post<{ competencias: { ano: number; mes: number }[] }>(
-          "/documents/beneficios/competencias",
-          payload,
-          { signal: controller.signal }
-        );
+        // (já estava correto; mantido)
+        const res = await api.post<{
+          competencias: { ano: number; mes: number }[];
+        }>("/documents/beneficios/competencias", payload, {
+          signal: controller.signal,
+        });
 
         if (controller.signal.aborted) return;
 
@@ -936,9 +950,8 @@ export default function DocumentList() {
   };
 
   // ==========================================
-  // Benefícios: buscar mês -> prévia
-  // (ALTERADO: critério menos rígido + tipos opcionais)
-// ==========================================
+  // Benefícios: buscar mês -> BUSCAR (pega lote/uuid) -> MONTAR -> prévia
+  // ==========================================
   const buscarBeneficiosPorAnoMes = async (ano: number, mes: string) => {
     if (!selectedEmpresaIdGen) {
       toast.error("Selecione a empresa para continuar.");
@@ -960,13 +973,8 @@ export default function DocumentList() {
     setPaginaAtual(1);
 
     try {
-      const payload = {
-        cpf: meCpf,
-        matricula: matriculaEfetivaGen,
-        competencia: competenciaYYYYMM,
-      };
-
-      const res = await api.post<{
+      // 1) BUSCAR -> obter lote (do cabeçalho) e uuid
+      const resBuscar = await api.post<{
         cpf?: string;
         matricula?: string | number;
         competencia?: string;
@@ -987,41 +995,66 @@ export default function DocumentList() {
           uuid?: string;
         };
         beneficios?: any[];
-      }>("/documents/beneficios/buscar", payload);
+      }>("/documents/beneficios/buscar", {
+        cpf: meCpf,
+        matricula: matriculaEfetivaGen,
+        competencia: competenciaYYYYMM,
+      });
 
       if (process.env.NODE_ENV !== "production") {
-        console.debug("beneficios/buscar ->", res.data);
+        console.debug("beneficios/buscar ->", resBuscar.data);
       }
 
-      const hasCabecalho =
-        !!res.data?.cabecalho &&
-        Object.keys(res.data.cabecalho || {}).length > 0;
+      const cab = getCabecalhoNormalized(resBuscar.data);
+      const lote = cab?.lote;
+      const uuid = cab?.uuid;
 
-      const hasBeneficios =
-        Array.isArray(res.data?.beneficios) &&
-        (res.data.beneficios as any[]).length > 0;
-
-      if (hasCabecalho || hasBeneficios) {
-        const documento: DocumentoBeneficio = {
-          id_documento: String(res.data.cabecalho?.lote ?? "1"),
-          anomes: competenciaYYYYMM,
-        };
-        setDocuments([documento]);
-        sessionStorage.setItem("beneficiosData", JSON.stringify(res.data));
-        toast.success("Benefícios encontrados!", {
-          description: `Período ${toYYYYDashMM(documento.anomes)} localizado.`,
-        });
-
-        await visualizarDocumento(documento);
+      if (!lote || !uuid) {
+        toast.warning("Não foi possível obter lote/uuid para montar.");
         return;
-      } else {
-        toast.warning("Nenhum benefício encontrado para o mês selecionado.");
       }
+
+      // Popular lista/tabela (mantido)
+      const documento: DocumentoBeneficio = {
+        id_documento: String(lote ?? "1"),
+        anomes: competenciaYYYYMM,
+      };
+      setDocuments([documento]);
+      sessionStorage.setItem("beneficiosData", JSON.stringify(resBuscar.data));
+      toast.success("Benefícios encontrados!", {
+        description: `Período ${toYYYYDashMM(documento.anomes)} localizado.`,
+      });
+
+      // 2) MONTAR -> usa lote do cabeçalho + uuid
+      // ✅ usar exatamente o que o back espera
+      const resMontar = await api.post<{
+        pdf_base64?: string;
+        cabecalho?: any;
+      }>("/documents/beneficios/montar", {
+        matricula: String(matriculaEfetivaGen),
+        competencia: competenciaYYYYMM, // ex: "202401"
+        uuid: String(uuid),
+        lote_holerite: String(lote), // <— chave correta
+        cpf: String(meCpf),
+      });
+
+      // 3) Abrir prévia com pdf_base64
+      navigate("/documento/preview", {
+        state: {
+          tipo: "beneficios",
+          competencia_forced: competenciaYYYYMM,
+          pdf_base64: resMontar.data?.pdf_base64 || "",
+          cabecalho: resMontar.data?.cabecalho ?? cab,
+          beneficios: resBuscar.data?.beneficios ?? [],
+        },
+      });
+      toast.success("Documento de benefícios aberto!");
+      return;
     } catch (err: any) {
-      toast.error("Erro ao buscar benefícios", {
+      toast.error("Erro ao buscar/montar benefícios", {
         description: extractErrorMessage(
           err,
-          "Falha ao consultar o período escolhido."
+          "Falha ao processar o período escolhido."
         ),
       });
     } finally {
@@ -1213,6 +1246,9 @@ export default function DocumentList() {
           throw new Error("Não foi possível gerar o PDF do holerite");
         }
       } else if (tipoDocumento === "beneficios") {
+        // ===============================================
+        // [ALTERAÇÃO] Benefícios: buscar -> montar -> preview
+        // ===============================================
         const docBen = doc as DocumentoBeneficio;
 
         // matricula efetiva
@@ -1220,8 +1256,7 @@ export default function DocumentList() {
         if (user?.gestor) {
           matForPreview = matricula;
         } else if (selectedEmpresaIdGen) {
-          const arr =
-            empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+          const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
           matForPreview = requerEscolherMatriculaGen
             ? selectedMatriculaGen ?? ""
             : arr[0] ?? "";
@@ -1229,29 +1264,23 @@ export default function DocumentList() {
 
         const competenciaYYYYMM = normalizeYYYYMM(docBen.anomes);
 
-        const payload = {
-          cpf: user?.gestor
-            ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
-            : meCpf,
-          matricula: matForPreview,
-          competencia: competenciaYYYYMM,
-        };
+        const cpfToUse = user?.gestor
+          ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
+          : meCpf;
 
-        const res = await withRetry(
+        // 1) BUSCAR: obter lote (cabeçalho) e uuid
+        const resBuscar = await withRetry(
           () =>
             api.post<{
-              cpf: string;
-              matricula: string;
-              competencia: string;
-              cabecalho?: {
-                lote?: number;
-                uuid?: string;
-                [k: string]: any;
-              };
+              cabecalho?: { lote?: number; uuid?: string; [k: string]: any };
               beneficios?: any[];
             }>(
               "/documents/beneficios/buscar",
-              payload,
+              {
+                cpf: cpfToUse,
+                matricula: String(matForPreview),
+                competencia: competenciaYYYYMM,
+              },
               {
                 timeout: 45000,
                 signal: controller.signal,
@@ -1261,21 +1290,49 @@ export default function DocumentList() {
           700
         );
 
-        if (res.data) {
-          setLoadingPreviewId(null);
-          previewAbortRef.current = null;
+        const cab = getCabecalhoNormalized(resBuscar.data);
+        const lote = cab?.lote;
+        const uuid = cab?.uuid;
 
-          navigate("/documento/preview", {
-            state: {
-              ...res.data,
-              tipo: "beneficios",
-              competencia_forced: competenciaYYYYMM,
-            },
-          });
-          toast.success("Documento de benefícios aberto!");
-        } else {
-          throw new Error("Não foi possível obter os dados de benefícios");
+        if (!lote || !uuid) {
+          throw new Error("Não foi possível obter lote/uuid para montar.");
         }
+
+        // 2) MONTAR: usar lote do cabeçalho + uuid
+        // ✅ usar exatamente o que o back espera
+        const resMontar = await withRetry(
+          () =>
+            api.post<{ pdf_base64?: string; cabecalho?: any }>(
+              "/documents/beneficios/montar",
+              {
+                matricula: String(matForPreview),
+                competencia: competenciaYYYYMM, // ex: "202401"
+                uuid: String(uuid),
+                lote_holerite: String(lote), // <— chave correta
+                cpf: String(cpfToUse),
+              },
+              {
+                timeout: 45000,
+                signal: controller.signal,
+              }
+            ),
+          2,
+          700
+        );
+
+        setLoadingPreviewId(null);
+        previewAbortRef.current = null;
+
+        navigate("/documento/preview", {
+          state: {
+            tipo: "beneficios",
+            competencia_forced: competenciaYYYYMM,
+            pdf_base64: resMontar.data?.pdf_base64 || "",
+            cabecalho: resMontar.data?.cabecalho ?? cab,
+            beneficios: resBuscar.data?.beneficios ?? [],
+          },
+        });
+        toast.success("Documento de benefícios aberto!");
       } else {
         const docGenerico = doc as DocumentoGenerico;
 
@@ -1429,9 +1486,7 @@ export default function DocumentList() {
       const docBen = doc as DocumentoBeneficio;
       return (
         <>
-          <td className="px-4 py-2 text-left">
-            {toYYYYDashMM(docBen.anomes)}
-          </td>
+          <td className="px-4 py-2 text-left">{toYYYYDashMM(docBen.anomes)}</td>
           <td className="px-4 py-2 text-center">{docBen.id_documento}</td>
         </>
       );
@@ -1488,7 +1543,9 @@ export default function DocumentList() {
   const showDiscoveryFlowBeneficios =
     !user?.gestor && tipoDocumento === "beneficios";
   const showDiscoveryFlowGenerico =
-    !user?.gestor && tipoDocumento !== "holerite" && tipoDocumento !== "beneficios";
+    !user?.gestor &&
+    tipoDocumento !== "holerite" &&
+    tipoDocumento !== "beneficios";
   const gestorGridCols =
     tipoDocumento === "holerite" || tipoDocumento === "beneficios"
       ? "sm:grid-cols-4"
@@ -1950,8 +2007,9 @@ export default function DocumentList() {
                             key={mm}
                             variant="default"
                             className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            onClick={() =>
-                              buscarBeneficiosPorAnoMes(selectedYearBen, mm)
+                            onClick={
+                              () =>
+                                buscarBeneficiosPorAnoMes(selectedYearBen, mm) // [ALTERAÇÃO] agora chama o fluxo buscar->montar
                             }
                             disabled={isAnyLoading}
                           >
@@ -2099,6 +2157,8 @@ export default function DocumentList() {
                             setSelectedMatriculaGen(null);
                             setCompetenciasGen([]);
                             setSelectedYearGen(null);
+                            setDocuments([]);
+                            setPaginaAtual(1);
                             setCompetenciasGenLoaded(false);
                           }}
                           disabled={isAnyLoading}
@@ -2225,7 +2285,9 @@ export default function DocumentList() {
                       disabled={isAnyLoading}
                     />
                     {cpfError && (
-                      <span className="text-red-400 text-xs mt-1">{cpfError}</span>
+                      <span className="text-red-400 text-xs mt-1">
+                        {cpfError}
+                      </span>
                     )}
                   </div>
                   <input
@@ -2350,13 +2412,13 @@ export default function DocumentList() {
                             competencia?: string;
                             cabecalho?: { lote?: number; [k: string]: any };
                             beneficios?: any[];
-                          }>(
-                            "/documents/beneficios/buscar",
-                            payload
-                          );
+                          }>("/documents/beneficios/buscar", payload);
 
                           if (process.env.NODE_ENV !== "production") {
-                            console.debug("beneficios/buscar (gestor) ->", res.data);
+                            console.debug(
+                              "beneficios/buscar (gestor) ->",
+                              res.data
+                            );
                           }
 
                           const hasCabecalho =
@@ -2368,11 +2430,14 @@ export default function DocumentList() {
                             (res.data.beneficios as any[]).length > 0;
 
                           if (hasCabecalho || hasBeneficios) {
-                            const competenciaYYYYMM =
-                              normalizeYYYYMM(res.data.competencia || formatCompetencia(anomes));
+                            const competenciaYYYYMM = normalizeYYYYMM(
+                              res.data.competencia || formatCompetencia(anomes)
+                            );
 
                             const documento: DocumentoBeneficio = {
-                              id_documento: String(res.data.cabecalho?.lote ?? "1"),
+                              id_documento: String(
+                                res.data.cabecalho?.lote ?? "1"
+                              ),
                               anomes: competenciaYYYYMM,
                             };
                             setDocuments([documento]);
@@ -2517,7 +2582,8 @@ export default function DocumentList() {
                     <tr>
                       <td
                         colSpan={
-                          tipoDocumento === "holerite" || tipoDocumento === "beneficios"
+                          tipoDocumento === "holerite" ||
+                          tipoDocumento === "beneficios"
                             ? 3
                             : 2
                         }

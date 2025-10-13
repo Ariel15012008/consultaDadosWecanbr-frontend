@@ -3,8 +3,8 @@
 
 /**
  * Preview unificado para Holerite, Benefícios e Genérico.
- * - Benefícios agora usa exatamente o mesmo layout/cores/estrutura do Holerite (mesmo main branco, gradiente, grids, tabela, responsividade).
- * - Apenas os dados mudam (títulos e campos).
+ * - Benefícios usa o mesmo layout do Holerite (mesmo main branco, gradiente, grids, tabela, responsividade).
+ * - Agora o PDF de Benefícios vem da rota /documents/beneficios/montar via DocumentList (pdf_base64 chega preenchido).
  * - Aceite/baixar: se houver pdf_base64, mantém os mesmos botões e fluxo de confirmação.
  * - Normalização de "cabeçalho" (com acento) -> cabecalho via helper getCabecalho.
  */
@@ -551,7 +551,7 @@ export default function PreviewDocumento() {
     const cab = getCabecalho(state) || {};
     const lista = (state as any).beneficios ?? [];
 
-    // Totais para preencher a seção idêntica à do holerite
+    // Totais
     const totV = lista.reduce((s: number, b: any) => s + (b?.tipo === "V" ? Number(b.valor || 0) : 0), 0);
     const totD = lista.reduce((s: number, b: any) => s + (b?.tipo === "D" ? Number(b.valor || 0) : 0), 0);
     const valLiq = totV - totD;
@@ -568,7 +568,7 @@ export default function PreviewDocumento() {
             {renderAceitoBadge()}
           </div>
 
-          {/* Cabeçalho (estrutura idêntica; muda apenas o título) */}
+          {/* Cabeçalho */}
           <div className="mb-6 flex flex-col md:flex-row justify-between items-start">
             <div className="flex flex-col">
               <h1 className="text-lg md:text-xl font-bold">Demonstrativo de Benefícios</h1>
@@ -608,7 +608,7 @@ export default function PreviewDocumento() {
             </div>
           </div>
 
-          {/* Grid infos (idêntico ao holerite) */}
+          {/* Grid infos */}
           <div className="mb-6 text-xs md:text-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
             <div className="flex flex-col">
               <strong className="pb-1 md:pb-2">Código</strong> {cab?.matricula ? padLeft(cab.matricula, 6) : "-"}
@@ -634,7 +634,7 @@ export default function PreviewDocumento() {
 
           <div className="bg-gray-300 w-full h-[1px] my-2"></div>
 
-          {/* Tabela (mesma estrutura do holerite; dados dos benefícios) */}
+          {/* Tabela benefícios */}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs md:text-sm">
               <thead>
@@ -714,7 +714,7 @@ export default function PreviewDocumento() {
           </div>
         </main>
 
-        {/* Botão inferior (idêntico ao holerite) — só aparece se houver PDF */}
+        {/* Botão inferior (igual holerite) — aparece porque agora recebemos pdf_base64 de /beneficios/montar */}
         {(state as any).pdf_base64 && (
           <div className="flex justify-center items-center p-8 md:p-16">
             <Button
@@ -723,7 +723,7 @@ export default function PreviewDocumento() {
               disabled={isDownloading}
             >
               <Download className="mr-2 w-4 h-4" />
-              {isDownloading ? "Confirmando..." : (isAceito ? "Baixar demonstrativo" : "Aceitar e baixar demonstrativo")}
+              {isDownloading ? "Confirmando..." : (isAceito ? "Baixar demonstrativo" : "Aceitar e baixar Benefícios")}
             </Button>
           </div>
         )}
