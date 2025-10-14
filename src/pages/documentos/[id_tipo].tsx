@@ -21,34 +21,16 @@ import { useUser } from "@/contexts/UserContext";
 import { toast, Toaster } from "sonner";
 import LoadingScreen from "@/components/ui/loadingScreen";
 
-// =====================================================
-// DEBUG HELPERS
-// =====================================================
-const DEBUG = true; // <- desligue aqui se quiser silenciar
-const LOG_PREFIX = "[DocumentList/Benefícios]";
-
 const maskCpf = (cpf: string) => {
   const d = (cpf || "").replace(/\D/g, "");
   if (d.length < 5) return d.replace(/.(?=..)/g, "*");
   return `${d.slice(0, 3)}****${d.slice(-2)}`;
 };
 
-const dbg = (...args: any[]) => {
-  if (!DEBUG) return;
-  // eslint-disable-next-line no-console
-  console.log(LOG_PREFIX, ...args);
-};
-
-const dbgGroup = (title: string) => {
-  if (!DEBUG) return;
-  // eslint-disable-next-line no-console
-  console.groupCollapsed(`${LOG_PREFIX} ${title}`);
-};
-const dbgGroupEnd = () => {
-  if (!DEBUG) return;
-  // eslint-disable-next-line no-console
-  console.groupEnd();
-};
+// no-ops (sem console)
+const dbg = (..._args: any[]) => {};
+const dbgGroup = (_title: string) => {};
+const dbgGroupEnd = () => {};
 
 // ================================================
 // Tipagens auxiliares
@@ -243,9 +225,8 @@ export default function DocumentList() {
   const { user, isLoading: userLoading } = useUser();
   const [searchParams] = useSearchParams();
 
-  // log baseURL do axios uma vez
+  // log baseURL do axios uma vez (silenciado)
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const anyApi: any = api as any;
     const baseURL = anyApi?.defaults?.baseURL;
     dbg("Axios baseURL:", baseURL);
@@ -405,6 +386,7 @@ export default function DocumentList() {
   const [isLoadingCompetenciasGen, setIsLoadingCompetenciasGen] =
     useState(false);
   const [competenciasGen, setCompetenciasGen] = useState<CompetenciaItem[]>([]);
+  0;
   const [selectedYearGen, setSelectedYearGen] = useState<number | null>(null);
   const [competenciasGenLoaded, setCompetenciasGenLoaded] = useState(false);
 
@@ -623,8 +605,7 @@ export default function DocumentList() {
         setCompetenciasHoleriteLoaded(false);
         setCompetenciasGenLoaded(false);
         setCompetenciasBenLoaded(false);
-      } catch (err: any) {
-        console.error("Falha ao carregar /user/me:", err);
+      } catch (_err: any) {
         if (!user?.gestor) {
           setMeCpf(onlyDigits((user as any)?.cpf || ""));
         }
@@ -969,7 +950,6 @@ export default function DocumentList() {
 
       dbgGroup("buscarHoleritePorAnoMes()");
       dbg("payload:", payload);
-      console.time(`${LOG_PREFIX} /holerite/buscar`);
 
       const res = await api.post<{
         tipo: "holerite";
@@ -980,7 +960,6 @@ export default function DocumentList() {
         uuid?: string;
       }>("/documents/holerite/buscar", payload);
 
-      console.timeEnd(`${LOG_PREFIX} /holerite/buscar`);
       dbg("res.data:", res.data);
 
       if (res.data && res.data.cabecalho) {
@@ -1052,7 +1031,6 @@ export default function DocumentList() {
       };
       dbgGroup("buscarBeneficiosPorAnoMes()");
       dbg("BUSCAR payload:", { ...buscarPayload, cpf: maskCpf(cpfNorm) });
-      console.time(`${LOG_PREFIX} /beneficios/buscar`);
 
       const resBuscar = await api.post<{
         cpf?: string;
@@ -1077,17 +1055,12 @@ export default function DocumentList() {
         beneficios?: any[];
       }>("/documents/beneficios/buscar", buscarPayload);
 
-      console.timeEnd(`${LOG_PREFIX} /beneficios/buscar`);
       dbg("BUSCAR res.data:", resBuscar.data);
 
       const cab = getCabecalhoNormalized(resBuscar.data);
 
-      // ================================
-      // [ALTERAÇÃO] Fallbacks para UUID e LOTE conforme contrato informado:
-      // - uuid pode vir NO TOPO do payload (/beneficios/buscar)
-      // - lote pode ser lido do primeiro item de beneficios[]
-      // ================================
-      const uuidTop = (resBuscar.data as any)?.uuid; // <- topo
+      // Fallbacks para uuid/lote
+      const uuidTop = (resBuscar.data as any)?.uuid;
       const loteFromItem =
         Array.isArray((resBuscar.data as any)?.beneficios) &&
         (resBuscar.data as any).beneficios.length > 0
@@ -1123,18 +1096,13 @@ export default function DocumentList() {
         lote_holerite: String(lote),
         lote: String(lote),
       };
-      dbg(
-        "MONTAR payload:",
-        { ...montarPayload, cpf: maskCpf(montarPayload.cpf) }
-      );
-      console.time(`${LOG_PREFIX} /beneficios/montar`);
+      dbg("MONTAR payload:", { ...montarPayload, cpf: maskCpf(montarPayload.cpf) });
 
       const resMontar = await api.post<{
         pdf_base64?: string;
         cabecalho?: any;
       }>("/documents/beneficios/montar", montarPayload);
 
-      console.timeEnd(`${LOG_PREFIX} /beneficios/montar`);
       dbg("MONTAR res.data keys:", Object.keys(resMontar.data || {}));
 
       // 3) preview
@@ -1205,7 +1173,6 @@ export default function DocumentList() {
 
       dbgGroup("buscarGenericoPorAnoMes()");
       dbg("payload:", payload);
-      console.time(`${LOG_PREFIX} /documents/search (gen)`);
 
       const res = await api.post<{
         total_bruto: number;
@@ -1214,7 +1181,6 @@ export default function DocumentList() {
         documentos: DocumentoGenerico[];
       }>("/documents/search", payload);
 
-      console.timeEnd(`${LOG_PREFIX} /documents/search (gen)`);
       dbg("res.data:", res.data);
 
       const documentos = res.data.documentos || [];
@@ -1331,7 +1297,6 @@ export default function DocumentList() {
 
         dbgGroup("visualizarDocumento(holerite)");
         dbg("payload:", { ...payload, cpf: maskCpf(payload.cpf) });
-        console.time(`${LOG_PREFIX} /holerite/montar`);
 
         const res = await withRetry(
           () =>
@@ -1349,7 +1314,6 @@ export default function DocumentList() {
           700
         );
 
-        console.timeEnd(`${LOG_PREFIX} /holerite/montar`);
         dbg("res.keys:", Object.keys(res.data || {}));
 
         if (res.data && res.data.pdf_base64) {
@@ -1400,11 +1364,7 @@ export default function DocumentList() {
           competencia: competenciaYYYYMM,
         };
         dbgGroup("visualizarDocumento(benefícios)");
-        dbg(
-          "BUSCAR payload:",
-          { ...buscarPayload, cpf: maskCpf(buscarPayload.cpf) }
-        );
-        console.time(`${LOG_PREFIX} /beneficios/buscar (preview)`);
+        dbg("BUSCAR payload:", { ...buscarPayload, cpf: maskCpf(buscarPayload.cpf) });
 
         const resBuscar = await withRetry(
           () =>
@@ -1423,14 +1383,11 @@ export default function DocumentList() {
           700
         );
 
-        console.timeEnd(`${LOG_PREFIX} /beneficios/buscar (preview)`);
         dbg("BUSCAR res.data:", resBuscar.data);
 
         const cab = getCabecalhoNormalized(resBuscar.data);
 
-        // ================================
-        // [ALTERAÇÃO] Fallbacks para UUID e LOTE no preview também
-        // ================================
+        // Fallbacks uuid/lote
         const uuidTop = (resBuscar.data as any)?.uuid;
         const loteFromItem =
           Array.isArray((resBuscar.data as any)?.beneficios) &&
@@ -1455,11 +1412,7 @@ export default function DocumentList() {
           lote_holerite: String(lote),
           lote: String(lote),
         };
-        dbg(
-          "MONTAR payload:",
-          { ...montarPayload, cpf: maskCpf(montarPayload.cpf) }
-        );
-        console.time(`${LOG_PREFIX} /beneficios/montar (preview)`);
+        dbg("MONTAR payload:", { ...montarPayload, cpf: maskCpf(montarPayload.cpf) });
 
         const resMontar = await withRetry(
           () =>
@@ -1475,7 +1428,6 @@ export default function DocumentList() {
           700
         );
 
-        console.timeEnd(`${LOG_PREFIX} /beneficios/montar (preview)`);
         dbg("MONTAR res.keys:", Object.keys(resMontar.data || {}));
 
         setLoadingPreviewId(null);
@@ -1501,7 +1453,6 @@ export default function DocumentList() {
 
         dbgGroup("visualizarDocumento(genérico)");
         dbg("payload:", payload);
-        console.time(`${LOG_PREFIX} /searchdocuments/download`);
 
         const res = await withRetry(
           () =>
@@ -1517,7 +1468,6 @@ export default function DocumentList() {
           700
         );
 
-        console.timeEnd(`${LOG_PREFIX} /searchdocuments/download`);
         dbg("res.keys:", Object.keys(res.data || {}));
 
         if (res.data.erro) {
@@ -2593,13 +2543,6 @@ export default function DocumentList() {
                             beneficios?: any[];
                           }>("/documents/beneficios/buscar", payload);
 
-                          if (process.env.NODE_ENV !== "production") {
-                            console.debug(
-                              "beneficios/buscar (gestor) ->",
-                              res.data
-                            );
-                          }
-
                           const hasCabecalho =
                             !!res.data?.cabecalho &&
                             Object.keys(res.data.cabecalho || {}).length > 0;
@@ -2613,10 +2556,7 @@ export default function DocumentList() {
                               res.data.competencia || formatCompetencia(anomes)
                             );
 
-                            // ================================
-                            // [ALTERAÇÃO] Fallback de LOTE para montar a listagem (gestor):
-                            // usa cabecalho.lote OU primeiro beneficios[].lote
-                            // ================================
+                            // fallback de lote
                             const loteDoc =
                               (getCabecalhoNormalized(res.data)?.lote as
                                 | number
