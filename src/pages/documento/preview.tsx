@@ -3,10 +3,12 @@
 
 /**
  * Preview unificado para Holerite, Benefícios e Genérico.
- * - Benefícios usa o mesmo layout do Holerite (mesmo main branco, gradiente, grids, tabela, responsividade).
- * - Agora o PDF de Benefícios vem da rota /documents/beneficios/montar via DocumentList (pdf_base64 chega preenchido).
- * - Aceite/baixar: se houver pdf_base64, mantém os mesmos botões e fluxo de confirmação.
- * - Normalização de "cabeçalho" (com acento) -> cabecalho via helper getCabecalho.
+ * - Benefícios usa o mesmo layout do Holerite.
+ * - O PDF de Benefícios vem de /documents/beneficios/montar (pdf_base64).
+ * - Aceite/baixar: se houver pdf_base64, mantém os mesmos botões/fluxos.
+ * - Normalização "cabeçalho" -> cabecalho via helper getCabecalho.
+ * - [Ajuste]: quando NÃO houver cabecalho em Benefícios, preenche os mesmos
+ *   campos da UI com os dados "soltos" do montar e (se preciso) com /beneficios/buscar.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -22,19 +24,19 @@ import { FaCheckCircle } from "react-icons/fa";
 
 // Tipos para Holerite
 interface Cabecalho {
-  empresa: string;
-  filial: string;
-  empresa_nome: string;
-  empresa_cnpj: string;
-  cliente: string;
-  cliente_nome: string;
-  cliente_cnpj: string;
-  matricula: string;
-  nome: string;
-  funcao_nome: string;
-  admissao: string;
+  empresa: string | number;
+  filial: string | number;
+  empresa_nome?: string;
+  empresa_cnpj?: string;
+  cliente: string | number;
+  cliente_nome?: string;
+  cliente_cnpj?: string;
+  matricula: string | number;
+  nome?: string;
+  funcao_nome?: string;
+  admissao?: string;
   competencia: string; // "YYYY", "YYYYMM" ou "YYYY-MM"
-  lote: number;
+  lote?: number | string;
   uuid?: string;
 }
 
@@ -43,7 +45,7 @@ interface Evento {
   evento_nome: string;
   referencia: number;
   valor: number;
-  tipo: string; // "V" | "D"
+  tipo: "V" | "D";
 }
 
 interface Rodape {
@@ -73,13 +75,13 @@ interface DocumentoGenerico {
   colaborador: string;
   regional: string;
   cr: string;
-  anomes: string;        // "YYYY-MM" ou "YYYYMM"
-  tipodedoc: string;     // nome do documento
+  anomes: string; // "YYYY-MM" ou "YYYYMM"
+  tipodedoc: string; // nome do documento
   status: string;
   observacao: string;
   datadepagamento: string;
   matricula: string;
-  _norm_anomes: string;  // label
+  _norm_anomes: string; // label
   aceito?: boolean;
 }
 
@@ -97,7 +99,9 @@ function fmtNum(value: number): string {
 
 function truncate(text: string | undefined | null, maxLen: number): string {
   const safeText = text ?? "";
-  return safeText.length <= maxLen ? safeText : safeText.slice(0, maxLen - 3) + "...";
+  return safeText.length <= maxLen
+    ? safeText
+    : safeText.slice(0, maxLen - 3) + "...";
 }
 
 function fmtRef(value: number): string {
@@ -110,26 +114,27 @@ function fmtRef(value: number): string {
 }
 
 // Normaliza para "YYYYMM"
-function normalizeCompetencia(v: string | undefined | null): string {
+function normalizeCompetencia(v: string | number | undefined | null): string {
   const s = String(v ?? "").trim();
   if (!s) return "";
-  if (/^\d{6}$/.test(s)) return s;               // "YYYYMM"
+  if (/^\d{6}$/.test(s)) return s; // "YYYYMM"
   if (/^\d{4}-\d{2}$/.test(s)) return s.replace("-", ""); // "YYYY-MM" -> "YYYYMM"
-  if (/^\d{2}\/\d{4}$/.test(s)) {               // "MM/YYYY" -> "YYYYMM"
+  if (/^\d{2}\/\d{4}$/.test(s)) {
+    // "MM/YYYY"
     const [mm, yyyy] = s.split("/");
-    return `${yyyy}${mm.padStart(2,"0")}`;
+    return `${yyyy}${mm.padStart(2, "0")}`;
   }
   return s.replace(/\D/g, "");
 }
 
 function cleanBase64Pdf(b64: string): string {
-  return b64.replace(/^data:application\/pdf;base64,/, "");
+  return String(b64 || "").replace(/^data:application\/pdf;base64,/, "");
 }
 
 const asStr = (v: unknown) =>
   v === null || v === undefined ? undefined : String(v);
 
-// Helper: normaliza cabecalho (aceita "cabeçalho" e "cabecalho")
+// Normaliza cabecalho (aceita "cabeçalho" e "cabecalho")
 function getCabecalho(obj: any): any {
   if (!obj) return undefined;
   if (obj.cabecalho) return obj.cabecalho;
@@ -137,8 +142,63 @@ function getCabecalho(obj: any): any {
   return undefined;
 }
 
+// Decode base64 com segurança
+function safeAtobToBytes(b64: string): Uint8Array {
+  const clean = cleanBase64Pdf(b64).replace(/\s+/g, "");
+  const bin = atob(clean);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+const isDefined = (v: any) => typeof v !== "undefined" && v !== null;
+
+/** === AJUSTE UUID (novo helper) ======================== */
+function extractUuidFromAny(input: any): string | undefined {
+  if (!input) return undefined;
+
+  const looksLikeUuid = (val: any) =>
+    typeof val === "string" && /^[0-9a-fA-F-]{16,}$/.test(val);
+
+  const tryObj = (obj: any): string | undefined => {
+    if (!obj) return undefined;
+    // diretos comuns
+    if (looksLikeUuid(obj.uuid)) return obj.uuid;
+    if (looksLikeUuid(obj.UUID)) return obj.UUID;
+    if (looksLikeUuid(obj.id_uuid)) return obj.id_uuid;
+    if (looksLikeUuid(obj.uuid_beneficio)) return obj.uuid_beneficio;
+
+    // dentro do cabecalho
+    const cab = getCabecalho(obj) || obj.cabecalho || obj["cabeçalho"];
+    if (looksLikeUuid(cab?.uuid)) return cab.uuid;
+
+    // itens comuns
+    const maybeArrays = ["items", "data", "beneficios", "eventos", "results"];
+    for (const key of maybeArrays) {
+      const arr = obj?.[key];
+      if (Array.isArray(arr)) {
+        for (const it of arr) {
+          const got = tryObj(it);
+          if (got) return got;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  if (Array.isArray(input)) {
+    for (const it of input) {
+      const got = tryObj(it);
+      if (got) return got;
+    }
+  }
+  return tryObj(input);
+}
+/** ====================================================== */
+
 type PreviewState =
-  | ({
+  | {
       pdf_base64: string;
       tipo: "holerite";
       cabecalho: Cabecalho;
@@ -147,17 +207,17 @@ type PreviewState =
       competencia_forced?: string; // YYYYMM
       aceito?: boolean;
       uuid?: string;
-    })
-  | ({
+    }
+  | {
       pdf_base64: string;
       tipo: "generico";
       documento_info: DocumentoGenerico;
-    })
-  | ({
+    }
+  | {
       // Benefícios
       tipo: "beneficios";
-      pdf_base64?: string;     // opcional: se o back mandar
-      cabecalho?: any;         // normalizado via getCabecalho
+      pdf_base64?: string; // opcional: se o back mandar
+      cabecalho?: any;
       ["cabeçalho"]?: any;
       beneficios?: Array<{
         empresa: number;
@@ -165,8 +225,8 @@ type PreviewState =
         cliente: number;
         matricula: number | string;
         cpf: string;
-        competencia: string;   // YYYYMM
-        lote: number;
+        competencia: string; // YYYYMM
+        lote: number | string;
         evento: number;
         evento_nome: string;
         referencia: number;
@@ -174,7 +234,17 @@ type PreviewState =
         tipo: "V" | "D";
       }>;
       competencia_forced?: string; // YYYYMM
-    });
+
+      // alguns backends enviam estes campos “soltos” no montar
+      cpf?: string;
+      matricula?: number | string;
+      competencia?: string;
+      empresa?: number;
+      filial?: number;
+      cliente?: number;
+      lote?: number | string;
+      eventos?: any[]; // em alguns retornos, além de beneficios
+    };
 
 export default function PreviewDocumento() {
   const location = useLocation();
@@ -187,7 +257,9 @@ export default function PreviewDocumento() {
   useEffect(() => {
     if (!state) return;
     if (state?.tipo === "generico" && (state as any)?.documento_info) {
-      document.title = `${(state as any).documento_info.tipodedoc} - ${(state as any).documento_info._norm_anomes}`;
+      document.title = `${(state as any).documento_info.tipodedoc} - ${
+        (state as any).documento_info._norm_anomes
+      }`;
     } else if (state?.tipo === "beneficios") {
       document.title = "Demonstrativo de Benefícios";
     } else {
@@ -202,8 +274,10 @@ export default function PreviewDocumento() {
   // fonte “legada” (fallback) — só usada se não houver retorno da consulta
   const legacyAceito = useMemo(() => {
     if (!state) return false;
-    if ((state as any).tipo === "generico") return !!(state as any).documento_info?.aceito;
-    if (typeof (state as any).aceito !== "undefined") return !!(state as any).aceito;
+    if ((state as any).tipo === "generico")
+      return !!(state as any).documento_info?.aceito;
+    if (typeof (state as any).aceito !== "undefined")
+      return !!(state as any).aceito;
     try {
       const raw = sessionStorage.getItem("holeriteData");
       if (!raw) return false;
@@ -215,12 +289,68 @@ export default function PreviewDocumento() {
   }, [state]);
 
   // prioridade: resultado da consulta > legacyAceito
-  const isAceito = aceiteFlag === true ? true : (aceiteFlag === false ? false : legacyAceito);
+  const isAceito =
+    aceiteFlag === true ? true : aceiteFlag === false ? false : legacyAceito;
 
-  // consulta /status-doc/consultar:
-  // - holerite: via uuid
-  // - beneficios: via uuid (no cabecalho)
-  // - genérico: via id_ged
+  // ===== [NOVO] Dados extras de Benefícios quando NÃO há cabecalho =====
+  const [benefExtraCab, setBenefExtraCab] = useState<any | null>(null);
+
+  /** === AJUSTE UUID: cache local do uuid de benefícios === */
+  const [benefUuid, setBenefUuid] = useState<string | undefined>(undefined);
+
+  // Inicializa benefUuid a partir do state (cabecalho ou qualquer nível)
+  useEffect(() => {
+    if (!state || (state as any).tipo !== "beneficios") return;
+    const cab = getCabecalho(state);
+    const u = cab?.uuid || extractUuidFromAny(state);
+    if (u) setBenefUuid(u);
+  }, [state]);
+
+  // Chama /beneficios/buscar APENAS quando NÃO existe cabecalho no montar
+  useEffect(() => {
+    if (!state || (state as any).tipo !== "beneficios") return;
+
+    const cabBase = getCabecalho(state);
+    const hasCab = !!cabBase;
+    if (hasCab) return; // não altera nada quando existe cabecalho
+
+    // payload a partir dos campos “soltos” do montar
+    const payload = {
+      cpf: (state as any)?.cpf,
+      matricula: (state as any)?.matricula,
+      competencia: normalizeCompetencia(
+        (state as any)?.competencia_forced ?? (state as any)?.competencia
+      ),
+    };
+
+    if (!payload.cpf || !payload.matricula || !payload.competencia) return;
+
+    (async () => {
+      try {
+        const res = await api.post("/documents/beneficios/buscar", payload);
+        const data = res?.data;
+        // tenta extrair cabecalho do retorno
+        const candidate =
+          getCabecalho(data) ??
+          getCabecalho((data && data[0]) || {}) ??
+          (Array.isArray(data?.items)
+            ? getCabecalho(data.items[0])
+            : undefined) ??
+          data?.cabecalho ??
+          (Array.isArray(data) ? data[0]?.cabecalho : undefined);
+
+        if (candidate) setBenefExtraCab(candidate);
+
+        // [NOVO] captura uuid de qualquer formato/nível e guarda
+        const u = extractUuidFromAny(data) || candidate?.uuid;
+        if (u) setBenefUuid(u);
+      } catch (e) {
+        console.warn("fallback beneficios/buscar falhou:", e);
+      }
+    })();
+  }, [state]);
+
+  // ===== Consulta /status-doc/consultar =====
   useEffect(() => {
     if (!state) return;
 
@@ -231,7 +361,6 @@ export default function PreviewDocumento() {
         setAceiteLoading(true);
 
         if (state.tipo === "holerite" || state.tipo === "beneficios") {
-          // tentar pegar uuid do state/cabecalho/sessionStorage (holerite)
           let uuid: string | undefined;
 
           if (state.tipo === "holerite") {
@@ -246,8 +375,10 @@ export default function PreviewDocumento() {
               } catch {}
             }
           } else {
-            const cab = getCabecalho(state);
-            uuid = cab?.uuid;
+            const cabBase = getCabecalho(state);
+            const hasCab = !!cabBase;
+            const cab = hasCab ? cabBase : benefExtraCab; // só usa buscar quando não tem cabecalho
+            uuid = cab?.uuid || benefUuid;               // [NOVO] usa benefUuid como fallback
           }
 
           if (!uuid) {
@@ -292,24 +423,32 @@ export default function PreviewDocumento() {
     return () => {
       canceled = true;
     };
-  }, [state]);
+  }, [state, benefExtraCab, benefUuid]);
 
   const renderAceitoBadge = () => {
     if (aceiteLoading) {
       return (
         <span className="inline-flex items-center gap-2">
-          <span className="text-white/80 text-sm md:text-base">Verificando…</span>
+          <span className="text-white/80 text-sm md:text-base">
+            Verificando…
+          </span>
           <span className="inline-flex items-center justify-center rounded-full bg-white/20 p-2">
-            <Loader2 className="w-4 h-4 animate-spin text-white" aria-label="Verificando aceite" />
+            <Loader2
+              className="w-4 h-4 animate-spin text-white"
+              aria-label="Verificando aceite"
+            />
           </span>
         </span>
       );
     }
     if (isAceito) {
       return (
-         <span className="inline-flex items-center gap-2 ml-auto self-end sm:self-auto pb-2 sm:pb-0">
+        <span className="inline-flex items-center gap-2 ml-auto self-end sm:self-auto pb-2 sm:pb-0">
           <p className="text-green-500">Aceito</p>
-          <FaCheckCircle className="w-10 h-10 text-green-500" aria-label="Documento aceito" />
+          <FaCheckCircle
+            className="w-10 h-10 text-green-500"
+            aria-label="Documento aceito"
+          />
         </span>
       );
     }
@@ -324,13 +463,12 @@ export default function PreviewDocumento() {
 
     try {
       setIsDownloading(true);
-      const byteCharacters = atob(cleanBase64Pdf((state as any).pdf_base64));
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: "application/pdf" });
+      const bytes = safeAtobToBytes((state as any).pdf_base64);
+      const ab = (bytes.buffer as ArrayBuffer).slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength
+      );
+      const blob = new Blob([ab], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -341,17 +479,51 @@ export default function PreviewDocumento() {
           (state as any).documento_info.tipodedoc ||
           "documento";
         link.download = `${nome}.pdf`;
-      } else if ((state as any).tipo === "holerite" && (state as any).cabecalho) {
+      } else if (
+        (state as any).tipo === "holerite" &&
+        (state as any).cabecalho
+      ) {
         const comp =
           normalizeCompetencia((state as any).competencia_forced) ||
           normalizeCompetencia((state as any).cabecalho.competencia);
-        link.download = `holerite_${(state as any).cabecalho.matricula}_${comp || "YYYYMM"}.pdf`;
+        link.download = `holerite_${(state as any).cabecalho.matricula}_${
+          comp || "YYYYMM"
+        }.pdf`;
       } else if ((state as any).tipo === "beneficios") {
-        const cab = getCabecalho(state);
+        const cabBase = getCabecalho(state);
+        const hasCab = !!cabBase;
+        const baseFromState = {
+          empresa:
+            (state as any)?.empresa ??
+            (state as any)?.beneficios?.[0]?.empresa ??
+            (state as any)?.eventos?.[0]?.empresa,
+          filial:
+            (state as any)?.filial ??
+            (state as any)?.beneficios?.[0]?.filial ??
+            (state as any)?.eventos?.[0]?.filial,
+          cliente:
+            (state as any)?.cliente ??
+            (state as any)?.beneficios?.[0]?.cliente ??
+            (state as any)?.eventos?.[0]?.cliente,
+          matricula:
+            (state as any)?.matricula ??
+            (state as any)?.beneficios?.[0]?.matricula ??
+            (state as any)?.eventos?.[0]?.matricula,
+          competencia:
+            (state as any)?.competencia ??
+            (state as any)?.beneficios?.[0]?.competencia ??
+            (state as any)?.eventos?.[0]?.competencia,
+        };
+        const cabResolved: any = hasCab
+          ? cabBase
+          : { ...(benefExtraCab || {}), ...baseFromState };
+
         const comp =
           normalizeCompetencia((state as any).competencia_forced) ||
-          normalizeCompetencia(cab?.competencia);
-        link.download = `beneficios_${cab?.matricula ?? "mat"}_${comp || "YYYYMM"}.pdf`;
+          normalizeCompetencia(cabResolved?.competencia) ||
+          normalizeCompetencia((state as any)?.competencia);
+        const mat = (cabResolved?.matricula ?? "mat").toString();
+        link.download = `beneficios_${mat}_${comp || "YYYYMM"}.pdf`;
       } else {
         link.download = "documento.pdf";
       }
@@ -362,7 +534,7 @@ export default function PreviewDocumento() {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
         setIsDownloading(false);
-      }, 100);
+      }, 300);
     } catch (e) {
       console.error("Erro ao baixar PDF:", e);
       alert("Erro ao baixar o PDF.");
@@ -384,7 +556,6 @@ export default function PreviewDocumento() {
         ? "beneficios"
         : (state as any)?.documento_info?.tipodedoc || "generico";
 
-    // matrícula / competência / unidade (holerite/beneficios vs genérico)
     let matricula = "";
     let competencia = "";
     let unidade = "";
@@ -396,7 +567,10 @@ export default function PreviewDocumento() {
       competencia =
         normalizeCompetencia((state as any).competencia_forced) ||
         normalizeCompetencia((state as any).cabecalho.competencia);
-      unidade = (state as any).cabecalho.cliente_nome || (state as any).cabecalho.cliente || "";
+      unidade =
+        (state as any).cabecalho.cliente_nome ||
+        (state as any).cabecalho.cliente ||
+        "";
       uuid = (state as any).uuid || (state as any).cabecalho?.uuid;
       if (!uuid) {
         try {
@@ -408,14 +582,75 @@ export default function PreviewDocumento() {
         } catch {}
       }
     } else if ((state as any)?.tipo === "beneficios") {
-      const cab = getCabecalho(state);
-      matricula = String(cab?.matricula ?? "");
+      const cabBase = getCabecalho(state);
+      const hasCab = !!cabBase;
+
+      const baseFromState = {
+        empresa:
+          (state as any)?.empresa ??
+          (state as any)?.beneficios?.[0]?.empresa ??
+          (state as any)?.eventos?.[0]?.empresa,
+        filial:
+          (state as any)?.filial ??
+          (state as any)?.beneficios?.[0]?.filial ??
+          (state as any)?.eventos?.[0]?.filial,
+        cliente:
+          (state as any)?.cliente ??
+          (state as any)?.beneficios?.[0]?.cliente ??
+          (state as any)?.eventos?.[0]?.cliente,
+        matricula:
+          (state as any)?.matricula ??
+          (state as any)?.beneficios?.[0]?.matricula ??
+          (state as any)?.eventos?.[0]?.matricula,
+        competencia:
+          (state as any)?.competencia ??
+          (state as any)?.beneficios?.[0]?.competencia ??
+          (state as any)?.eventos?.[0]?.competencia,
+      };
+
+      const cabAll: any = hasCab
+        ? cabBase
+        : { ...(benefExtraCab || {}), ...baseFromState };
+
+      matricula = String(cabAll?.matricula ?? "");
       competencia =
         normalizeCompetencia((state as any).competencia_forced) ||
-        normalizeCompetencia(cab?.competencia);
-      unidade = cab?.cliente_nome || cab?.cliente || "";
-      uuid = cab?.uuid;
-    } else if ((state as any)?.tipo === "generico" && (state as any)?.documento_info) {
+        normalizeCompetencia(cabAll?.competencia) ||
+        normalizeCompetencia((state as any)?.competencia);
+      unidade = cabAll?.cliente_nome || cabAll?.cliente || "";
+
+      // [NOVO] prioridade: cabecalho.uuid -> benefUuid
+      uuid = cabAll?.uuid || benefUuid;
+
+      // fallback: buscar uuid na hora (com mais pistas, se tivermos)
+      if (!uuid) {
+        try {
+          const cpfDigits = String((user as any)?.cpf ?? "")
+            .replace(/\D/g, "") || (state as any)?.cpf;
+          const buscarPayload: any = {
+            cpf: cpfDigits,
+            matricula: String(matricula),
+            competencia: String(competencia),
+          };
+          if (isDefined(baseFromState.empresa))
+            buscarPayload.empresa = baseFromState.empresa;
+          if (isDefined(baseFromState.filial))
+            buscarPayload.filial = baseFromState.filial;
+          if (isDefined(baseFromState.cliente))
+            buscarPayload.cliente = baseFromState.cliente;
+
+          const res = await api.post("/documents/beneficios/buscar", buscarPayload);
+          uuid =
+            extractUuidFromAny(res?.data) ||
+            getCabecalho(res?.data)?.uuid ||
+            (Array.isArray(res?.data) ? getCabecalho(res.data[0])?.uuid : undefined);
+          if (uuid) setBenefUuid(uuid);
+        } catch {}
+      }
+    } else if (
+      (state as any)?.tipo === "generico" &&
+      (state as any)?.documento_info
+    ) {
       const info = (state as any).documento_info;
       matricula = String(info.matricula ?? "");
       competencia = normalizeCompetencia(info.anomes || info._norm_anomes);
@@ -423,19 +658,21 @@ export default function PreviewDocumento() {
       id_ged = asStr(info.id_ged) ?? asStr(info.id_documento);
     }
 
-    // CPF do contexto
     const cpfDigits = String((user as any)?.cpf ?? "").replace(/\D/g, "") || "";
 
     if (!matricula) {
       toast.error("Matrícula não encontrada para confirmar o documento.");
+      await handleDownload();
       return;
     }
     if (!competencia || !/^\d{6}$/.test(competencia)) {
       toast.error("Competência inválida para confirmar o documento.");
+      await handleDownload();
       return;
     }
     if (!cpfDigits || cpfDigits.length !== 11) {
       toast.error("CPF do usuário indisponível ou inválido.");
+      await handleDownload();
       return;
     }
 
@@ -449,9 +686,11 @@ export default function PreviewDocumento() {
       competencia: String(competencia),
     };
 
-    // identificadores
-    if (((state as any)?.tipo === "holerite" || (state as any)?.tipo === "beneficios") && uuid) {
-      payload.uuid = String(uuid);
+    if (
+      (state as any)?.tipo === "holerite" ||
+      (state as any)?.tipo === "beneficios"
+    ) {
+      if (uuid) payload.uuid = String(uuid);
     }
     if ((state as any)?.tipo === "generico" && id_ged) {
       payload.id_ged = String(id_ged);
@@ -461,15 +700,19 @@ export default function PreviewDocumento() {
       setIsDownloading(true);
       await api.post("/status-doc", payload);
       toast.success("Documento confirmado com sucesso.");
-      setAceiteFlag(true); // refletir na UI
+      setAceiteFlag(true);
       await handleDownload();
     } catch (err: any) {
       console.error("Falha ao confirmar /status-doc:", err);
       const msg =
         err?.response?.data?.message ||
         err?.message ||
-        "Não foi possível confirmar o documento.";
-      toast.error("Erro ao confirmar", { description: msg });
+        "Não foi possível confirmar o documento agora.";
+      toast.warning("Não confirmamos o aceite, mas vamos baixar o PDF.", {
+        description: msg,
+      });
+      await handleDownload();
+    } finally {
       setIsDownloading(false);
     }
   };
@@ -483,19 +726,28 @@ export default function PreviewDocumento() {
   }
 
   // Guard: só bloqueia quando NÃO for benefícios e não houver PDF
-  if (!state || (!(state as any).pdf_base64 && (state as any).tipo !== "beneficios")) {
+  if (
+    !state ||
+    (!(state as any).pdf_base64 && (state as any).tipo !== "beneficios")
+  ) {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
         <main className="flex-grow p-4 md:p-8 bg-[#1e1e2f] text-white text-center">
           <div className="flex items-center justify-between mb-4">
-            <Button variant="default" onClick={() => navigate(-1)} className="flex items-center gap-2">
+            <Button
+              variant="default"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2"
+            >
               <ArrowLeft /> Voltar
             </Button>
             {renderAceitoBadge()}
           </div>
 
-          <p className="text-lg">Dados do documento não encontrados. Volte e tente novamente.</p>
+          <p className="text-lg">
+            Dados do documento não encontrados. Volte e tente novamente.
+          </p>
         </main>
         <Footer />
       </div>
@@ -509,7 +761,11 @@ export default function PreviewDocumento() {
         <Header />
         <main className="flex-grow p-8 pt-24">
           <div className="flex md:flex-row justify-between items-start rounded-lg">
-            <Button variant="default" onClick={() => navigate(-1)} className="mb-4 flex items-center gap-2 text-white ">
+            <Button
+              variant="default"
+              onClick={() => navigate(-1)}
+              className="mb-4 flex items-center gap-2 text-white "
+            >
               <ArrowLeft /> Voltar
             </Button>
 
@@ -522,7 +778,9 @@ export default function PreviewDocumento() {
             style={{ width: "100%", maxWidth: "900px", height: "600px" }}
           >
             <iframe
-              src={`data:application/pdf;base64,${cleanBase64Pdf((state as any).pdf_base64)}`}
+              src={`data:application/pdf;base64,${cleanBase64Pdf(
+                (state as any).pdf_base64
+              )}`}
               className="w-full h-full border-0"
               title="Visualizador de PDF"
             />
@@ -537,7 +795,9 @@ export default function PreviewDocumento() {
               <Download className="mr-2 w-4 h-4" />
               {isDownloading
                 ? "Confirmando..."
-                : (isAceito ? "Baixar documento" : "Aceitar e baixar documento")}
+                : isAceito
+                ? "Baixar documento"
+                : "Aceitar e baixar documento"}
             </Button>
           </div>
         </main>
@@ -546,35 +806,88 @@ export default function PreviewDocumento() {
     );
   }
 
-  // ======== BENEFÍCIOS — Layout idêntico ao Holerite ========
+  // ======== BENEFÍCIOS — Layout idêntico ao Holerite (sem mudar posições) ========
   if ((state as any).tipo === "beneficios") {
-    const cab = getCabecalho(state) || {};
+    const cabBase = getCabecalho(state);
+    const hasCab = !!cabBase;
+
+    // Quando NÃO há cabecalho: completa dados com “soltos” e (se existir) benefExtraCab
+    const baseFromState = {
+      empresa:
+        (state as any)?.empresa ??
+        (state as any)?.beneficios?.[0]?.empresa ??
+        (state as any)?.eventos?.[0]?.empresa,
+      filial:
+        (state as any)?.filial ??
+        (state as any)?.beneficios?.[0]?.filial ??
+        (state as any)?.eventos?.[0]?.filial,
+      cliente:
+        (state as any)?.cliente ??
+        (state as any)?.beneficios?.[0]?.cliente ??
+        (state as any)?.eventos?.[0]?.cliente,
+      matricula:
+        (state as any)?.matricula ??
+        (state as any)?.beneficios?.[0]?.matricula ??
+        (state as any)?.eventos?.[0]?.matricula,
+      cpf:
+        (state as any)?.cpf ??
+        (state as any)?.beneficios?.[0]?.cpf ??
+        (state as any)?.eventos?.[0]?.cpf,
+      competencia:
+        (state as any)?.competencia ??
+        (state as any)?.beneficios?.[0]?.competencia ??
+        (state as any)?.eventos?.[0]?.competencia,
+      lote:
+        (state as any)?.lote ??
+        (state as any)?.beneficios?.[0]?.lote ??
+        (state as any)?.eventos?.[0]?.lote,
+    };
+
+    const cab: any = hasCab
+      ? cabBase
+      : { ...(benefExtraCab || {}), ...baseFromState };
     const lista = (state as any).beneficios ?? [];
 
     // Totais
-    const totV = lista.reduce((s: number, b: any) => s + (b?.tipo === "V" ? Number(b.valor || 0) : 0), 0);
-    const totD = lista.reduce((s: number, b: any) => s + (b?.tipo === "D" ? Number(b.valor || 0) : 0), 0);
+    const totV = lista.reduce(
+      (s: number, b: any) => s + (b?.tipo === "V" ? Number(b.valor || 0) : 0),
+      0
+    );
+    const totD = lista.reduce(
+      (s: number, b: any) => s + (b?.tipo === "D" ? Number(b.valor || 0) : 0),
+      0
+    );
     const valLiq = totV - totD;
 
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-green-600">
         <Header />
         <main className="flex-grow p-4 max-sm:p-2 max-sm:pt-24 pt-24 bg-white">
-          {/* Linha topo: Voltar / Check/Spinner (igual holerite) */}
+          {/* Linha topo: Voltar / Check/Spinner */}
           <div className="flex items-center justify-between mb-4">
-            <Button variant="default" onClick={() => navigate(-1)} className="flex items-center gap-2 text-white ">
+            <Button
+              variant="default"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-white "
+            >
               <ArrowLeft /> Voltar
             </Button>
             {renderAceitoBadge()}
           </div>
 
-          {/* Cabeçalho */}
+          {/* Cabeçalho (mesma estrutura/posições) */}
           <div className="mb-6 flex flex-col md:flex-row justify-between items-start">
             <div className="flex flex-col">
-              <h1 className="text-lg md:text-xl font-bold">Demonstrativo de Benefícios</h1>
+              <h1 className="text-lg md:text-xl font-bold">
+                Demonstrativo de Benefícios
+              </h1>
               <div className="text-sm md:text-base">
                 <strong>Empresa:</strong>{" "}
-                {cab?.empresa !== undefined ? `${padLeft(cab.empresa, 3)} - ${cab?.filial ?? ""} ` : ""}
+                {isDefined(cab?.empresa)
+                  ? `${padLeft(cab.empresa, 3)} - ${
+                      isDefined(cab?.filial) ? cab.filial : ""
+                    } `
+                  : ""}
                 {cab?.empresa_nome ?? ""}
                 {cab?.empresa_cnpj && (
                   <div className="block md:hidden text-xs pr-4 whitespace-nowrap overflow-x-auto">
@@ -584,7 +897,8 @@ export default function PreviewDocumento() {
               </div>
               <div className="text-sm md:text-base mt-2">
                 <strong>Cliente:</strong>{" "}
-                {(cab?.cliente ?? "") + (cab?.cliente_nome ? ` ${cab.cliente_nome}` : "")}
+                {(isDefined(cab?.cliente) ? String(cab.cliente) : "") +
+                  (cab?.cliente_nome ? ` ${cab.cliente_nome}` : "")}
                 {cab?.cliente_cnpj && (
                   <div className="block md:hidden text-xs whitespace-nowrap overflow-x-auto">
                     <strong>Nº Inscrição:</strong> {cab.cliente_cnpj}
@@ -608,33 +922,46 @@ export default function PreviewDocumento() {
             </div>
           </div>
 
-          {/* Grid infos */}
+          {/* Grid infos (mesma estrutura/posições).
+              >>> Campos "Nome do Funcionário", "Função" e "Admissão" ficam ocultos se vazios. */}
           <div className="mb-6 text-xs md:text-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
             <div className="flex flex-col">
-              <strong className="pb-1 md:pb-2">Código</strong> {cab?.matricula ? padLeft(cab.matricula, 6) : "-"}
+              <strong className="pb-1 md:pb-2">Código</strong>{" "}
+              {isDefined(cab?.matricula) ? padLeft(cab.matricula, 6) : "-"}
             </div>
-            <div className="flex flex-col">
-              <strong className="pb-1 md:pb-2">Nome do Funcionário</strong> {cab?.nome ? truncate(cab.nome, 30) : "-"}
-            </div>
-            <div className="flex flex-col">
-              <strong className="pb-1 md:pb-2">Função</strong> {cab?.funcao_nome ?? "-"}
-            </div>
-            <div className="flex flex-col">
-              <strong className="pb-1 md:pb-2">Admissão</strong> {cab?.admissao ?? "-"}
-            </div>
+
+            {cab?.nome && (
+              <div className="flex flex-col">
+                <strong className="pb-1 md:pb-2">Nome do Funcionário</strong>{" "}
+                {truncate(cab.nome, 30)}
+              </div>
+            )}
+
+            {cab?.funcao_nome && (
+              <div className="flex flex-col">
+                <strong className="pb-1 md:pb-2">Função</strong>{" "}
+                {cab.funcao_nome}
+              </div>
+            )}
+
+            {cab?.admissao && (
+              <div className="flex flex-col">
+                <strong className="pb-1 md:pb-2">Admissão</strong>{" "}
+                {cab.admissao}
+              </div>
+            )}
+
             <div className="flex flex-col">
               <strong className="pb-1 md:pb-2">Competência</strong>{" "}
-              {(
-                (state as any).competencia_forced ||
-                cab?.competencia ||
-                ""
-              ).toString().replace(/(\d{4})(\d{2})/, "$1-$2")}
+              {((state as any).competencia_forced || cab?.competencia || "")
+                .toString()
+                .replace(/(\d{4})(\d{2})/, "$1-$2")}
             </div>
           </div>
 
           <div className="bg-gray-300 w-full h-[1px] my-2"></div>
 
-          {/* Tabela benefícios */}
+          {/* Tabela benefícios (inalterada) */}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs md:text-sm">
               <thead>
@@ -662,18 +989,34 @@ export default function PreviewDocumento() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map((b: any, idx: number) => (
-                  <tr key={idx} className={idx % 2 ? "bg-gray-100" : "bg-white"}>
-                    <td className="p-1 md:p-2 border-r-[1px]">{b.evento}</td>
-                    <td className="p-1 md:p-2 border-r-[1px]">{truncate(b.evento_nome, 35)}</td>
-                    <td className="p-1 md:p-2 text-center border-r-[1px]">{b?.referencia ? fmtRef(Number(b.referencia)) : ""}</td>
-                    <td className="p-1 md:p-2 text-center border-r-[1px]">{b?.tipo === "V" ? fmtNum(Number(b.valor || 0)) : ""}</td>
-                    <td className="p-1 md:p-2 text-center">{b?.tipo === "D" ? fmtNum(Number(b.valor || 0)) : ""}</td>
-                  </tr>
-                ))}
-                {(!lista || lista.length === 0) && (
+                {((state as any).beneficios ?? []).map(
+                  (b: any, idx: number) => (
+                    <tr
+                      key={idx}
+                      className={idx % 2 ? "bg-gray-100" : "bg-white"}
+                    >
+                      <td className="p-1 md:p-2 border-r-[1px]">{b.evento}</td>
+                      <td className="p-1 md:p-2 border-r-[1px]">
+                        {truncate(b.evento_nome, 35)}
+                      </td>
+                      <td className="p-1 md:p-2 text-center border-r-[1px]">
+                        {b?.referencia ? fmtRef(Number(b.referencia)) : ""}
+                      </td>
+                      <td className="p-1 md:p-2 text-center border-r-[1px]">
+                        {b?.tipo === "V" ? fmtNum(Number(b.valor || 0)) : ""}
+                      </td>
+                      <td className="p-1 md:p-2 text-center">
+                        {b?.tipo === "D" ? fmtNum(Number(b.valor || 0)) : ""}
+                      </td>
+                    </tr>
+                  )
+                )}
+                {(!(state as any).beneficios ||
+                  (state as any).beneficios.length === 0) && (
                   <tr>
-                    <td colSpan={5} className="text-center p-3">Sem lançamentos.</td>
+                    <td colSpan={5} className="text-center p-3">
+                      Sem lançamentos.
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -682,7 +1025,7 @@ export default function PreviewDocumento() {
 
           <div className="bg-gray-300 w-full h-[1px] my-2"></div>
 
-          {/* Totais (igual ao holerite) */}
+          {/* Totais (inalterado) */}
           <div className="my-4 md:my-6 flex flex-col sm:flex-row justify-between text-xs md:text-sm">
             <div className="hidden sm:flex justify-end sm:justify-start xl:pl-[700px]">
               <div className="flex flex-col text-right">
@@ -714,7 +1057,6 @@ export default function PreviewDocumento() {
           </div>
         </main>
 
-        {/* Botão inferior (igual holerite) — aparece porque agora recebemos pdf_base64 de /beneficios/montar */}
         {(state as any).pdf_base64 && (
           <div className="flex justify-center items-center p-8 md:p-16">
             <Button
@@ -723,7 +1065,11 @@ export default function PreviewDocumento() {
               disabled={isDownloading}
             >
               <Download className="mr-2 w-4 h-4" />
-              {isDownloading ? "Confirmando..." : (isAceito ? "Baixar demonstrativo" : "Aceitar e baixar Benefícios")}
+              {isDownloading
+                ? "Confirmando..."
+                : isAceito
+                ? "Baixar demonstrativo"
+                : "Aceitar e baixar Benefícios"}
             </Button>
           </div>
         )}
@@ -733,19 +1079,30 @@ export default function PreviewDocumento() {
   }
 
   // ======== HOLERITE ========
-  if ((state as any).tipo === "holerite" && (!(state as any).cabecalho || !(state as any).eventos || !(state as any).rodape)) {
+  if (
+    (state as any).tipo === "holerite" &&
+    (!(state as any).cabecalho ||
+      !(state as any).eventos ||
+      !(state as any).rodape)
+  ) {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
         <main className="flex-grow p-4 md:p-8 bg-[#1e1e2f] text-white text-center">
           <div className="flex items-center justify-between mb-4">
-            <Button variant="default" onClick={() => navigate(-1)} className="flex items-center gap-2">
+            <Button
+              variant="default"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2"
+            >
               <ArrowLeft /> Voltar
             </Button>
             {renderAceitoBadge()}
           </div>
 
-          <p className="text-lg">Dados do holerite não encontrados. Volte e tente novamente.</p>
+          <p className="text-lg">
+            Dados do holerite não encontrados. Volte e tente novamente.
+          </p>
         </main>
         <Footer />
       </div>
@@ -761,7 +1118,11 @@ export default function PreviewDocumento() {
       <main className="flex-grow p-8 max-sm:p-2 max-sm:pt-24 pt-24 bg-white">
         {/* Linha topo: Voltar / Check/Spinner */}
         <div className="flex items-center justify-between mb-4">
-          <Button variant="default" onClick={() => navigate(-1)} className="flex items-center gap-2 text-white ">
+          <Button
+            variant="default"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-white "
+          >
             <ArrowLeft /> Voltar
           </Button>
 
@@ -770,15 +1131,19 @@ export default function PreviewDocumento() {
 
         <div className="mb-6 flex flex-col md:flex-row justify-between items-start">
           <div className="flex flex-col">
-            <h1 className="text-lg md:text-xl font-bold">Recibo de Pagamento de Salário</h1>
+            <h1 className="text-lg md:text-xl font-bold">
+              Recibo de Pagamento de Salário
+            </h1>
             <div className="text-sm md:text-base">
-              <strong>Empresa:</strong> {padLeft(cabecalho.empresa, 3)} - {cabecalho.filial} {cabecalho.empresa_nome}
+              <strong>Empresa:</strong> {padLeft(cabecalho.empresa, 3)} -{" "}
+              {cabecalho.filial} {cabecalho.empresa_nome}
               <div className="block md:hidden text-xs pr-4 whitespace-nowrap overflow-x-auto">
                 <strong>Nº Inscrição:</strong> {cabecalho.empresa_cnpj}
               </div>
             </div>
             <div className="text-sm md:text-base mt-2">
-              <strong>Cliente:</strong> {cabecalho.cliente} {cabecalho.cliente_nome}
+              <strong>Cliente:</strong> {cabecalho.cliente}{" "}
+              {cabecalho.cliente_nome}
               <div className="block md:hidden text-xs whitespace-nowrap overflow-x-auto">
                 <strong>Nº Inscrição:</strong> {cabecalho.cliente_cnpj}
               </div>
@@ -794,23 +1159,40 @@ export default function PreviewDocumento() {
           </div>
         </div>
 
+        {/* >>> Oculta Nome/Função/Admissão se vazios no holerite também */}
         <div className="mb-6 text-xs md:text-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
           <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Código</strong> {padLeft(cabecalho.matricula, 6)}
+            <strong className="pb-1 md:pb-2">Código</strong>{" "}
+            {padLeft(cabecalho.matricula, 6)}
           </div>
-          <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Nome do Funcionário</strong> {truncate(cabecalho.nome, 30)}
-          </div>
-          <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Função</strong> {cabecalho.funcao_nome}
-          </div>
-          <div className="flex flex-col">
-            <strong className="pb-1 md:pb-2">Admissão</strong> {cabecalho.admissao}
-          </div>
+
+          {cabecalho.nome && (
+            <div className="flex flex-col">
+              <strong className="pb-1 md:pb-2">Nome do Funcionário</strong>{" "}
+              {truncate(cabecalho.nome, 30)}
+            </div>
+          )}
+
+          {cabecalho.funcao_nome && (
+            <div className="flex flex-col">
+              <strong className="pb-1 md:pb-2">Função</strong>{" "}
+              {cabecalho.funcao_nome}
+            </div>
+          )}
+
+          {cabecalho.admissao && (
+            <div className="flex flex-col">
+              <strong className="pb-1 md:pb-2">Admissão</strong>{" "}
+              {cabecalho.admissao}
+            </div>
+          )}
+
           <div className="flex flex-col">
             <strong className="pb-1 md:pb-2">Competência</strong>{" "}
             {(state as any).competencia_forced
-              ? `${(state as any).competencia_forced.slice(0,4)}-${(state as any).competencia_forced.slice(4,6)}`
+              ? `${(state as any).competencia_forced.slice(0, 4)}-${(
+                  state as any
+                ).competencia_forced.slice(4, 6)}`
               : cabecalho.competencia}
           </div>
         </div>
@@ -847,10 +1229,18 @@ export default function PreviewDocumento() {
               {(eventos as Evento[]).map((e: Evento, idx: number) => (
                 <tr key={idx} className={idx % 2 ? "bg-gray-100" : "bg-white"}>
                   <td className="p-1 md:p-2 border-r-[1px]">{e.evento}</td>
-                  <td className="p-1 md:p-2 border-r-[1px]">{truncate(e.evento_nome, 35)}</td>
-                  <td className="p-1 md:p-2 text-center border-r-[1px]">{fmtRef(e.referencia)}</td>
-                  <td className="p-1 md:p-2 text-center border-r-[1px]">{e.tipo === "V" ? fmtNum(e.valor) : ""}</td>
-                  <td className="p-1 md:p-2 text-center">{e.tipo === "D" ? fmtNum(e.valor) : ""}</td>
+                  <td className="p-1 md:p-2 border-r-[1px]">
+                    {truncate(e.evento_nome, 35)}
+                  </td>
+                  <td className="p-1 md:p-2 text-center border-r-[1px]">
+                    {fmtRef(e.referencia)}
+                  </td>
+                  <td className="p-1 md:p-2 text-center border-r-[1px]">
+                    {e.tipo === "V" ? fmtNum(e.valor) : ""}
+                  </td>
+                  <td className="p-1 md:p-2 text-center">
+                    {e.tipo === "D" ? fmtNum(e.valor) : ""}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -863,7 +1253,8 @@ export default function PreviewDocumento() {
         <div className="my-4 md:my-6 flex flex-col sm:flex-row justify-between text-xs md:text-sm">
           <div className="hidden sm:flex justify-end sm:justify-start xl:pl-[700px]">
             <div className="flex flex-col text-right">
-              <strong>Total Vencimentos:</strong> {fmtNum(rodape.total_vencimentos)}
+              <strong>Total Vencimentos:</strong>{" "}
+              {fmtNum(rodape.total_vencimentos)}
             </div>
           </div>
           <div className="sm:hidden flex flex-col gap-2">
@@ -889,32 +1280,6 @@ export default function PreviewDocumento() {
             </div>
           </div>
         </div>
-
-        <div className="bg-gray-300 w-full h-[1px] my-2"></div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2 md:gap-4 pt-2 text-xs md:text-sm">
-          <div className="flex flex-col text-center">
-            <strong>Salário Base:</strong> {fmtNum(rodape.salario_base)}
-          </div>
-          <div className="flex flex-col text-center">
-            <strong>Sal. Contr. INSS:</strong> {fmtNum(rodape.sal_contr_inss)}
-          </div>
-          <div className="flex flex-col text-center">
-            <strong>Base Cálc FGTS:</strong> {fmtNum(rodape.base_calc_fgts)}
-          </div>
-          <div className="flex flex-col text-center">
-            <strong>F.G.T.S. do Mês:</strong> {fmtNum(rodape.fgts_mes)}
-          </div>
-          <div className="flex flex-col text-center">
-            <strong>Base Cálc IRRF:</strong> {fmtNum(rodape.base_calc_irrf)}
-          </div>
-          <div className="flex flex-col text-center">
-            <strong>DEP SF:</strong> {rodape.dep_sf}
-          </div>
-          <div className="flex flex-col text-center">
-            <strong>Dep IRF:</strong> {rodape.dep_irf}
-          </div>
-        </div>
       </main>
 
       <div className="flex justify-center items-center p-8 md:p-16">
@@ -924,7 +1289,11 @@ export default function PreviewDocumento() {
           disabled={isDownloading}
         >
           <Download className="mr-2 w-4 h-4" />
-          {isDownloading ? "Confirmando..." : (isAceito ? "Baixar holerite" : "Aceitar e baixar holerite")}
+          {isDownloading
+            ? "Confirmando..."
+            : isAceito
+            ? "Baixar holerite"
+            : "Aceitar e baixar holerite"}
         </Button>
       </div>
       <Footer />
