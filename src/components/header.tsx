@@ -90,7 +90,7 @@ export default function Header() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild className="hover:cursor-pointer ">
                 <Button
-                  variant="ghost"
+                  variant="default"
                   className="flex items-center bg-transparent hover:bg-blue-700 mr-8"
                 >
                   <IoPersonCircle className="!w-8 !h-8" />
@@ -118,7 +118,7 @@ export default function Header() {
 
         <Sheet>
           <SheetTrigger asChild className="md:hidden mr-2">
-            <Button variant="ghost" size="icon">
+            <Button variant="default" size="icon">
               <RxHamburgerMenu className="!h-6 !w-6 text-white" />
             </Button>
           </SheetTrigger>
