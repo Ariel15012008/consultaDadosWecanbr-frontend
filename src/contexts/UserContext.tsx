@@ -15,8 +15,8 @@ import api from "@/utils/axiosInstance";
 // Tipos para suportar 'dados[]' do /user/me
 // ================================================
 interface EmpresaMatricula {
-  id: string;        // cliente
-  nome: string;      // nome da empresa
+  id: string; // cliente
+  nome: string; // nome da empresa
   matricula: string; // matrícula do usuário nesta empresa
 }
 
@@ -69,7 +69,6 @@ export function UserProvider({ children }: UserProviderProps) {
   // 30 dias em ms
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
-
   // -------- comparação estável/deep para evitar troca de ref desnecessária -----
   const stable = (obj: any): any => {
     if (Array.isArray(obj)) return obj.map(stable);
@@ -107,6 +106,10 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!background) setIsLoading(true);
     try {
       const res = await api.get("/user/me");
+      const is_sapore = res.data.dados[0].id == 5849;
+
+      Cookies.set("is_sapore", is_sapore ? "true" : "false", { sameSite: "lax" });
+      console.log(is_sapore);
       if (res.status === 200) {
         const data = res.data as User;
         assignUserIfChanged(data);
@@ -227,7 +230,7 @@ export function UserProvider({ children }: UserProviderProps) {
   const value: UserContextType = {
     user,
     isAuthenticated: isAuthRef.current,
-    isLoading,   // agora só verdadeiro no boot inicial
+    isLoading, // agora só verdadeiro no boot inicial
     logout,
     refreshUser,
   };

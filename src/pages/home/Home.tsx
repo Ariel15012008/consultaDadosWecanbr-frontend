@@ -11,6 +11,7 @@ import LoadingScreen from "@/components/ui/loadingScreen";
 import api from "@/utils/axiosInstance";
 import { useUser } from "@/contexts/UserContext";
 import { toast } from "sonner";
+import Cookies from "js-cookie";
 
 interface Documento {
   id: number;
@@ -34,13 +35,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (userLoading || !isAuthenticated) return;
+  if (userLoading || !isAuthenticated) return;
 
-    const controller = new AbortController();
-    setListsLoaded(false);
+  const controller = new AbortController();
+  setListsLoaded(false);
 
-    (async () => {
-      try {
+  (async () => {
+    try {
+      const shouldFetchTemplates =
+        (Cookies.get("is_sapore") || "").toLowerCase() === "true";
+
+      if (shouldFetchTemplates) {
         const [resDocs, resTemplates] = await Promise.all([
           api.get<Documento[]>("/documents", { signal: controller.signal }),
           api.get<TemplateGED[]>("/searchdocuments/templates", {
@@ -53,31 +58,45 @@ export default function Home() {
         );
         setDocumentos(documentosOrdenados);
         setTemplates(resTemplates.data);
-        setListsLoaded(true);
-      } catch (error: any) {
-        if (
-          controller.signal.aborted ||
-          error?.code === "ERR_CANCELED" ||
-          error?.name === "CanceledError"
-        ) {
-          return;
-        }
-        toast.error("Falha ao carregar opções", {
-          description:
-            "Não foi possível carregar a lista de documentos. Tente novamente.",
+      } else {
+        const resDocs = await api.get<Documento[]>("/documents", {
+          signal: controller.signal,
         });
-        console.warn("Erro ao carregar documentos/templates:", error);
+        const documentosOrdenados = [...resDocs.data].sort((a, b) =>
+          a.nome.localeCompare(b.nome)
+        );
+        setDocumentos(documentosOrdenados);
+        setTemplates([]);
       }
-    })();
 
-    return () => controller.abort();
-  }, [isAuthenticated, userLoading]);
+      setListsLoaded(true);
+    } catch (error: any) {
+      if (
+        controller.signal.aborted ||
+        error?.code === "ERR_CANCELED" ||
+        error?.name === "CanceledError"
+      ) {
+        return;
+      }
+      toast.error("Falha ao carregar opções", {
+        description:
+          "Não foi possível carregar a lista de documentos. Tente novamente.",
+      });
+      console.warn("Erro ao carregar documentos/templates:", error);
+    }
+  })();
+
+  return () => controller.abort();
+}, [isAuthenticated, userLoading]);
+
 
   const DEFAULT_TEMPLATE_ID = "3";
-  const DOC_TEMPLATE_RULES: Array<{ match: (n: string) => boolean; id: string }> = [
+  const DOC_TEMPLATE_RULES: Array<{
+    match: (n: string) => boolean;
+    id: string;
+  }> = [
     {
-      match: (n) =>
-        /recibo\s*va|vale\s*alimenta(ç|c)[aã]o/i.test(n ?? ""),
+      match: (n) => /recibo\s*va|vale\s*alimenta(ç|c)[aã]o/i.test(n ?? ""),
       id: "3",
     },
   ];
@@ -93,7 +112,8 @@ export default function Home() {
     if (total <= 2) return "grid-cols-1 sm:grid-cols-2";
     if (total === 3) return "grid-cols-1 sm:grid-cols-3";
     if (total === 4) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-4";
-    if (total === 5) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5";
+    if (total === 5)
+      return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5";
     return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
   }, [documentos]);
 
@@ -154,7 +174,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold">SEJA BEM-VINDO ao SuperRH</h1>
+                  <h1 className="text-lg font-bold">
+                    SEJA BEM-VINDO ao SuperRH
+                  </h1>
                   <p className="text-sm text-gray-300">
                     O SuperRH é um novo meio de comunicação entre você e o RH da
                     empresa. Através dele você poderá tirar dúvidas, consultar
