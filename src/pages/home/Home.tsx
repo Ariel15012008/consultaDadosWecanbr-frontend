@@ -1,4 +1,3 @@
-// src/pages/home/Home.tsx
 "use client";
 
 import avatar from "@/assets/Avatar de Recepição.png";
@@ -34,62 +33,64 @@ export default function Home() {
     document.title = "Portal do funcionário";
   }, []);
 
+  // 🔥 Hook que carrega documentos — sempre fica DEPOIS dos estados
   useEffect(() => {
-  if (userLoading || !isAuthenticated) return;
+    if (!isAuthenticated) return;
+    if (userLoading) return;
 
-  const controller = new AbortController();
-  setListsLoaded(false);
+    const controller = new AbortController();
+    setListsLoaded(false);
 
-  (async () => {
-    try {
-      const shouldFetchTemplates =
-        (Cookies.get("is_sapore") || "").toLowerCase() === "true";
+    (async () => {
+      try {
+        const shouldFetchTemplates =
+          (Cookies.get("is_sapore") || "").toLowerCase() === "true";
 
-      if (shouldFetchTemplates) {
-        const [resDocs, resTemplates] = await Promise.all([
-          api.get<Documento[]>("/documents", { signal: controller.signal }),
-          api.get<TemplateGED[]>("/searchdocuments/templates", {
+        if (shouldFetchTemplates) {
+          const [resDocs, resTemplates] = await Promise.all([
+            api.get<Documento[]>("/documents", { signal: controller.signal }),
+            api.get<TemplateGED[]>("/searchdocuments/templates", {
+              signal: controller.signal,
+            }),
+          ]);
+
+          const docsSorted = [...resDocs.data].sort((a, b) =>
+            a.nome.localeCompare(b.nome)
+          );
+          setDocumentos(docsSorted);
+          setTemplates(resTemplates.data);
+        } else {
+          const resDocs = await api.get<Documento[]>("/documents", {
             signal: controller.signal,
-          }),
-        ]);
+          });
+          const docsSorted = [...resDocs.data].sort((a, b) =>
+            a.nome.localeCompare(b.nome)
+          );
+          setDocumentos(docsSorted);
+          setTemplates([]);
+        }
 
-        const documentosOrdenados = [...resDocs.data].sort((a, b) =>
-          a.nome.localeCompare(b.nome)
-        );
-        setDocumentos(documentosOrdenados);
-        setTemplates(resTemplates.data);
-      } else {
-        const resDocs = await api.get<Documento[]>("/documents", {
-          signal: controller.signal,
+        setListsLoaded(true);
+      } catch (error: any) {
+        if (
+          controller.signal.aborted ||
+          error?.code === "ERR_CANCELED" ||
+          error?.name === "CanceledError"
+        ) {
+          return;
+        }
+        toast.error("Falha ao carregar opções", {
+          description:
+            "Não foi possível carregar a lista de documentos. Tente novamente.",
         });
-        const documentosOrdenados = [...resDocs.data].sort((a, b) =>
-          a.nome.localeCompare(b.nome)
-        );
-        setDocumentos(documentosOrdenados);
-        setTemplates([]);
+        console.warn("Erro ao carregar documentos:", error);
       }
+    })();
 
-      setListsLoaded(true);
-    } catch (error: any) {
-      if (
-        controller.signal.aborted ||
-        error?.code === "ERR_CANCELED" ||
-        error?.name === "CanceledError"
-      ) {
-        return;
-      }
-      toast.error("Falha ao carregar opções", {
-        description:
-          "Não foi possível carregar a lista de documentos. Tente novamente.",
-      });
-      console.warn("Erro ao carregar documentos/templates:", error);
-    }
-  })();
+    return () => controller.abort();
+  }, [isAuthenticated, userLoading]);
 
-  return () => controller.abort();
-}, [isAuthenticated, userLoading]);
-
-
+  // 🔍 Regras de template
   const DEFAULT_TEMPLATE_ID = "3";
   const DOC_TEMPLATE_RULES: Array<{
     match: (n: string) => boolean;
@@ -106,7 +107,7 @@ export default function Home() {
     return rule?.id || DEFAULT_TEMPLATE_ID;
   };
 
-  // ✅ mover o useMemo antes de qualquer return condicional
+  // 🔧 Grid dinâmico
   const gridCols = useMemo(() => {
     const total = documentos.length;
     if (total <= 2) return "grid-cols-1 sm:grid-cols-2";
@@ -117,11 +118,21 @@ export default function Home() {
     return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
   }, [documentos]);
 
-  // 🔧 Loader total da página — vem DEPOIS dos hooks
-  if (userLoading || (isAuthenticated && !listsLoaded)) {
+  // ====================================================
+  // 🚀 SOMENTE AQUI COMEÇAM OS RETURNS CONDICIONAIS
+  // ====================================================
+
+  // 1) Ainda carregando o usuário? → Não mostra NADA da Home
+  if (userLoading) {
     return <LoadingScreen />;
   }
 
+  // 2) Autenticado mas documentos não carregados? → LoadingScreen
+  if (isAuthenticated && !listsLoaded) {
+    return <LoadingScreen />;
+  }
+
+  // 3) Renderização final
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden">
       <Header />
@@ -137,20 +148,19 @@ export default function Home() {
                 key={id}
                 className="bg-[#1e1e2f] text-white rounded-lg cursor-pointer hover:shadow-xl transition-all hover:translate-x-1"
                 onClick={() => {
-                  const lower = (nome || "").toLowerCase();
+                  const n = nome.toLowerCase();
                   const isHolerite =
-                    lower.includes("holerite") ||
-                    lower.includes("folha") ||
-                    lower.includes("pagamento");
+                    n.includes("holerite") ||
+                    n.includes("folha") ||
+                    n.includes("pagamento");
 
                   if (isHolerite) {
                     navigate("/documentos?tipo=holerite");
                   } else {
-                    const templateId = getTemplateId(nome);
                     navigate(
-                      `/documentos?tipo=generico&template=${templateId}&documento=${encodeURIComponent(
+                      `/documentos?tipo=generico&template=${getTemplateId(
                         nome
-                      )}`
+                      )}&documento=${encodeURIComponent(nome)}`
                     );
                   }
                 }}
@@ -174,13 +184,10 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold">
-                    SEJA BEM-VINDO ao SuperRH
-                  </h1>
+                  <h1 className="text-lg font-bold">SEJA BEM-VINDO ao SuperRH</h1>
                   <p className="text-sm text-gray-300">
                     O SuperRH é um novo meio de comunicação entre você e o RH da
-                    empresa. Através dele você poderá tirar dúvidas, consultar
-                    seus recibos de pagamento, entre outros documentos.
+                    empresa. Consulte seus documentos, converse com o RH e muito mais.
                   </p>
                 </div>
               </div>

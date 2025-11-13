@@ -27,7 +27,7 @@ export default function LoginPage() {
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const navigate = useNavigate();
-  const { refreshUser } = useUser(); // Usando o contexto para atualizar os dados
+  const { refreshUser } = useUser(); // contexto
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -37,12 +37,16 @@ export default function LoginPage() {
     setLoginError("");
 
     try {
+      // 1) Faz login (rápido)
       await api.post("/user/login", data, { withCredentials: true });
-      
-      // Atualiza os dados do usuário no contexto após login bem-sucedido
-       await refreshUser();
-      
+
+      // 2) Já manda o usuário pra Home
       navigate("/");
+
+      // 3) Atualiza dados do usuário em background (sem travar a navegação)
+      refreshUser().catch((err) => {
+        console.error("Erro ao atualizar usuário após login:", err);
+      });
     } catch (err: any) {
       console.error("Erro ao fazer login:", err);
       if (err?.message === "Network Error") {
@@ -106,12 +110,6 @@ export default function LoginPage() {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </div>
           </div>
-          {/* <a
-            href="/forgot-password"
-            className=" text-sm text-gray-200 mt-1 flex justify-end hover:text-white hover:underline cursor-pointer "
-          >
-            Esqueceu sua senha?
-          </a> */}
           {errors.senha && (
             <p className="text-red-400 text-sm mt-1">{errors.senha.message}</p>
           )}
@@ -129,17 +127,6 @@ export default function LoginPage() {
         >
           {loading ? "Entrando..." : "Entrar"}
         </Button>
-
-
-        {/* <p className="text-sm text-center mt-4 text-gray-300">
-          Ainda não tem conta?{" "}
-          <a
-            href="/register"
-            className="text-[#7a8cff] hover:underline font-semibold"
-          >
-            Criar agora
-          </a>
-        </p> */}
       </form>
     </div>
   );
