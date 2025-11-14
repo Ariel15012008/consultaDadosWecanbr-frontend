@@ -1,22 +1,18 @@
 // src/lib/ProtectedRoute.tsx
-
-import { Navigate, Outlet, useLocation } from "react-router-dom"
-import Cookies from "js-cookie"
+import { Navigate, Outlet } from "react-router-dom";
+import { useUser } from "@/contexts/UserContext";
+import LoadingScreen from "@/components/ui/loadingScreen";
 
 export function ProtectedRoute() {
-  const { pathname } = useLocation()
+  const { isAuthenticated, isLoading } = useUser();
 
-  // Quais rotas exigem autenticação
-  const needsAuth =
-    pathname === "/documentos" ||
-    pathname.startsWith("/documento/preview")
-
-  // Leia o cookie correto
-  const isAuthenticated = Boolean(Cookies.get("logged_user"))
-
-  if (needsAuth && !isAuthenticated) {
-    return <Navigate to="/" replace />
+  if (isLoading) {
+    return <LoadingScreen />;
   }
 
-  return <Outlet />
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
 }

@@ -1,14 +1,18 @@
-import { Navigate, Outlet } from 'react-router-dom'
-import Cookies from "js-cookie"
+// src/lib/PublicRoute.tsx
+import { Navigate, Outlet } from "react-router-dom";
+import { useUser } from "@/contexts/UserContext";
+import LoadingScreen from "@/components/ui/loadingScreen";
 
 export function PublicRoute() {
-  const loggedUser = Cookies.get("logged_user")
+  const { isAuthenticated, isLoading } = useUser();
 
-  const isAuthenticated = !!loggedUser
-
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />
+  if (isLoading) {
+    return <LoadingScreen />;
   }
 
-  return <Outlet />
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
 }
