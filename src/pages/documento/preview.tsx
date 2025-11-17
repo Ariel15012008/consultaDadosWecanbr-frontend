@@ -378,7 +378,7 @@ export default function PreviewDocumento() {
             const cabBase = getCabecalho(state);
             const hasCab = !!cabBase;
             const cab = hasCab ? cabBase : benefExtraCab; // só usa buscar quando não tem cabecalho
-            uuid = cab?.uuid || benefUuid;               // [NOVO] usa benefUuid como fallback
+            uuid = cab?.uuid || benefUuid; // [NOVO] usa benefUuid como fallback
           }
 
           if (!uuid) {
@@ -397,8 +397,8 @@ export default function PreviewDocumento() {
 
         // genérico
         const idGed =
-          asStr((state as any)?.documento_info?.id_ged) ??
-          asStr((state as any)?.documento_info?.id_documento);
+          asStr((state as any)?.documento_info?.id_documento) ??
+          asStr((state as any)?.documento_info?.id_ged);
 
         if (!idGed) {
           setAceiteFlag(null);
@@ -444,9 +444,9 @@ export default function PreviewDocumento() {
     if (isAceito) {
       return (
         <span className="inline-flex items-center gap-2 ml-auto self-end sm:self-auto pb-2 sm:pb-0">
-          <p className="text-green-500">Aceito</p>
+          <p className="text-white">Aceito</p>
           <FaCheckCircle
-            className="w-10 h-10 text-green-500"
+            className="w-10 h-10 text-white"
             aria-label="Documento aceito"
           />
         </span>
@@ -543,6 +543,7 @@ export default function PreviewDocumento() {
   };
 
   // confirma no backend (uuid ou id_ged) e depois baixa
+  // confirma no backend (uuid ou id_ged) e depois baixa
   const handleAcceptAndDownload = async () => {
     if (!(state as any)?.pdf_base64) {
       toast.error("PDF não disponível para confirmar.");
@@ -562,6 +563,7 @@ export default function PreviewDocumento() {
     let uuid: string | undefined;
     let id_ged: string | undefined;
 
+    // ===== HOLERITE =====
     if ((state as any)?.tipo === "holerite" && (state as any)?.cabecalho) {
       matricula = String((state as any).cabecalho.matricula ?? "");
       competencia =
@@ -581,6 +583,8 @@ export default function PreviewDocumento() {
           }
         } catch {}
       }
+
+      // ===== BENEFÍCIOS =====
     } else if ((state as any)?.tipo === "beneficios") {
       const cabBase = getCabecalho(state);
       const hasCab = !!cabBase;
@@ -619,14 +623,15 @@ export default function PreviewDocumento() {
         normalizeCompetencia((state as any)?.competencia);
       unidade = cabAll?.cliente_nome || cabAll?.cliente || "";
 
-      // [NOVO] prioridade: cabecalho.uuid -> benefUuid
+      // prioridade: cabecalho.uuid -> benefUuid
       uuid = cabAll?.uuid || benefUuid;
 
       // fallback: buscar uuid na hora (com mais pistas, se tivermos)
       if (!uuid) {
         try {
-          const cpfDigits = String((user as any)?.cpf ?? "")
-            .replace(/\D/g, "") || (state as any)?.cpf;
+          const cpfDigits =
+            String((user as any)?.cpf ?? "").replace(/\D/g, "") ||
+            (state as any)?.cpf;
           const buscarPayload: any = {
             cpf: cpfDigits,
             matricula: String(matricula),
@@ -639,61 +644,200 @@ export default function PreviewDocumento() {
           if (isDefined(baseFromState.cliente))
             buscarPayload.cliente = baseFromState.cliente;
 
-          const res = await api.post("/documents/beneficios/buscar", buscarPayload);
+          const res = await api.post(
+            "/documents/beneficios/buscar",
+            buscarPayload
+          );
           uuid =
             extractUuidFromAny(res?.data) ||
             getCabecalho(res?.data)?.uuid ||
-            (Array.isArray(res?.data) ? getCabecalho(res.data[0])?.uuid : undefined);
+            (Array.isArray(res?.data)
+              ? getCabecalho(res.data[0])?.uuid
+              : undefined);
           if (uuid) setBenefUuid(uuid);
         } catch {}
       }
+
+      // ===== GENÉRICO (TRTC, INFORME, etc) =====
     } else if (
       (state as any)?.tipo === "generico" &&
       (state as any)?.documento_info
     ) {
       const info = (state as any).documento_info;
-      matricula = String(info.matricula ?? "");
-      competencia = normalizeCompetencia(info.anomes || info._norm_anomes);
-      unidade = info.cliente || "";
-      id_ged = asStr(info.id_ged) ?? asStr(info.id_documento);
+
+      // trata vazio como "não preenchido"
+      const clean = (v: any) =>
+        v === null || v === undefined ? "" : String(v).trim();
+
+      const docMat = clean(info.matricula);
+      const stateMat = clean((state as any)?.matricula);
+      const userMat =
+        clean((user as any)?.matricula) ||
+        clean((user as any)?.registration_number) ||
+        clean((user as any)?.registration);
+
+      matricula = docMat || stateMat || userMat || "";
+
+      const docCli = clean(info.cliente);
+      const userCli = clean((user as any)?.cliente);
+
+      unidade = docCli || userCli || "";
+
+      const rawComp =
+        info.anomes ??
+        info._norm_anomes ??
+        (state as any)?.competencia_forced ??
+        info.ano ??
+        info.ANO ??
+        "";
+
+      // aqui a gente normaliza, mas lá embaixo a validação de YYYYMM só vale para holerite/benefícios
+      competencia = normalizeCompetencia(rawComp);
+
+      id_ged =
+        asStr(info.id_documento) ??
+        asStr(info.id_ged) ??
+        asStr(info.id) ??
+        asStr(info.ID);
+
+      console.log("[STATUS-DOC] GEN fill (TRTC/Informe)", {
+        from: "generico-block",
+        docMat,
+        stateMat,
+        userMat,
+        finalMatricula: matricula,
+        docCli,
+        userCli,
+        finalUnidade: unidade,
+        rawComp,
+        competencia,
+        id_ged,
+      });
+    }
+
+    // [DEBUG] TRTC / Informe – antes de qualquer validação/return
+    if (
+      (state as any)?.tipo === "generico" &&
+      typeof (state as any)?.documento_info?.tipodedoc === "string"
+    ) {
+      const tipodedocRaw = (state as any).documento_info.tipodedoc;
+      const tipodedoc = tipodedocRaw.toLowerCase();
+
+      const isTRTC = tipodedoc.includes("trtc") || tipodedoc.includes("trct");
+      const isInforme =
+        tipodedoc.includes("informe") && tipodedoc.includes("rend");
+
+      if (isTRTC || isInforme) {
+        console.log("[STATUS-DOC] INICIO TRTC/Informe:", {
+          tipo: (state as any)?.tipo,
+          tipo_doc,
+          tipodedoc: tipodedocRaw,
+          preliminares: {
+            matricula,
+            competencia,
+            unidade,
+            id_ged,
+            cpfDigitsUser: String((user as any)?.cpf ?? ""),
+          },
+        });
+      }
     }
 
     const cpfDigits = String((user as any)?.cpf ?? "").replace(/\D/g, "") || "";
 
-    if (!matricula) {
+    const isHolBenef =
+      (state as any)?.tipo === "holerite" ||
+      (state as any)?.tipo === "beneficios";
+
+    if (!matricula && isHolBenef) {
+      console.warn(
+        "[STATUS-DOC] BLOQUEADO: sem matricula (holerite/beneficios)",
+        {
+          tipo: (state as any)?.tipo,
+          tipo_doc,
+          matricula,
+          competencia,
+          cpfDigits,
+        }
+      );
       toast.error("Matrícula não encontrada para confirmar o documento.");
       await handleDownload();
       return;
     }
-    if (!competencia || !/^\d{6}$/.test(competencia)) {
-      toast.error("Competência inválida para confirmar o documento.");
+
+    // Para holerite/benefícios: exige YYYYMM
+    // Para genérico (TRCT, informes etc.): apenas exige que exista algum período
+    if (!competencia || (isHolBenef && !/^\d{6}$/.test(competencia))) {
+      console.warn("[STATUS-DOC] BLOQUEADO: competencia inválida", {
+        tipo: (state as any)?.tipo,
+        tipo_doc,
+        isHolBenef,
+        competencia,
+      });
+      toast.error(
+        isHolBenef
+          ? "Competência inválida para confirmar o documento."
+          : "Período do documento não localizado para confirmar."
+      );
       await handleDownload();
       return;
     }
+
     if (!cpfDigits || cpfDigits.length !== 11) {
+      console.warn("[STATUS-DOC] BLOQUEADO: cpf inválido", {
+        tipo: (state as any)?.tipo,
+        tipo_doc,
+        cpfDigits,
+      });
       toast.error("CPF do usuário indisponível ou inválido.");
       await handleDownload();
       return;
     }
 
     const payload: any = {
-      aceito: true,
-      tipo_doc,
-      base64: cleanBase64Pdf((state as any).pdf_base64),
-      matricula: String(matricula),
-      cpf: String(cpfDigits),
-      unidade: String(unidade || ""),
-      competencia: String(competencia),
-    };
+  aceito: true,
+  tipo_doc,
+  base64: cleanBase64Pdf((state as any).pdf_base64),
+  cpf: String(cpfDigits),
+  // sempre manda matricula, mesmo vazia
+  matricula: matricula ?? "",
+};
 
-    if (
-      (state as any)?.tipo === "holerite" ||
-      (state as any)?.tipo === "beneficios"
-    ) {
-      if (uuid) payload.uuid = String(uuid);
-    }
-    if ((state as any)?.tipo === "generico" && id_ged) {
-      payload.id_ged = String(id_ged);
+if (unidade) payload.unidade = String(unidade);
+if (competencia) payload.competencia = String(competencia);
+
+if (
+  (state as any)?.tipo === "holerite" ||
+  (state as any)?.tipo === "beneficios"
+) {
+  if (uuid) payload.uuid = String(uuid);
+}
+if ((state as any)?.tipo === "generico" && id_ged) {
+  payload.id_ged = String(id_ged);
+}
+    // LOG APENAS PARA TRTC / INFORME DE RENDIMENTOS
+    if ((state as any)?.tipo === "generico") {
+      const tipodedocRaw = (state as any)?.documento_info?.tipodedoc;
+      const tipodedoc = String(tipodedocRaw || "").toLowerCase();
+
+      const isTRTC = tipodedoc.includes("trtc") || tipodedoc.includes("trct");
+      const isInforme =
+        tipodedoc.includes("informe") && tipodedoc.includes("rend");
+
+      console.log("[STATUS-DOC] GEN pronto para enviar:", {
+        tipo_doc,
+        tipodedoc: tipodedocRaw,
+        isTRTC,
+        isInforme,
+        payload,
+        extras: {
+          matricula,
+          competencia,
+          unidade,
+          id_ged,
+          cpfDigits,
+        },
+      });
     }
 
     try {
@@ -788,7 +932,14 @@ export default function PreviewDocumento() {
 
           <div className="flex justify-center items-center pb-8 pt-4 gap-3">
             <Button
-              onClick={isAceito ? handleDownload : handleAcceptAndDownload}
+              onClick={() => {
+                console.log("[GEN BUTTON CLICK]", {
+                  isAceito,
+                  tipo: (state as any)?.tipo,
+                  tipodedoc: (state as any)?.documento_info?.tipodedoc,
+                });
+                return isAceito ? handleDownload() : handleAcceptAndDownload();
+              }}
               className="bg-green-600 hover:bg-green-500 w-full sm:w-56 h-10"
               disabled={isDownloading}
             >

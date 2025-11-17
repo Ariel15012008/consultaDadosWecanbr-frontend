@@ -21,16 +21,9 @@ import { useUser } from "@/contexts/UserContext";
 import { toast, Toaster } from "sonner";
 import LoadingScreen from "@/components/ui/loadingScreen";
 
-const maskCpf = (cpf: string) => {
-  const d = (cpf || "").replace(/\D/g, "");
-  if (d.length < 5) return d.replace(/.(?=..)/g, "*");
-  return `${d.slice(0, 3)}****${d.slice(-2)}`;
-};
 
-// no-ops (sem console)
-const dbg = (..._args: any[]) => {};
-const dbgGroup = (_title: string) => {};
-const dbgGroupEnd = () => {};
+
+
 
 // ================================================
 // Tipagens auxiliares
@@ -207,7 +200,6 @@ async function withRetry<T>(
 
       if (!transient || attempt === retries) break;
       const wait = baseDelayMs * Math.pow(2, attempt);
-      dbg(`withRetry: tentativa ${attempt + 1} falhou; aguardando ${wait}ms`);
       await new Promise((r) => setTimeout(r, wait));
     }
   }
@@ -225,13 +217,6 @@ export default function DocumentList() {
   const { user, isLoading: userLoading } = useUser();
   const [searchParams] = useSearchParams();
 
-  // log baseURL do axios uma vez (silenciado)
-  useEffect(() => {
-    const anyApi: any = api as any;
-    const baseURL = anyApi?.defaults?.baseURL;
-    dbg("Axios baseURL:", baseURL);
-  }, []);
-
   // ===== Opção 2: normalizar parametros e mapear generico+Beneficios => beneficios
   const normalize = (s: string) =>
     (s || "")
@@ -244,7 +229,7 @@ export default function DocumentList() {
   const nomeDocumentoRaw = searchParams.get("documento") || "";
   const docParam = normalize(nomeDocumentoRaw);
 
-  const tipoDocumento =
+    const tipoDocumento =
     tipoParam === "beneficios" ||
     (tipoParam === "generico" && /^beneficios?$/.test(docParam))
       ? "beneficios"
@@ -252,6 +237,19 @@ export default function DocumentList() {
 
   const templateId = searchParams.get("template") || "3";
   const nomeDocumento = nomeDocumentoRaw;
+
+const isTrct = (() => {
+  const d = docParam; // "informe rendimento", "trct", etc. já normalizado
+
+  // Aqui você define quais documentos vão usar a rota /documents/search/informetrct
+  return (
+    tipoDocumento === "trct" ||             // se vier explicitamente como tipo=trct
+    d.includes("informe rendimento") ||     // Informe de Rendimentos
+    d.includes("trct") ||                   // TRCT / TRTC
+    d.includes("rescis")                    // termo de rescisão (opcional)
+  );
+})();
+
 
   // ================================================
   // ESTADOS GERAIS
@@ -408,7 +406,7 @@ export default function DocumentList() {
   // ================================================
   // Benefícios (não gestor): discovery por empresa/matrícula
   // ================================================
-  const [isLoadingCompetenciasBen, setIsLoadingCompetenciasBen] =
+  const [isLoadingCompetenciasBen] =
     useState(false);
   const [competenciasBen, setCompetenciasBen] = useState<CompetenciaItem[]>([]);
   const [selectedYearBen, setSelectedYearBen] = useState<number | null>(null);
@@ -540,7 +538,6 @@ export default function DocumentList() {
           matricula: trimStr(d.matricula),
         }));
         setEmpresasDoUsuario(dadosList);
-        dbg("(/user/me) cpf:", maskCpf(cpfDigits), "empresas:", dadosList);
 
         // Auto-seleção por empresa (para holerite e genéricos/benefícios)
         if (dadosList.length > 0) {
@@ -668,7 +665,6 @@ export default function DocumentList() {
         })) as CompetenciaItem[];
 
         setCompetencias(lista);
-        dbg("(/holerite/competencias) payload:", payload, "resp:", lista);
 
         if (!lista.length) {
           toast.warning(
@@ -689,11 +685,6 @@ export default function DocumentList() {
         ) {
           return;
         }
-        dbg("(/holerite/competencias) ERRO:", {
-          status: err?.response?.status,
-          url: err?.config?.url,
-          data: err?.response?.data,
-        });
         toast.error("Erro ao carregar períodos do holerite", {
           description: extractErrorMessage(
             err,
@@ -750,35 +741,76 @@ export default function DocumentList() {
         setPaginaAtual(1);
         setCompetenciasGenLoaded(false);
 
-        const cp = [
-          { nome: "tipodedoc", valor: nomeDocumento },
-          { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
-          { nome: "colaborador", valor: onlyDigits(meCpf) },
-        ];
+        // se for TRCT, seguimos o mesmo padrão que você testou no Postman
+const cpfNorm = onlyDigits(meCpf);
 
-        const payload = {
-          id_template: Number(templateId),
-          cp,
-          campo_anomes: "anomes",
-          anomes: "",
-        };
+// TRCT + Informe Rendimento usam a mesma rota /documents/search/informetrct
+const cp = isTrct
+  ? [
+      { nome: "tipodedoc", valor: nomeDocumento }, // "trtc" OU "Informe Rendimento"
+      { nome: "cpf", valor: cpfNorm },
+    ]
+  : [
+      { nome: "tipodedoc", valor: nomeDocumento },
+      { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
+      { nome: "colaborador", valor: cpfNorm },
+    ];
 
-        const res = await api.post<{ anomes: { ano: number; mes: number }[] }>(
-          "/documents/search",
-          payload,
-          { signal: controller.signal }
-        );
+const payload: any = {
+  id_template: Number(templateId),
+  cp,
+  campo_anomes: isTrct ? "ano" : "anomes",
+  anomes: "",
+};
 
-        if (controller.signal.aborted) return;
+if (isTrct) {
+  payload.cpf = cpfNorm;
+}
 
-        const listaBruta = res.data?.anomes ?? [];
-        const lista: CompetenciaItem[] = listaBruta.map((x) => ({
-          ano: x.ano,
-          mes: String(x.mes).padStart(2, "0"),
-        }));
+const endpoint = isTrct
+  ? "/documents/search/informetrct"
+  : "/documents/search";
 
-        setCompetenciasGen(lista);
-        dbg("(/documents/search - genéricos) payload:", payload, "resp:", lista);
+// 🔍 LOG só quando chamar a rota informetrct
+if (endpoint === "/documents/search/informetrct") {
+  console.log(
+    "[DocumentList][DISCOVERY informetrct] endpoint:",
+    endpoint
+  );
+  console.log(
+    "[DocumentList][DISCOVERY informetrct] payload:",
+    JSON.stringify(payload, null, 2)
+  );
+}
+
+const res = await api.post<{
+  anomes?: { ano: number; mes: number }[];
+  anos?: { ano: number }[];
+}>(endpoint, payload, { signal: controller.signal });
+
+
+if (controller.signal.aborted) return;
+
+let lista: CompetenciaItem[] = [];
+
+if (isTrct) {
+  // TRCT retorna "anos", não "anomes"
+  const anosBrutos = res.data?.anos ?? [];
+  lista = anosBrutos.map((x) => ({
+    ano: x.ano,
+    // usamos um mês "fake" só pra encaixar no grid; depois a busca usa só o ano
+    mes: "01",
+  }));
+} else {
+  const listaBruta = res.data?.anomes ?? [];
+  lista = listaBruta.map((x) => ({
+    ano: x.ano,
+    mes: String(x.mes).padStart(2, "0"),
+  }));
+}
+
+setCompetenciasGen(lista);
+
 
         if (!lista.length) {
           toast.warning(`Nenhum período encontrado para ${nomeDocumento}.`);
@@ -793,11 +825,6 @@ export default function DocumentList() {
         ) {
           return;
         }
-        dbg("(/documents/search - genéricos) ERRO:", {
-          status: err?.response?.status,
-          url: err?.config?.url,
-          data: err?.response?.data,
-        });
         toast.error("Erro ao carregar períodos", {
           description: extractErrorMessage(
             err,
@@ -845,65 +872,105 @@ export default function DocumentList() {
 
     const controller = new AbortController();
 
-    const run = async () => {
-      try {
-        setIsLoadingCompetenciasBen(true);
-        setDocuments([]);
-        setPaginaAtual(1);
-        setCompetenciasBenLoaded(false);
+      const run = async () => {
+    try {
+      setIsLoadingCompetenciasGen(true);
+      setDocuments([]);
+      setPaginaAtual(1);
+      setCompetenciasGenLoaded(false);
 
-        const payload = {
-          cpf: onlyDigits(meCpf),
-          matricula: trimStr(matriculaEfetivaGen),
+      // vamos escolher endpoint + payload dependendo se é TRCT ou não
+      let endpoint = "/documents/search";
+      let payload: any;
+
+      if (isTrct) {
+        // TRCT usa a rota específica e o mesmo contrato que você testou no Postman
+        endpoint = "/documents/search/informetrct";
+
+        const cp = [
+          // usa o mesmo valor que está configurado no GED (no Postman você usou "trtc")
+          { nome: "tipodedoc", valor: "trtc" },
+          { nome: "cpf", valor: onlyDigits(meCpf) },
+        ];
+
+        payload = {
+          id_template: Number(templateId), // ex.: 6
+          cp,
+          campo_anomes: "ano",
+          anomes: "",
         };
+      } else {
+        // fluxo genérico normal, como já funcionava antes
+        const cp = [
+          { nome: "tipodedoc", valor: nomeDocumento },
+          { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
+          { nome: "colaborador", valor: onlyDigits(meCpf) },
+        ];
 
-        const res = await api.post<{
-          competencias: { ano: number; mes: number }[];
-        }>("/documents/beneficios/competencias", payload, {
-          signal: controller.signal,
-        });
-
-        if (controller.signal.aborted) return;
-
-        const lista = (res.data?.competencias ?? []).map((x) => ({
-          ano: x.ano,
-          mes: String(x.mes).padStart(2, "0"),
-        })) as CompetenciaItem[];
-
-        setCompetenciasBen(lista);
-        dbg("(/beneficios/competencias) payload:", payload, "resp:", lista);
-
-        if (!lista.length) {
-          toast.warning(`Nenhum período de benefícios encontrado.`);
-        } else {
-          toast.success(`Períodos disponíveis de benefícios carregados.`);
-        }
-      } catch (err: any) {
-        if (
-          controller.signal.aborted ||
-          err?.code === "ERR_CANCELED" ||
-          err?.name === "CanceledError"
-        ) {
-          return;
-        }
-        dbg("(/beneficios/competencias) ERRO:", {
-          status: err?.response?.status,
-          url: err?.config?.url,
-          data: err?.response?.data,
-        });
-        toast.error("Erro ao carregar períodos de benefícios", {
-          description: extractErrorMessage(
-            err,
-            "Falha ao consultar períodos disponíveis."
-          ),
-        });
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoadingCompetenciasBen(false);
-          setCompetenciasBenLoaded(true);
-        }
+        payload = {
+          id_template: Number(templateId),
+          cp,
+          campo_anomes: "anomes",
+          anomes: "",
+        };
       }
-    };
+
+      const res = await api.post<{
+        anomes?: { ano: number; mes: number }[];
+        anos?: { ano: number }[];
+      }>(endpoint, payload, { signal: controller.signal });
+
+
+      if (controller.signal.aborted) return;
+
+      // TRCT devolve "anos"; genérico devolve "anomes"
+      const listaBruta = isTrct
+        ? res.data?.anos ?? []
+        : res.data?.anomes ?? [];
+
+      const lista: CompetenciaItem[] = listaBruta.map((x: any) => ({
+        ano: x.ano,
+        // para TRCT, por enquanto colocamos um mês "fixo" só para preencher a tipagem
+        mes: isTrct ? "01" : String(x.mes).padStart(2, "0"),
+      }));
+
+      setCompetenciasGen(lista);
+
+      if (!lista.length) {
+        toast.warning(
+          isTrct
+            ? "Nenhum ano encontrado para TRCT."
+            : `Nenhum período encontrado para ${nomeDocumento}.`
+        );
+      } else {
+        toast.success(
+          isTrct
+            ? "Anos disponíveis de TRCT carregados."
+            : `Períodos disponíveis de ${nomeDocumento} carregados.`
+        );
+      }
+    } catch (err: any) {
+      if (
+        controller.signal.aborted ||
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError"
+      ) {
+        return;
+      }
+      toast.error("Erro ao carregar períodos", {
+        description: extractErrorMessage(
+          err,
+          "Falha ao consultar períodos disponíveis."
+        ),
+      });
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoadingCompetenciasGen(false);
+        setCompetenciasGenLoaded(true);
+      }
+    }
+  };
+
 
     run();
     return () => controller.abort();
@@ -948,9 +1015,6 @@ export default function DocumentList() {
         competencia: normalizeYYYYMM(competenciaYYYYMM),
       };
 
-      dbgGroup("buscarHoleritePorAnoMes()");
-      dbg("payload:", payload);
-
       const res = await api.post<{
         tipo: "holerite";
         cabecalho: CabecalhoHolerite;
@@ -959,8 +1023,6 @@ export default function DocumentList() {
         pdf_base64?: string;
         uuid?: string;
       }>("/documents/holerite/buscar", payload);
-
-      dbg("res.data:", res.data);
 
       if (res.data && res.data.cabecalho) {
         const documento: DocumentoHolerite = {
@@ -979,11 +1041,6 @@ export default function DocumentList() {
         toast.warning("Nenhum holerite encontrado para o mês selecionado.");
       }
     } catch (err: any) {
-      dbg("(/holerite/buscar) ERRO:", {
-        status: err?.response?.status,
-        url: err?.config?.url,
-        data: err?.response?.data,
-      });
       toast.error("Erro ao buscar holerite", {
         description: extractErrorMessage(
           err,
@@ -1029,8 +1086,6 @@ export default function DocumentList() {
         matricula: matriculaNorm,
         competencia: competenciaYYYYMM,
       };
-      dbgGroup("buscarBeneficiosPorAnoMes()");
-      dbg("BUSCAR payload:", { ...buscarPayload, cpf: maskCpf(cpfNorm) });
 
       const resBuscar = await api.post<{
         cpf?: string;
@@ -1055,8 +1110,6 @@ export default function DocumentList() {
         beneficios?: any[];
       }>("/documents/beneficios/buscar", buscarPayload);
 
-      dbg("BUSCAR res.data:", resBuscar.data);
-
       const cab = getCabecalhoNormalized(resBuscar.data);
 
       // Fallbacks para uuid/lote
@@ -1071,7 +1124,6 @@ export default function DocumentList() {
       const uuid = cab?.uuid ?? uuidTop;
 
       if (!lote || !uuid) {
-        dbg("BUSCAR sem lote/uuid. cab:", cab);
         toast.warning("Não foi possível obter lote/uuid para montar.");
         return;
       }
@@ -1096,14 +1148,11 @@ export default function DocumentList() {
         lote_holerite: String(lote),
         lote: String(lote),
       };
-      dbg("MONTAR payload:", { ...montarPayload, cpf: maskCpf(montarPayload.cpf) });
 
       const resMontar = await api.post<{
         pdf_base64?: string;
         cabecalho?: any;
       }>("/documents/beneficios/montar", montarPayload);
-
-      dbg("MONTAR res.data keys:", Object.keys(resMontar.data || {}));
 
       // 3) preview
       navigate("/documento/preview", {
@@ -1118,12 +1167,6 @@ export default function DocumentList() {
       toast.success("Documento de benefícios aberto!");
       return;
     } catch (err: any) {
-      dbg("(/beneficios/*) ERRO:", {
-        status: err?.response?.status,
-        url: err?.config?.url,
-        data: err?.response?.data,
-        method: err?.config?.method,
-      });
       toast.error("Erro ao buscar/montar benefícios", {
         description: extractErrorMessage(
           err,
@@ -1140,124 +1183,167 @@ export default function DocumentList() {
   // Genéricos: buscar mês -> prévia do primeiro
   // ==========================================
   const buscarGenericoPorAnoMes = async (ano: number, mes: string) => {
-    if (!selectedEmpresaIdGen) {
-      toast.error("Selecione a empresa para continuar.");
-      return;
-    }
-    const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
-    const matriculaEfetivaGen = requerEscolherMatriculaGen
-      ? selectedMatriculaGen
-      : arr[0];
-    if (!matriculaEfetivaGen) {
-      toast.error("Selecione a matrícula para continuar.");
-      return;
-    }
+  if (!selectedEmpresaIdGen) {
+    toast.error("Selecione a empresa para continuar.");
+    return;
+  }
+  const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+  const matriculaEfetivaGen = requerEscolherMatriculaGen
+    ? selectedMatriculaGen
+    : arr[0];
+  if (!matriculaEfetivaGen) {
+    toast.error("Selecione a matrícula para continuar.");
+    return;
+  }
 
-    setIsLoading(true);
-    setDocuments([]);
-    setPaginaAtual(1);
+  setIsLoading(true);
+  setDocuments([]);
+  setPaginaAtual(1);
 
-    try {
-      const cp = [
+  try {
+    let cp: { nome: string; valor: string }[] = [
+      { nome: "tipodedoc", valor: nomeDocumento },
+      { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
+      { nome: "colaborador", valor: onlyDigits(meCpf) },
+    ];
+
+    let campo_anomes = "anomes";
+    let anomesValor = `${ano}-${mes}`; // ex: 2025-09
+
+    if (isTrct) {
+      cp = [
         { nome: "tipodedoc", valor: nomeDocumento },
-        { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
-        { nome: "colaborador", valor: onlyDigits(meCpf) },
+        { nome: "cpf", valor: onlyDigits(meCpf) },
       ];
-
-      const payload = {
-        id_template: Number(templateId),
-        cp,
-        campo_anomes: "anomes",
-        anomes: `${ano}-${mes}`,
-      };
-
-      dbgGroup("buscarGenericoPorAnoMes()");
-      dbg("payload:", payload);
-
-      const res = await api.post<{
-        total_bruto: number;
-        ultimos_6_meses: string[];
-        total_encontrado: number;
-        documentos: DocumentoGenerico[];
-      }>("/documents/search", payload);
-
-      dbg("res.data:", res.data);
-
-      const documentos = res.data.documentos || [];
-      setDocuments(documentos);
-
-      if (documentos.length > 0) {
-        toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
-          description: `Período ${ano}-${mes} para ${nomeDocumento}.`,
-        });
-
-        await visualizarDocumento(documentos[0]);
-        return;
-      } else {
-        toast.warning("Nenhum documento encontrado para o mês selecionado.");
-      }
-    } catch (err: any) {
-      const status = err?.response?.status as number | undefined;
-      dbg("(/documents/search gen) ERRO:", {
-        status,
-        url: err?.config?.url,
-        data: err?.response?.data,
-      });
-      let title = "Erro ao buscar documentos";
-      let description = extractErrorMessage(
-        err,
-        "Falha ao consultar o período escolhido."
-      );
-
-      switch (status) {
-        case 401:
-          title = "Não autorizado";
-          description = "Sua sessão expirou. Faça login novamente.";
-          break;
-        case 403:
-          title = "Acesso negado";
-          description = "Você não tem permissão para executar esta busca.";
-          break;
-        case 404:
-          title = "Documento não encontrado";
-          description = "Não localizamos documentos para os dados informados.";
-          break;
-        case 413:
-          title = "Documento muito grande";
-          description = "Tente novamente mais tarde ou contate o suporte.";
-          break;
-        case 415:
-        case 422:
-          title = "Requisição inválida";
-          description = "Os dados informados não foram aceitos pelo servidor.";
-          break;
-        case 429:
-          title = "Muitas tentativas";
-          description =
-            "Você atingiu o limite momentâneo. Aguarde e tente novamente.";
-          break;
-        case 500:
-          title = "Erro interno do servidor";
-          description =
-            "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
-          break;
-        case 502:
-        case 503:
-        case 504:
-          title = "Instabilidade no serviço";
-          description =
-            "O servidor está indisponível no momento. Tente novamente.";
-          break;
-        default:
-          break;
-      }
-
-      toast.error(title, { description });
-    } finally {
-      dbgGroupEnd();
-      setIsLoading(false);
+      campo_anomes = "ano";
+      anomesValor = String(ano); // "2025"
     }
-  };
+
+    const payload: any = {
+      id_template: Number(templateId),
+      cp,
+      campo_anomes,
+      anomes: anomesValor,
+    };
+
+    if (isTrct) {
+      payload.cpf = onlyDigits(meCpf);
+    }
+
+    const endpoint = isTrct
+      ? "/documents/search/informetrct"
+      : "/documents/search";
+
+    const res = await api.post<{
+  total_bruto: number;
+  ultimos_6_meses: string[];
+  total_encontrado: number;
+  documentos: any[];
+}>(endpoint, payload);
+
+const documentosBrutos = res.data.documentos || [];
+
+// 🔧 Normaliza TRTC e demais genéricos
+const documentos: DocumentoGenerico[] = documentosBrutos.map((d: any) => {
+  const anoDoc = d.ano ?? d.ANO ?? null;
+
+  const idDocumentoNorm = String(
+    d.id_documento ??
+      d.id_ged ??
+      d.id ??
+      d.ID ??
+      "" // último fallback
+  );
+
+  const normAnoMes =
+    d._norm_anomes ??
+    d.anomes ??
+    (anoDoc ? String(anoDoc) : "") ??
+    anomesValor; // ex.: "2025" para TRTC
+
+  return {
+    ...d,
+    id_documento: idDocumentoNorm,
+    _norm_anomes: normAnoMes,
+  } as DocumentoGenerico;
+});
+
+setDocuments(documentos);
+
+
+    if (documentos.length > 0) {
+      const periodoLabel = isTrct ? String(ano) : `${ano}-${mes}`;
+      toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
+        description: `Período ${periodoLabel} para ${nomeDocumento}.`,
+      });
+
+      await visualizarDocumento(documentos[0]);
+      return;
+    } else {
+      toast.warning(
+        isTrct
+          ? "Nenhum documento encontrado para o ano selecionado."
+          : "Nenhum documento encontrado para o mês selecionado."
+      );
+    }
+  } catch (err: any) {
+    const status = err?.response?.status as number | undefined;
+    let title = "Erro ao buscar documentos";
+    let description = extractErrorMessage(
+      err,
+      "Falha ao consultar o período escolhido."
+    );
+
+    switch (status) {
+      case 401:
+        title = "Não autorizado";
+        description = "Sua sessão expirou. Faça login novamente.";
+        break;
+      case 403:
+        title = "Acesso negado";
+        description = "Você não tem permissão para executar esta busca.";
+        break;
+      case 404:
+        title = "Documento não encontrado";
+        description = "Não localizamos documentos para os dados informados.";
+        break;
+      case 413:
+        title = "Documento muito grande";
+        description = "Tente novamente mais tarde ou contate o suporte.";
+        break;
+      case 415:
+      case 422:
+        title = "Requisição inválida";
+        description = "Os dados informados não foram aceitos pelo servidor.";
+        break;
+      case 429:
+        title = "Muitas tentativas";
+        description =
+          "Você atingiu o limite momentâneo. Aguarde e tente novamente.";
+        break;
+      case 500:
+        title = "Erro interno do servidor";
+        description =
+          "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
+        break;
+      case 502:
+      case 503:
+      case 504:
+        title = "Instabilidade no serviço";
+        description =
+          "O servidor está indisponível no momento. Tente novamente.";
+        break;
+      default:
+        break;
+    }
+
+    toast.error(title, { description });
+  } finally {
+    dbgGroupEnd();
+    setIsLoading(false);
+  }
+};
+
 
   // ==========================================
   // Visualizar documento
@@ -1295,9 +1381,6 @@ export default function DocumentList() {
           lote: docHolerite.id_documento,
         };
 
-        dbgGroup("visualizarDocumento(holerite)");
-        dbg("payload:", { ...payload, cpf: maskCpf(payload.cpf) });
-
         const res = await withRetry(
           () =>
             api.post<{
@@ -1313,8 +1396,6 @@ export default function DocumentList() {
           2,
           700
         );
-
-        dbg("res.keys:", Object.keys(res.data || {}));
 
         if (res.data && res.data.pdf_base64) {
           setLoadingPreviewId(null);
@@ -1363,8 +1444,6 @@ export default function DocumentList() {
           matricula: matriculaNorm,
           competencia: competenciaYYYYMM,
         };
-        dbgGroup("visualizarDocumento(benefícios)");
-        dbg("BUSCAR payload:", { ...buscarPayload, cpf: maskCpf(buscarPayload.cpf) });
 
         const resBuscar = await withRetry(
           () =>
@@ -1383,8 +1462,6 @@ export default function DocumentList() {
           700
         );
 
-        dbg("BUSCAR res.data:", resBuscar.data);
-
         const cab = getCabecalhoNormalized(resBuscar.data);
 
         // Fallbacks uuid/lote
@@ -1399,7 +1476,6 @@ export default function DocumentList() {
         const uuid = cab?.uuid ?? uuidTop;
 
         if (!lote || !uuid) {
-          dbg("BUSCAR sem lote/uuid no preview. cab:", cab);
           throw new Error("Não foi possível obter lote/uuid para montar.");
         }
 
@@ -1412,7 +1488,6 @@ export default function DocumentList() {
           lote_holerite: String(lote),
           lote: String(lote),
         };
-        dbg("MONTAR payload:", { ...montarPayload, cpf: maskCpf(montarPayload.cpf) });
 
         const resMontar = await withRetry(
           () =>
@@ -1428,7 +1503,6 @@ export default function DocumentList() {
           700
         );
 
-        dbg("MONTAR res.keys:", Object.keys(resMontar.data || {}));
 
         setLoadingPreviewId(null);
         previewAbortRef.current = null;
@@ -1451,9 +1525,6 @@ export default function DocumentList() {
           id_documento: Number(docGenerico.id_documento),
         };
 
-        dbgGroup("visualizarDocumento(genérico)");
-        dbg("payload:", payload);
-
         const res = await withRetry(
           () =>
             api.post<{
@@ -1468,7 +1539,6 @@ export default function DocumentList() {
           700
         );
 
-        dbg("res.keys:", Object.keys(res.data || {}));
 
         if (res.data.erro) {
           throw new Error(
@@ -1499,23 +1569,7 @@ export default function DocumentList() {
       const code = err?.code as string | undefined;
       const offline =
         typeof navigator !== "undefined" && navigator.onLine === false;
-      const canceled =
-        controller.signal.aborted ||
-        code === "ERR_CANCELED" ||
-        err?.name === "CanceledError";
 
-      if (canceled) {
-        dbg("visualização cancelada");
-        return;
-      }
-
-      dbg("visualizarDocumento ERRO:", {
-        status,
-        url: err?.config?.url,
-        method: err?.config?.method,
-        data: err?.response?.data,
-        message: err?.message,
-      });
 
       let title = "Erro ao abrir documento";
       let description = extractErrorMessage(
@@ -1597,60 +1651,93 @@ export default function DocumentList() {
   };
 
   const renderDocumentInfo = (doc: DocumentoUnion) => {
-    if (tipoDocumento === "holerite") {
-      const docHolerite = doc as DocumentoHolerite;
+  if (tipoDocumento === "holerite") {
+    const docHolerite = doc as DocumentoHolerite;
+    return (
+      <>
+        <td className="px-4 py-2 text-left">
+          {toYYYYDashMM(docHolerite.anomes)}
+        </td>
+        <td className="px-4 py-2 text-center">
+          {docHolerite.id_documento}
+        </td>
+      </>
+    );
+  } else if (tipoDocumento === "beneficios") {
+    const docBen = doc as DocumentoBeneficio;
+    return (
+      <>
+        <td className="px-4 py-2 text-left">
+          {toYYYYDashMM(docBen.anomes)}
+        </td>
+        <td className="px-4 py-2 text-center">
+          {docBen.id_documento}
+        </td>
+      </>
+    );
+  } else {
+    const docGenerico = doc as DocumentoGenerico;
+
+    // 🔹 CASO ESPECÍFICO: TRCT → mostrar só o ano (ex: 2025)
+    if (isTrct) {
+      const anyDoc = docGenerico as any;
+      const raw =
+        anyDoc._norm_anomes || anyDoc.anomes || anyDoc.ano || anyDoc.ANO;
+
+      const displayAno = raw ? String(raw).slice(0, 4) : "";
+
       return (
         <>
-          <td className="px-4 py-2 text-left">
-            {toYYYYDashMM(docHolerite.anomes)}
-          </td>
-          <td className="px-4 py-2 text-center">{docHolerite.id_documento}</td>
-        </>
-      );
-    } else if (tipoDocumento === "beneficios") {
-      const docBen = doc as DocumentoBeneficio;
-      return (
-        <>
-          <td className="px-4 py-2 text-left">{toYYYYDashMM(docBen.anomes)}</td>
-          <td className="px-4 py-2 text-center">{docBen.id_documento}</td>
-        </>
-      );
-    } else {
-      const docGenerico = doc as DocumentoGenerico;
-      return (
-        <>
-          <td className="px-4 py-2 text-left">{docGenerico._norm_anomes}</td>
+          <td className="px-4 py-2 text-left">{displayAno}</td>
         </>
       );
     }
-  };
+
+    // 🔹 DEMAIS GENÉRICOS → mantém Ano/Mês (ex: 2025-09)
+    const rawAnoMes = docGenerico._norm_anomes || docGenerico.anomes;
+    const displayAnoMes = rawAnoMes
+      ? toYYYYDashMM(normalizeYYYYMM(rawAnoMes))
+      : "";
+
+    return (
+      <>
+        <td className="px-4 py-2 text-left">{displayAnoMes}</td>
+      </>
+    );
+  }
+};
+
+
 
   const renderTableHeader = () => {
-    if (tipoDocumento === "holerite") {
-      return (
-        <>
-          <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
-          <th className="py-3 text-center min-w-[100px]">Lote</th>
-          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
-        </>
-      );
-    } else if (tipoDocumento === "beneficios") {
-      return (
-        <>
-          <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
-          <th className="py-3 text-center min-w-[100px]">Lote</th>
-          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
-        </>
-      );
-    } else {
-      return (
-        <>
-          <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
-          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
-        </>
-      );
-    }
-  };
+  if (tipoDocumento === "holerite") {
+    return (
+      <>
+        <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
+        <th className="py-3 text-center min-w-[100px]">Lote</th>
+        <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+      </>
+    );
+  } else if (tipoDocumento === "beneficios") {
+    return (
+      <>
+        <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
+        <th className="py-3 text-center min-w-[100px]">Lote</th>
+        <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+      </>
+    );
+  } else {
+    return (
+      <>
+        <th className="px-4 py-3 text-left min-w-[120px]">
+          {isTrct ? "Ano" : "Ano/mês"}
+        </th>
+        <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+      </>
+    );
+  }
+};
+
 
   const showCardLoader =
     userLoading ||
@@ -2314,78 +2401,96 @@ export default function DocumentList() {
                   )}
                 </section>
 
+                
                 {/* ANOS & MESES (GEN) */}
-                <section className="md:col-span-2 bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
-                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
-                    Períodos (anos e meses)
-                  </h3>
-                  {!selectedEmpresaIdGen ? (
-                    <p className="text-center text-gray-400">
-                      Selecione uma empresa para carregar os períodos.
-                    </p>
-                  ) : requerEscolherMatriculaGen && !selectedMatriculaGen ? (
-                    <p className="text-center text-gray-400">
-                      Selecione a matrícula para carregar os períodos.
-                    </p>
-                  ) : isLoadingCompetenciasGen || !competenciasGenLoaded ? (
-                    <p className="text-center">
-                      Carregando períodos disponíveis...
-                    </p>
-                  ) : anosDisponiveisGen.length === 0 ? (
-                    <p className="text-center text-gray-300">
-                      Nenhum período de {nomeDocumento} encontrado para a
-                      seleção atual.
-                    </p>
-                  ) : !selectedYearGen ? (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                      {anosDisponiveisGen.map((ano) => (
-                        <Button
-                          key={ano}
-                          variant="default"
-                          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                          onClick={() => setSelectedYearGen(ano)}
-                          disabled={isAnyLoading}
-                        >
-                          {ano}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
-                        {mesesDoAnoSelecionadoGen.map((mm) => (
-                          <Button
-                            key={mm}
-                            variant="default"
-                            className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            onClick={() =>
-                              buscarGenericoPorAnoMes(selectedYearGen, mm)
-                            }
-                            disabled={isAnyLoading}
-                          >
-                            {isAnyLoading
-                              ? "Buscando..."
-                              : makeYYYYMMLabel(selectedYearGen, mm)}
-                          </Button>
-                        ))}
-                      </div>
-                      <div className="flex justify-center">
-                        <Button
-                          variant="default"
-                          className="border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                          onClick={() => {
-                            setSelectedYearGen(null);
-                            setDocuments([]);
-                            setPaginaAtual(1);
-                          }}
-                          disabled={isAnyLoading}
-                        >
-                          Escolher outro ano
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </section>
+<section className="md:col-span-2 bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
+  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+    Períodos (anos e meses)
+  </h3>
+  {!selectedEmpresaIdGen ? (
+    <p className="text-center text-gray-400">
+      Selecione uma empresa para carregar os períodos.
+    </p>
+  ) : requerEscolherMatriculaGen && !selectedMatriculaGen ? (
+    <p className="text-center text-gray-400">
+      Selecione a matrícula para carregar os períodos.
+    </p>
+  ) : isLoadingCompetenciasGen || !competenciasGenLoaded ? (
+    <p className="text-center">
+      Carregando períodos disponíveis...
+    </p>
+  ) : anosDisponiveisGen.length === 0 ? (
+    <p className="text-center text-gray-300">
+      Nenhum período de {nomeDocumento} encontrado para a
+      seleção atual.
+    </p>
+  ) : isTrct ? (
+    // 🔹 CASO TRCT: só lista ANOS e já busca direto
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+      {anosDisponiveisGen.map((ano) => (
+        <Button
+          key={ano}
+          variant="default"
+          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+          onClick={() => buscarGenericoPorAnoMes(ano, "01")}
+          disabled={isAnyLoading}
+        >
+          {isAnyLoading ? "Buscando..." : ano}
+        </Button>
+      ))}
+    </div>
+  ) : !selectedYearGen ? (
+    // 🔹 demais documentos genéricos → fluxo padrão (Ano → escolher mês)
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+      {anosDisponiveisGen.map((ano) => (
+        <Button
+          key={ano}
+          variant="default"
+          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+          onClick={() => setSelectedYearGen(ano)}
+          disabled={isAnyLoading}
+        >
+          {ano}
+        </Button>
+      ))}
+    </div>
+  ) : (
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
+        {mesesDoAnoSelecionadoGen.map((mm) => (
+          <Button
+            key={mm}
+            variant="default"
+            className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+            onClick={() =>
+              buscarGenericoPorAnoMes(selectedYearGen, mm)
+            }
+            disabled={isAnyLoading}
+          >
+            {isAnyLoading
+              ? "Buscando..."
+              : makeYYYYMMLabel(selectedYearGen, mm)}
+          </Button>
+        ))}
+      </div>
+      <div className="flex justify-center">
+        <Button
+          variant="default"
+          className="border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
+          onClick={() => {
+            setSelectedYearGen(null);
+            setDocuments([]);
+            setPaginaAtual(1);
+          }}
+          disabled={isAnyLoading}
+        >
+          Escolher outro ano
+        </Button>
+      </div>
+    </>
+  )}
+</section>
+
               </div>
             </>
           ) : (
@@ -2589,7 +2694,7 @@ export default function DocumentList() {
                                 "Não foi localizado documento de benefícios para o período informado.",
                             });
                           }
-                        } else {
+                        }else {
                           const cp = [
                             { nome: "tipodedoc", valor: nomeDocumento },
                             { nome: "matricula", valor: trimStr(matricula) },
@@ -2610,12 +2715,20 @@ export default function DocumentList() {
                             cpf: onlyDigits(cpfNumbers),
                           };
 
+                          // [NOVO - TRCT] – se for Informe/TRTC, muda a rota
+                          const endpoint = isTrct
+                            ? "/documents/search/informetrct"
+                            : "/documents/search";
+
+                           
+
                           const res = await api.post<{
                             total_bruto: number;
                             ultimos_6_meses: string[];
                             total_encontrado: number;
                             documentos: DocumentoGenerico[];
-                          }>("/documents/search", payload);
+                          }>(endpoint, payload);
+
 
                           const { documentos = [], total_encontrado = 0 } =
                             res.data;
@@ -2806,3 +2919,7 @@ export default function DocumentList() {
     </div>
   );
 }
+function dbgGroupEnd() {
+  throw new Error("Function not implemented.");
+}
+
