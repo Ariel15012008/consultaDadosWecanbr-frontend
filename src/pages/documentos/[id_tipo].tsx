@@ -763,25 +763,11 @@ const payload: any = {
   anomes: "",
 };
 
-if (isTrct) {
-  payload.cpf = cpfNorm;
-}
-
 const endpoint = isTrct
   ? "/documents/search/informetrct"
   : "/documents/search";
 
-// 🔍 LOG só quando chamar a rota informetrct
-if (endpoint === "/documents/search/informetrct") {
-  console.log(
-    "[DocumentList][DISCOVERY informetrct] endpoint:",
-    endpoint
-  );
-  console.log(
-    "[DocumentList][DISCOVERY informetrct] payload:",
-    JSON.stringify(payload, null, 2)
-  );
-}
+
 
 const res = await api.post<{
   anomes?: { ano: number; mes: number }[];
@@ -1225,10 +1211,6 @@ setCompetenciasGen(lista);
       campo_anomes,
       anomes: anomesValor,
     };
-
-    if (isTrct) {
-      payload.cpf = onlyDigits(meCpf);
-    }
 
     const endpoint = isTrct
       ? "/documents/search/informetrct"
