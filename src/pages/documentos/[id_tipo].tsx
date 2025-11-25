@@ -21,10 +21,6 @@ import { useUser } from "@/contexts/UserContext";
 import { toast, Toaster } from "sonner";
 import LoadingScreen from "@/components/ui/loadingScreen";
 
-
-
-
-
 // ================================================
 // Tipagens auxiliares
 // ================================================
@@ -229,7 +225,7 @@ export default function DocumentList() {
   const nomeDocumentoRaw = searchParams.get("documento") || "";
   const docParam = normalize(nomeDocumentoRaw);
 
-    const tipoDocumento =
+  const tipoDocumento =
     tipoParam === "beneficios" ||
     (tipoParam === "generico" && /^beneficios?$/.test(docParam))
       ? "beneficios"
@@ -238,18 +234,22 @@ export default function DocumentList() {
   const templateId = searchParams.get("template") || "3";
   const nomeDocumento = nomeDocumentoRaw;
 
-const isTrct = (() => {
-  const d = docParam; // "informe rendimento", "trct", etc. já normalizado
+  const isTrct = (() => {
+    const d = docParam; // "informe rendimento", "trct", etc. já normalizado
 
-  // Aqui você define quais documentos vão usar a rota /documents/search/informetrct
-  return (
-    tipoDocumento === "trct" ||             // se vier explicitamente como tipo=trct
-    d.includes("informe rendimento") ||     // Informe de Rendimentos
-    d.includes("trct") ||                   // TRCT / TRTC
-    d.includes("rescis")                    // termo de rescisão (opcional)
-  );
+    // Aqui você define quais documentos vão usar a rota /documents/search/informetrct
+    return (
+      tipoDocumento === "trct" || // se vier explicitamente como tipo=trct
+      d.includes("informe rendimento") || // Informe de Rendimentos
+      d.includes("trct") || // TRCT / TRTC
+      d.includes("rescis") // termo de rescisão (opcional)
+    );
+  })();
+
+  const isRecibo = (() => {
+  const d = docParam; // já normalizado (sem acento e minúsculo)
+  return d.includes("recibo va") || d.includes("recibo vt");
 })();
-
 
   // ================================================
   // ESTADOS GERAIS
@@ -406,8 +406,7 @@ const isTrct = (() => {
   // ================================================
   // Benefícios (não gestor): discovery por empresa/matrícula
   // ================================================
-  const [isLoadingCompetenciasBen] =
-    useState(false);
+  const [isLoadingCompetenciasBen] = useState(false);
   const [competenciasBen, setCompetenciasBen] = useState<CompetenciaItem[]>([]);
   const [selectedYearBen, setSelectedYearBen] = useState<number | null>(null);
   const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
@@ -742,61 +741,64 @@ const isTrct = (() => {
         setCompetenciasGenLoaded(false);
 
         // se for TRCT, seguimos o mesmo padrão que você testou no Postman
-const cpfNorm = onlyDigits(meCpf);
+        const cpfNorm = onlyDigits(meCpf);
 
-// TRCT + Informe Rendimento usam a mesma rota /documents/search/informetrct
-const cp = isTrct
-  ? [
-      { nome: "tipodedoc", valor: nomeDocumento }, // "trtc" OU "Informe Rendimento"
-      { nome: "cpf", valor: cpfNorm },
-    ]
-  : [
-      { nome: "tipodedoc", valor: nomeDocumento },
-      { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
-      { nome: "colaborador", valor: cpfNorm },
-    ];
+        // TRCT + Informe Rendimento usam a mesma rota /documents/search/informetrct
+        const cp = isTrct
+          ? [
+              { nome: "tipodedoc", valor: nomeDocumento }, // "trtc" OU "Informe Rendimento"
+              { nome: "cpf", valor: cpfNorm },
+            ]
+          : [
+              { nome: "tipodedoc", valor: nomeDocumento },
+              { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
+              { nome: "colaborador", valor: cpfNorm },
+            ];
 
-const payload: any = {
-  id_template: Number(templateId),
-  cp,
-  campo_anomes: isTrct ? "ano" : "anomes",
-  anomes: "",
-};
+        const payload: any = {
+          id_template: Number(templateId),
+          cp,
+          campo_anomes: isTrct ? "ano" : "anomes",
+          anomes: "",
+        };
 
-const endpoint = isTrct
-  ? "/documents/search/informetrct"
-  : "/documents/search";
+        console.log(
+          "[RECIBOS][DISCOVERY] payload ENVIADO (sem anomes):",
+          payload
+        );
 
+        const endpoint = isTrct
+          ? "/documents/search/informetrct"
+          : isRecibo
+          ? "/documents/search/recibos"
+          : "/documents/search";
 
+        const res = await api.post<{
+          anomes?: { ano: number; mes: number }[];
+          anos?: { ano: number }[];
+        }>(endpoint, payload, { signal: controller.signal });
 
-const res = await api.post<{
-  anomes?: { ano: number; mes: number }[];
-  anos?: { ano: number }[];
-}>(endpoint, payload, { signal: controller.signal });
+        if (controller.signal.aborted) return;
 
+        let lista: CompetenciaItem[] = [];
 
-if (controller.signal.aborted) return;
+        if (isTrct) {
+          // TRCT retorna "anos", não "anomes"
+          const anosBrutos = res.data?.anos ?? [];
+          lista = anosBrutos.map((x) => ({
+            ano: x.ano,
+            // usamos um mês "fake" só pra encaixar no grid; depois a busca usa só o ano
+            mes: "01",
+          }));
+        } else {
+          const listaBruta = res.data?.anomes ?? [];
+          lista = listaBruta.map((x) => ({
+            ano: x.ano,
+            mes: String(x.mes).padStart(2, "0"),
+          }));
+        }
 
-let lista: CompetenciaItem[] = [];
-
-if (isTrct) {
-  // TRCT retorna "anos", não "anomes"
-  const anosBrutos = res.data?.anos ?? [];
-  lista = anosBrutos.map((x) => ({
-    ano: x.ano,
-    // usamos um mês "fake" só pra encaixar no grid; depois a busca usa só o ano
-    mes: "01",
-  }));
-} else {
-  const listaBruta = res.data?.anomes ?? [];
-  lista = listaBruta.map((x) => ({
-    ano: x.ano,
-    mes: String(x.mes).padStart(2, "0"),
-  }));
-}
-
-setCompetenciasGen(lista);
-
+        setCompetenciasGen(lista);
 
         if (!lista.length) {
           toast.warning(`Nenhum período encontrado para ${nomeDocumento}.`);
@@ -858,105 +860,103 @@ setCompetenciasGen(lista);
 
     const controller = new AbortController();
 
-      const run = async () => {
-    try {
-      setIsLoadingCompetenciasGen(true);
-      setDocuments([]);
-      setPaginaAtual(1);
-      setCompetenciasGenLoaded(false);
+    const run = async () => {
+      try {
+        setIsLoadingCompetenciasGen(true);
+        setDocuments([]);
+        setPaginaAtual(1);
+        setCompetenciasGenLoaded(false);
 
-      // vamos escolher endpoint + payload dependendo se é TRCT ou não
-      let endpoint = "/documents/search";
-      let payload: any;
+        // vamos escolher endpoint + payload dependendo se é TRCT ou não
+        let endpoint = "/documents/search";
+        let payload: any;
 
-      if (isTrct) {
-        // TRCT usa a rota específica e o mesmo contrato que você testou no Postman
-        endpoint = "/documents/search/informetrct";
+        if (isTrct) {
+          // TRCT usa a rota específica e o mesmo contrato que você testou no Postman
+          endpoint = "/documents/search/informetrct";
 
-        const cp = [
-          // usa o mesmo valor que está configurado no GED (no Postman você usou "trtc")
-          { nome: "tipodedoc", valor: "trtc" },
-          { nome: "cpf", valor: onlyDigits(meCpf) },
-        ];
+          const cp = [
+            // usa o mesmo valor que está configurado no GED (no Postman você usou "trtc")
+            { nome: "tipodedoc", valor: "trtc" },
+            { nome: "cpf", valor: onlyDigits(meCpf) },
+          ];
 
-        payload = {
-          id_template: Number(templateId), // ex.: 6
-          cp,
-          campo_anomes: "ano",
-          anomes: "",
-        };
-      } else {
-        // fluxo genérico normal, como já funcionava antes
-        const cp = [
-          { nome: "tipodedoc", valor: nomeDocumento },
-          { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
-          { nome: "colaborador", valor: onlyDigits(meCpf) },
-        ];
+          payload = {
+            id_template: Number(templateId), // ex.: 6
+            cp,
+            campo_anomes: "ano",
+            anomes: "",
+          };
+        } else {
+          // fluxo genérico normal, como já funcionava antes
+          const cp = [
+            { nome: "tipodedoc", valor: nomeDocumento },
+            { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
+            { nome: "colaborador", valor: onlyDigits(meCpf) },
+          ];
 
-        payload = {
-          id_template: Number(templateId),
-          cp,
-          campo_anomes: "anomes",
-          anomes: "",
-        };
+          payload = {
+            id_template: Number(templateId),
+            cp,
+            campo_anomes: "anomes",
+            anomes: "",
+          };
+        }
+
+        const res = await api.post<{
+          anomes?: { ano: number; mes: number }[];
+          anos?: { ano: number }[];
+        }>(endpoint, payload, { signal: controller.signal });
+
+        if (controller.signal.aborted) return;
+
+        // TRCT devolve "anos"; genérico devolve "anomes"
+        const listaBruta = isTrct
+          ? res.data?.anos ?? []
+          : res.data?.anomes ?? [];
+
+        const lista: CompetenciaItem[] = listaBruta.map((x: any) => ({
+          ano: x.ano,
+          // para TRCT, por enquanto colocamos um mês "fixo" só para preencher a tipagem
+          mes: isTrct ? "01" : String(x.mes).padStart(2, "0"),
+        }));
+
+        setCompetenciasGen(lista);
+
+        if (!lista.length) {
+          toast.warning(
+            isTrct
+              ? "Nenhum ano encontrado para TRCT."
+              : `Nenhum período encontrado para ${nomeDocumento}.`
+          );
+        } else {
+          toast.success(
+            isTrct
+              ? "Anos disponíveis de TRCT carregados."
+              : `Períodos disponíveis de ${nomeDocumento} carregados.`
+          );
+        }
+      } catch (err: any) {
+        if (
+          controller.signal.aborted ||
+          err?.code === "ERR_CANCELED" ||
+          err?.name === "CanceledError"
+        ) {
+          return;
+        }
+        toast.error("Erro ao carregar períodos", {
+          description: extractErrorMessage(
+            err,
+            "Falha ao consultar períodos disponíveis."
+          ),
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingCompetenciasGen(false);
+          setCompetenciasGenLoaded(true);
+        }
       }
-
-      const res = await api.post<{
-        anomes?: { ano: number; mes: number }[];
-        anos?: { ano: number }[];
-      }>(endpoint, payload, { signal: controller.signal });
-
-
-      if (controller.signal.aborted) return;
-
-      // TRCT devolve "anos"; genérico devolve "anomes"
-      const listaBruta = isTrct
-        ? res.data?.anos ?? []
-        : res.data?.anomes ?? [];
-
-      const lista: CompetenciaItem[] = listaBruta.map((x: any) => ({
-        ano: x.ano,
-        // para TRCT, por enquanto colocamos um mês "fixo" só para preencher a tipagem
-        mes: isTrct ? "01" : String(x.mes).padStart(2, "0"),
-      }));
-
-      setCompetenciasGen(lista);
-
-      if (!lista.length) {
-        toast.warning(
-          isTrct
-            ? "Nenhum ano encontrado para TRCT."
-            : `Nenhum período encontrado para ${nomeDocumento}.`
-        );
-      } else {
-        toast.success(
-          isTrct
-            ? "Anos disponíveis de TRCT carregados."
-            : `Períodos disponíveis de ${nomeDocumento} carregados.`
-        );
-      }
-    } catch (err: any) {
-      if (
-        controller.signal.aborted ||
-        err?.code === "ERR_CANCELED" ||
-        err?.name === "CanceledError"
-      ) {
-        return;
-      }
-      toast.error("Erro ao carregar períodos", {
-        description: extractErrorMessage(
-          err,
-          "Falha ao consultar períodos disponíveis."
-        ),
-      });
-    } finally {
-      if (!controller.signal.aborted) {
-        setIsLoadingCompetenciasGen(false);
-        setCompetenciasGenLoaded(true);
-      }
-    }
-  };
-
+    };
 
     run();
     return () => controller.abort();
@@ -1169,163 +1169,160 @@ setCompetenciasGen(lista);
   // Genéricos: buscar mês -> prévia do primeiro
   // ==========================================
   const buscarGenericoPorAnoMes = async (ano: number, mes: string) => {
-  if (!selectedEmpresaIdGen) {
-    toast.error("Selecione a empresa para continuar.");
-    return;
-  }
-  const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
-  const matriculaEfetivaGen = requerEscolherMatriculaGen
-    ? selectedMatriculaGen
-    : arr[0];
-  if (!matriculaEfetivaGen) {
-    toast.error("Selecione a matrícula para continuar.");
-    return;
-  }
-
-  setIsLoading(true);
-  setDocuments([]);
-  setPaginaAtual(1);
-
-  try {
-    let cp: { nome: string; valor: string }[] = [
-      { nome: "tipodedoc", valor: nomeDocumento },
-      { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
-      { nome: "colaborador", valor: onlyDigits(meCpf) },
-    ];
-
-    let campo_anomes = "anomes";
-    let anomesValor = `${ano}-${mes}`; // ex: 2025-09
-
-    if (isTrct) {
-      cp = [
-        { nome: "tipodedoc", valor: nomeDocumento },
-        { nome: "cpf", valor: onlyDigits(meCpf) },
-      ];
-      campo_anomes = "ano";
-      anomesValor = String(ano); // "2025"
+    if (!selectedEmpresaIdGen) {
+      toast.error("Selecione a empresa para continuar.");
+      return;
+    }
+    const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+    const matriculaEfetivaGen = requerEscolherMatriculaGen
+      ? selectedMatriculaGen
+      : arr[0];
+    if (!matriculaEfetivaGen) {
+      toast.error("Selecione a matrícula para continuar.");
+      return;
     }
 
-    const payload: any = {
-      id_template: Number(templateId),
-      cp,
-      campo_anomes,
-      anomes: anomesValor,
-    };
+    setIsLoading(true);
+    setDocuments([]);
+    setPaginaAtual(1);
 
-    const endpoint = isTrct
-      ? "/documents/search/informetrct"
-      : "/documents/search";
+    try {
+      let cp: { nome: string; valor: string }[] = [
+        { nome: "tipodedoc", valor: nomeDocumento },
+        { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
+        { nome: "colaborador", valor: onlyDigits(meCpf) },
+      ];
 
-    const res = await api.post<{
-  total_bruto: number;
-  ultimos_6_meses: string[];
-  total_encontrado: number;
-  documentos: any[];
-}>(endpoint, payload);
+      let campo_anomes = "anomes";
+      let anomesValor = `${ano}-${mes}`; // ex: 2025-09
 
-const documentosBrutos = res.data.documentos || [];
+      if (isTrct) {
+        cp = [
+          { nome: "tipodedoc", valor: nomeDocumento },
+          { nome: "cpf", valor: onlyDigits(meCpf) },
+        ];
+        campo_anomes = "ano";
+        anomesValor = String(ano); // "2025"
+      }
 
-// 🔧 Normaliza TRTC e demais genéricos
-const documentos: DocumentoGenerico[] = documentosBrutos.map((d: any) => {
-  const anoDoc = d.ano ?? d.ANO ?? null;
-
-  const idDocumentoNorm = String(
-    d.id_documento ??
-      d.id_ged ??
-      d.id ??
-      d.ID ??
-      "" // último fallback
-  );
-
-  const normAnoMes =
-    d._norm_anomes ??
-    d.anomes ??
-    (anoDoc ? String(anoDoc) : "") ??
-    anomesValor; // ex.: "2025" para TRTC
-
-  return {
-    ...d,
-    id_documento: idDocumentoNorm,
-    _norm_anomes: normAnoMes,
-  } as DocumentoGenerico;
-});
-
-setDocuments(documentos);
+      const payload: any = {
+        id_template: Number(templateId),
+        cp,
+        campo_anomes,
+        anomes: anomesValor,
+      };
 
 
-    if (documentos.length > 0) {
-      const periodoLabel = isTrct ? String(ano) : `${ano}-${mes}`;
-      toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
-        description: `Período ${periodoLabel} para ${nomeDocumento}.`,
+      const endpoint = isTrct
+        ? "/documents/search/informetrct"
+        : isRecibo
+        ? "/documents/search/recibos"
+        : "/documents/search";
+
+      const res = await api.post<{
+        total_bruto: number;
+        ultimos_6_meses: string[];
+        total_encontrado: number;
+        documentos: any[];
+      }>(endpoint, payload);
+
+      const documentosBrutos = res.data.documentos || [];
+
+      // 🔧 Normaliza TRTC e demais genéricos
+      const documentos: DocumentoGenerico[] = documentosBrutos.map((d: any) => {
+        const anoDoc = d.ano ?? d.ANO ?? null;
+
+        const idDocumentoNorm = String(
+          d.id_documento ?? d.id_ged ?? d.id ?? d.ID ?? "" // último fallback
+        );
+
+        const normAnoMes =
+          d._norm_anomes ??
+          d.anomes ??
+          (anoDoc ? String(anoDoc) : "") ??
+          anomesValor; // ex.: "2025" para TRTC
+
+        return {
+          ...d,
+          id_documento: idDocumentoNorm,
+          _norm_anomes: normAnoMes,
+        } as DocumentoGenerico;
       });
 
-      await visualizarDocumento(documentos[0]);
-      return;
-    } else {
-      toast.warning(
-        isTrct
-          ? "Nenhum documento encontrado para o ano selecionado."
-          : "Nenhum documento encontrado para o mês selecionado."
+      setDocuments(documentos);
+
+      if (documentos.length > 0) {
+        const periodoLabel = isTrct ? String(ano) : `${ano}-${mes}`;
+        toast.success(`${documentos.length} documento(s) encontrado(s)!`, {
+          description: `Período ${periodoLabel} para ${nomeDocumento}.`,
+        });
+
+        await visualizarDocumento(documentos[0]);
+        return;
+      } else {
+        toast.warning(
+          isTrct
+            ? "Nenhum documento encontrado para o ano selecionado."
+            : "Nenhum documento encontrado para o mês selecionado."
+        );
+      }
+    } catch (err: any) {
+      const status = err?.response?.status as number | undefined;
+      let title = "Erro ao buscar documentos";
+      let description = extractErrorMessage(
+        err,
+        "Falha ao consultar o período escolhido."
       );
+
+      switch (status) {
+        case 401:
+          title = "Não autorizado";
+          description = "Sua sessão expirou. Faça login novamente.";
+          break;
+        case 403:
+          title = "Acesso negado";
+          description = "Você não tem permissão para executar esta busca.";
+          break;
+        case 404:
+          title = "Documento não encontrado";
+          description = "Não localizamos documentos para os dados informados.";
+          break;
+        case 413:
+          title = "Documento muito grande";
+          description = "Tente novamente mais tarde ou contate o suporte.";
+          break;
+        case 415:
+        case 422:
+          title = "Requisição inválida";
+          description = "Os dados informados não foram aceitos pelo servidor.";
+          break;
+        case 429:
+          title = "Muitas tentativas";
+          description =
+            "Você atingiu o limite momentâneo. Aguarde e tente novamente.";
+          break;
+        case 500:
+          title = "Erro interno do servidor";
+          description =
+            "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
+          break;
+        case 502:
+        case 503:
+        case 504:
+          title = "Instabilidade no serviço";
+          description =
+            "O servidor está indisponível no momento. Tente novamente.";
+          break;
+        default:
+          break;
+      }
+
+      toast.error(title, { description });
+    } finally {
+      dbgGroupEnd();
+      setIsLoading(false);
     }
-  } catch (err: any) {
-    const status = err?.response?.status as number | undefined;
-    let title = "Erro ao buscar documentos";
-    let description = extractErrorMessage(
-      err,
-      "Falha ao consultar o período escolhido."
-    );
-
-    switch (status) {
-      case 401:
-        title = "Não autorizado";
-        description = "Sua sessão expirou. Faça login novamente.";
-        break;
-      case 403:
-        title = "Acesso negado";
-        description = "Você não tem permissão para executar esta busca.";
-        break;
-      case 404:
-        title = "Documento não encontrado";
-        description = "Não localizamos documentos para os dados informados.";
-        break;
-      case 413:
-        title = "Documento muito grande";
-        description = "Tente novamente mais tarde ou contate o suporte.";
-        break;
-      case 415:
-      case 422:
-        title = "Requisição inválida";
-        description = "Os dados informados não foram aceitos pelo servidor.";
-        break;
-      case 429:
-        title = "Muitas tentativas";
-        description =
-          "Você atingiu o limite momentâneo. Aguarde e tente novamente.";
-        break;
-      case 500:
-        title = "Erro interno do servidor";
-        description =
-          "Ocorreu um problema no servidor. Tente novamente em alguns minutos.";
-        break;
-      case 502:
-      case 503:
-      case 504:
-        title = "Instabilidade no serviço";
-        description =
-          "O servidor está indisponível no momento. Tente novamente.";
-        break;
-      default:
-        break;
-    }
-
-    toast.error(title, { description });
-  } finally {
-    dbgGroupEnd();
-    setIsLoading(false);
-  }
-};
-
+  };
 
   // ==========================================
   // Visualizar documento
@@ -1432,14 +1429,10 @@ setDocuments(documentos);
             api.post<{
               cabecalho?: { lote?: number; uuid?: string; [k: string]: any };
               beneficios?: any[];
-            }>(
-              "/documents/beneficios/buscar",
-              buscarPayload,
-              {
-                timeout: 45000,
-                signal: controller.signal,
-              }
-            ),
+            }>("/documents/beneficios/buscar", buscarPayload, {
+              timeout: 45000,
+              signal: controller.signal,
+            }),
           2,
           700
         );
@@ -1485,7 +1478,6 @@ setDocuments(documentos);
           700
         );
 
-
         setLoadingPreviewId(null);
         previewAbortRef.current = null;
 
@@ -1521,7 +1513,6 @@ setDocuments(documentos);
           700
         );
 
-
         if (res.data.erro) {
           throw new Error(
             "O servidor retornou um erro ao processar o documento"
@@ -1551,7 +1542,6 @@ setDocuments(documentos);
       const code = err?.code as string | undefined;
       const offline =
         typeof navigator !== "undefined" && navigator.onLine === false;
-
 
       let title = "Erro ao abrir documento";
       let description = extractErrorMessage(
@@ -1633,93 +1623,84 @@ setDocuments(documentos);
   };
 
   const renderDocumentInfo = (doc: DocumentoUnion) => {
-  if (tipoDocumento === "holerite") {
-    const docHolerite = doc as DocumentoHolerite;
-    return (
-      <>
-        <td className="px-4 py-2 text-left">
-          {toYYYYDashMM(docHolerite.anomes)}
-        </td>
-        <td className="px-4 py-2 text-center">
-          {docHolerite.id_documento}
-        </td>
-      </>
-    );
-  } else if (tipoDocumento === "beneficios") {
-    const docBen = doc as DocumentoBeneficio;
-    return (
-      <>
-        <td className="px-4 py-2 text-left">
-          {toYYYYDashMM(docBen.anomes)}
-        </td>
-        <td className="px-4 py-2 text-center">
-          {docBen.id_documento}
-        </td>
-      </>
-    );
-  } else {
-    const docGenerico = doc as DocumentoGenerico;
+    if (tipoDocumento === "holerite") {
+      const docHolerite = doc as DocumentoHolerite;
+      return (
+        <>
+          <td className="px-4 py-2 text-left">
+            {toYYYYDashMM(docHolerite.anomes)}
+          </td>
+          <td className="px-4 py-2 text-center">{docHolerite.id_documento}</td>
+        </>
+      );
+    } else if (tipoDocumento === "beneficios") {
+      const docBen = doc as DocumentoBeneficio;
+      return (
+        <>
+          <td className="px-4 py-2 text-left">{toYYYYDashMM(docBen.anomes)}</td>
+          <td className="px-4 py-2 text-center">{docBen.id_documento}</td>
+        </>
+      );
+    } else {
+      const docGenerico = doc as DocumentoGenerico;
 
-    // 🔹 CASO ESPECÍFICO: TRCT → mostrar só o ano (ex: 2025)
-    if (isTrct) {
-      const anyDoc = docGenerico as any;
-      const raw =
-        anyDoc._norm_anomes || anyDoc.anomes || anyDoc.ano || anyDoc.ANO;
+      // 🔹 CASO ESPECÍFICO: TRCT → mostrar só o ano (ex: 2025)
+      if (isTrct) {
+        const anyDoc = docGenerico as any;
+        const raw =
+          anyDoc._norm_anomes || anyDoc.anomes || anyDoc.ano || anyDoc.ANO;
 
-      const displayAno = raw ? String(raw).slice(0, 4) : "";
+        const displayAno = raw ? String(raw).slice(0, 4) : "";
+
+        return (
+          <>
+            <td className="px-4 py-2 text-left">{displayAno}</td>
+          </>
+        );
+      }
+
+      // 🔹 DEMAIS GENÉRICOS → mantém Ano/Mês (ex: 2025-09)
+      const rawAnoMes = docGenerico._norm_anomes || docGenerico.anomes;
+      const displayAnoMes = rawAnoMes
+        ? toYYYYDashMM(normalizeYYYYMM(rawAnoMes))
+        : "";
 
       return (
         <>
-          <td className="px-4 py-2 text-left">{displayAno}</td>
+          <td className="px-4 py-2 text-left">{displayAnoMes}</td>
         </>
       );
     }
-
-    // 🔹 DEMAIS GENÉRICOS → mantém Ano/Mês (ex: 2025-09)
-    const rawAnoMes = docGenerico._norm_anomes || docGenerico.anomes;
-    const displayAnoMes = rawAnoMes
-      ? toYYYYDashMM(normalizeYYYYMM(rawAnoMes))
-      : "";
-
-    return (
-      <>
-        <td className="px-4 py-2 text-left">{displayAnoMes}</td>
-      </>
-    );
-  }
-};
-
-
+  };
 
   const renderTableHeader = () => {
-  if (tipoDocumento === "holerite") {
-    return (
-      <>
-        <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
-        <th className="py-3 text-center min-w-[100px]">Lote</th>
-        <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
-      </>
-    );
-  } else if (tipoDocumento === "beneficios") {
-    return (
-      <>
-        <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
-        <th className="py-3 text-center min-w-[100px]">Lote</th>
-        <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
-      </>
-    );
-  } else {
-    return (
-      <>
-        <th className="px-4 py-3 text-left min-w-[120px]">
-          {isTrct ? "Ano" : "Ano/mês"}
-        </th>
-        <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
-      </>
-    );
-  }
-};
-
+    if (tipoDocumento === "holerite") {
+      return (
+        <>
+          <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
+          <th className="py-3 text-center min-w-[100px]">Lote</th>
+          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+        </>
+      );
+    } else if (tipoDocumento === "beneficios") {
+      return (
+        <>
+          <th className="px-4 py-3 text-left min-w-[120px]">Ano/mês</th>
+          <th className="py-3 text-center min-w-[100px]">Lote</th>
+          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+        </>
+      );
+    } else {
+      return (
+        <>
+          <th className="px-4 py-3 text-left min-w-[120px]">
+            {isTrct ? "Ano" : "Ano/mês"}
+          </th>
+          <th className="px-10 py-3 text-right min-w-[100px]">Ações</th>
+        </>
+      );
+    }
+  };
 
   const showCardLoader =
     userLoading ||
@@ -2201,9 +2182,8 @@ setDocuments(documentos);
                             key={mm}
                             variant="default"
                             className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            onClick={
-                              () =>
-                                buscarBeneficiosPorAnoMes(selectedYearBen, mm)
+                            onClick={() =>
+                              buscarBeneficiosPorAnoMes(selectedYearBen, mm)
                             }
                             disabled={isAnyLoading}
                           >
@@ -2383,96 +2363,94 @@ setDocuments(documentos);
                   )}
                 </section>
 
-                
                 {/* ANOS & MESES (GEN) */}
-<section className="md:col-span-2 bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
-  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
-    Períodos (anos e meses)
-  </h3>
-  {!selectedEmpresaIdGen ? (
-    <p className="text-center text-gray-400">
-      Selecione uma empresa para carregar os períodos.
-    </p>
-  ) : requerEscolherMatriculaGen && !selectedMatriculaGen ? (
-    <p className="text-center text-gray-400">
-      Selecione a matrícula para carregar os períodos.
-    </p>
-  ) : isLoadingCompetenciasGen || !competenciasGenLoaded ? (
-    <p className="text-center">
-      Carregando períodos disponíveis...
-    </p>
-  ) : anosDisponiveisGen.length === 0 ? (
-    <p className="text-center text-gray-300">
-      Nenhum período de {nomeDocumento} encontrado para a
-      seleção atual.
-    </p>
-  ) : isTrct ? (
-    // 🔹 CASO TRCT: só lista ANOS e já busca direto
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-      {anosDisponiveisGen.map((ano) => (
-        <Button
-          key={ano}
-          variant="default"
-          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-          onClick={() => buscarGenericoPorAnoMes(ano, "01")}
-          disabled={isAnyLoading}
-        >
-          {isAnyLoading ? "Buscando..." : ano}
-        </Button>
-      ))}
-    </div>
-  ) : !selectedYearGen ? (
-    // 🔹 demais documentos genéricos → fluxo padrão (Ano → escolher mês)
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-      {anosDisponiveisGen.map((ano) => (
-        <Button
-          key={ano}
-          variant="default"
-          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-          onClick={() => setSelectedYearGen(ano)}
-          disabled={isAnyLoading}
-        >
-          {ano}
-        </Button>
-      ))}
-    </div>
-  ) : (
-    <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
-        {mesesDoAnoSelecionadoGen.map((mm) => (
-          <Button
-            key={mm}
-            variant="default"
-            className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
-            onClick={() =>
-              buscarGenericoPorAnoMes(selectedYearGen, mm)
-            }
-            disabled={isAnyLoading}
-          >
-            {isAnyLoading
-              ? "Buscando..."
-              : makeYYYYMMLabel(selectedYearGen, mm)}
-          </Button>
-        ))}
-      </div>
-      <div className="flex justify-center">
-        <Button
-          variant="default"
-          className="border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
-          onClick={() => {
-            setSelectedYearGen(null);
-            setDocuments([]);
-            setPaginaAtual(1);
-          }}
-          disabled={isAnyLoading}
-        >
-          Escolher outro ano
-        </Button>
-      </div>
-    </>
-  )}
-</section>
-
+                <section className="md:col-span-2 bg-[#151527] border border-gray-700 rounded-lg p-4 mb-5 m-3">
+                  <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                    Períodos (anos e meses)
+                  </h3>
+                  {!selectedEmpresaIdGen ? (
+                    <p className="text-center text-gray-400">
+                      Selecione uma empresa para carregar os períodos.
+                    </p>
+                  ) : requerEscolherMatriculaGen && !selectedMatriculaGen ? (
+                    <p className="text-center text-gray-400">
+                      Selecione a matrícula para carregar os períodos.
+                    </p>
+                  ) : isLoadingCompetenciasGen || !competenciasGenLoaded ? (
+                    <p className="text-center">
+                      Carregando períodos disponíveis...
+                    </p>
+                  ) : anosDisponiveisGen.length === 0 ? (
+                    <p className="text-center text-gray-300">
+                      Nenhum período de {nomeDocumento} encontrado para a
+                      seleção atual.
+                    </p>
+                  ) : isTrct ? (
+                    // 🔹 CASO TRCT: só lista ANOS e já busca direto
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                      {anosDisponiveisGen.map((ano) => (
+                        <Button
+                          key={ano}
+                          variant="default"
+                          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => buscarGenericoPorAnoMes(ano, "01")}
+                          disabled={isAnyLoading}
+                        >
+                          {isAnyLoading ? "Buscando..." : ano}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : !selectedYearGen ? (
+                    // 🔹 demais documentos genéricos → fluxo padrão (Ano → escolher mês)
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                      {anosDisponiveisGen.map((ano) => (
+                        <Button
+                          key={ano}
+                          variant="default"
+                          className="w-full h-11 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => setSelectedYearGen(ano)}
+                          disabled={isAnyLoading}
+                        >
+                          {ano}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
+                        {mesesDoAnoSelecionadoGen.map((mm) => (
+                          <Button
+                            key={mm}
+                            variant="default"
+                            className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            onClick={() =>
+                              buscarGenericoPorAnoMes(selectedYearGen, mm)
+                            }
+                            disabled={isAnyLoading}
+                          >
+                            {isAnyLoading
+                              ? "Buscando..."
+                              : makeYYYYMMLabel(selectedYearGen, mm)}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="flex justify-center">
+                        <Button
+                          variant="default"
+                          className="border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          onClick={() => {
+                            setSelectedYearGen(null);
+                            setDocuments([]);
+                            setPaginaAtual(1);
+                          }}
+                          disabled={isAnyLoading}
+                        >
+                          Escolher outro ano
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </section>
               </div>
             </>
           ) : (
@@ -2676,11 +2654,14 @@ setDocuments(documentos);
                                 "Não foi localizado documento de benefícios para o período informado.",
                             });
                           }
-                        }else {
+                        } else {
                           const cp = [
                             { nome: "tipodedoc", valor: nomeDocumento },
                             { nome: "matricula", valor: trimStr(matricula) },
-                            { nome: "colaborador", valor: onlyDigits(cpfNumbers) },
+                            {
+                              nome: "colaborador",
+                              valor: onlyDigits(cpfNumbers),
+                            },
                           ];
 
                           const payload = {
@@ -2700,9 +2681,9 @@ setDocuments(documentos);
                           // [NOVO - TRCT] – se for Informe/TRTC, muda a rota
                           const endpoint = isTrct
                             ? "/documents/search/informetrct"
+                            : isRecibo
+                            ? "/documents/search/recibos"
                             : "/documents/search";
-
-                           
 
                           const res = await api.post<{
                             total_bruto: number;
@@ -2710,7 +2691,6 @@ setDocuments(documentos);
                             total_encontrado: number;
                             documentos: DocumentoGenerico[];
                           }>(endpoint, payload);
-
 
                           const { documentos = [], total_encontrado = 0 } =
                             res.data;
@@ -2904,4 +2884,3 @@ setDocuments(documentos);
 function dbgGroupEnd() {
   throw new Error("Function not implemented.");
 }
-
