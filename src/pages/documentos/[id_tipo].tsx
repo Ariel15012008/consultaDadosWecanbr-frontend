@@ -406,10 +406,11 @@ export default function DocumentList() {
   // ================================================
   // Benefícios (não gestor): discovery por empresa/matrícula
   // ================================================
-  const [isLoadingCompetenciasBen] = useState(false);
-  const [competenciasBen, setCompetenciasBen] = useState<CompetenciaItem[]>([]);
-  const [selectedYearBen, setSelectedYearBen] = useState<number | null>(null);
-  const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
+const [isLoadingCompetenciasBen, setIsLoadingCompetenciasBen] =
+  useState(false);
+const [competenciasBen, setCompetenciasBen] = useState<CompetenciaItem[]>([]);
+const [selectedYearBen, setSelectedYearBen] = useState<number | null>(null);
+const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
 
   const anosDisponiveisBen = useMemo(() => {
     const setAnos = new Set<number>();
@@ -845,131 +846,99 @@ export default function DocumentList() {
   // ================================================
   // Benefícios: carregar competências (empresa + matrícula)
   // ================================================
-  useEffect(() => {
-    const deveRodarDiscoveryBen =
-      !userLoading && user && !user.gestor && tipoDocumento === "beneficios";
-    if (!deveRodarDiscoveryBen) return;
+  // ================================================
+// Benefícios: carregar competências (empresa + matrícula)
+// → usa /documents/beneficios/competencias
+// ================================================
+useEffect(() => {
+  const deveRodarDiscoveryBen =
+    !userLoading && user && !user.gestor && tipoDocumento === "beneficios";
+  if (!deveRodarDiscoveryBen) return;
 
-    if (!selectedEmpresaIdGen) return;
+  if (!selectedEmpresaIdGen) return;
 
-    const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
-    const matriculaEfetivaGen = requerEscolherMatriculaGen
-      ? selectedMatriculaGen
-      : arr[0];
-    if (!matriculaEfetivaGen) return;
+  const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+  const matriculaEfetivaGen = requerEscolherMatriculaGen
+    ? selectedMatriculaGen
+    : arr[0];
+  if (!matriculaEfetivaGen) return;
 
-    const controller = new AbortController();
+  const controller = new AbortController();
 
-    const run = async () => {
-      try {
-        setIsLoadingCompetenciasGen(true);
-        setDocuments([]);
-        setPaginaAtual(1);
-        setCompetenciasGenLoaded(false);
+  const run = async () => {
+    try {
+      setIsLoadingCompetenciasBen(true);
+      setDocuments([]);
+      setPaginaAtual(1);
+      setCompetenciasBenLoaded(false);
 
-        // vamos escolher endpoint + payload dependendo se é TRCT ou não
-        let endpoint = "/documents/search";
-        let payload: any;
+      const cpfNorm = onlyDigits(meCpf);
+      const matriculaNorm = trimStr(matriculaEfetivaGen);
 
-        if (isTrct) {
-          // TRCT usa a rota específica e o mesmo contrato que você testou no Postman
-          endpoint = "/documents/search/informetrct";
+      const payload = {
+        cpf: cpfNorm,
+        matricula: matriculaNorm,
+      };
 
-          const cp = [
-            // usa o mesmo valor que está configurado no GED (no Postman você usou "trtc")
-            { nome: "tipodedoc", valor: "trtc" },
-            { nome: "cpf", valor: onlyDigits(meCpf) },
-          ];
+      const res = await api.post<{
+        competencias: { ano: number; mes: number }[];
+      }>("/documents/beneficios/competencias", payload, {
+        signal: controller.signal,
+      });
 
-          payload = {
-            id_template: Number(templateId), // ex.: 6
-            cp,
-            campo_anomes: "ano",
-            anomes: "",
-          };
-        } else {
-          // fluxo genérico normal, como já funcionava antes
-          const cp = [
-            { nome: "tipodedoc", valor: nomeDocumento },
-            { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
-            { nome: "colaborador", valor: onlyDigits(meCpf) },
-          ];
+      if (controller.signal.aborted) return;
 
-          payload = {
-            id_template: Number(templateId),
-            cp,
-            campo_anomes: "anomes",
-            anomes: "",
-          };
-        }
-
-        const res = await api.post<{
-          anomes?: { ano: number; mes: number }[];
-          anos?: { ano: number }[];
-        }>(endpoint, payload, { signal: controller.signal });
-
-        if (controller.signal.aborted) return;
-
-        // TRCT devolve "anos"; genérico devolve "anomes"
-        const listaBruta = isTrct
-          ? res.data?.anos ?? []
-          : res.data?.anomes ?? [];
-
-        const lista: CompetenciaItem[] = listaBruta.map((x: any) => ({
+      const lista: CompetenciaItem[] = (res.data?.competencias ?? []).map(
+        (x) => ({
           ano: x.ano,
-          // para TRCT, por enquanto colocamos um mês "fixo" só para preencher a tipagem
-          mes: isTrct ? "01" : String(x.mes).padStart(2, "0"),
-        }));
+          mes: String(x.mes).padStart(2, "0"),
+        })
+      );
 
-        setCompetenciasGen(lista);
+      setCompetenciasBen(lista);
 
-        if (!lista.length) {
-          toast.warning(
-            isTrct
-              ? "Nenhum ano encontrado para TRCT."
-              : `Nenhum período encontrado para ${nomeDocumento}.`
-          );
-        } else {
-          toast.success(
-            isTrct
-              ? "Anos disponíveis de TRCT carregados."
-              : `Períodos disponíveis de ${nomeDocumento} carregados.`
-          );
-        }
-      } catch (err: any) {
-        if (
-          controller.signal.aborted ||
-          err?.code === "ERR_CANCELED" ||
-          err?.name === "CanceledError"
-        ) {
-          return;
-        }
-        toast.error("Erro ao carregar períodos", {
-          description: extractErrorMessage(
-            err,
-            "Falha ao consultar períodos disponíveis."
-          ),
-        });
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoadingCompetenciasGen(false);
-          setCompetenciasGenLoaded(true);
-        }
+      if (!lista.length) {
+        toast.warning(
+          "Nenhum período de benefícios encontrado para a seleção atual."
+        );
+      } else {
+        toast.success("Períodos de benefícios carregados com sucesso.");
       }
-    };
+    } catch (err: any) {
+      if (
+        controller.signal.aborted ||
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError"
+      ) {
+        return;
+      }
+      toast.error("Erro ao carregar períodos de benefícios", {
+        description: extractErrorMessage(
+          err,
+          "Falha ao consultar benefícios disponíveis."
+        ),
+      });
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoadingCompetenciasBen(false);
+        setCompetenciasBenLoaded(true);
+      }
+    }
+  };
 
-    run();
-    return () => controller.abort();
-  }, [
-    userLoading,
-    user,
-    tipoDocumento,
-    selectedEmpresaIdGen,
-    selectedMatriculaGen,
-    requerEscolherMatriculaGen,
-    empresasMap,
-    meCpf,
-  ]);
+  run();
+  return () => controller.abort();
+}, [
+  userLoading,
+  user,
+  tipoDocumento,
+  selectedEmpresaIdGen,
+  selectedMatriculaGen,
+  requerEscolherMatriculaGen,
+  empresasMap,
+  meCpf,
+]);
+
 
   // ==========================================
   // Holerite: buscar mês -> prévia
