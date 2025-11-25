@@ -444,9 +444,9 @@ export default function PreviewDocumento() {
     if (isAceito) {
       return (
         <span className="inline-flex items-center gap-2 ml-auto self-end sm:self-auto pb-2 sm:pb-0">
-          <p className="text-white">Aceito</p>
+          <p className="text-emerald-400 font-bold">Aceito</p>
           <FaCheckCircle
-            className="w-10 h-10 text-white"
+            className="w-10 h-10 text-emerald-400"
             aria-label="Documento aceito"
           />
         </span>
