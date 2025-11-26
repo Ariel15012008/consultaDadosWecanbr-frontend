@@ -967,20 +967,22 @@ useEffect(() => {
     setPaginaAtual(1);
 
     try {
-      const payload = {
-        cpf: onlyDigits(meCpf),
-        matricula: trimStr(matriculaEfetiva),
-        competencia: normalizeYYYYMM(competenciaYYYYMM),
-      };
+    const payload = {
+      cpf: onlyDigits(meCpf),
+      matricula: trimStr(matriculaEfetiva),
+      competencia: normalizeYYYYMM(competenciaYYYYMM),
+      empresa: selectedEmpresaId, // <<--- AQUI entra a empresa selecionada
+    };
 
-      const res = await api.post<{
-        tipo: "holerite";
-        cabecalho: CabecalhoHolerite;
-        eventos: EventoHolerite[];
-        rodape: RodapeHolerite;
-        pdf_base64?: string;
-        uuid?: string;
-      }>("/documents/holerite/buscar", payload);
+    const res = await api.post<{
+      tipo: "holerite";
+      cabecalho: CabecalhoHolerite;
+      eventos: EventoHolerite[];
+      rodape: RodapeHolerite;
+      pdf_base64?: string;
+      uuid?: string;
+    }>("/documents/holerite/buscar", payload);
+
 
       if (res.data && res.data.cabecalho) {
         const documento: DocumentoHolerite = {
@@ -2863,5 +2865,6 @@ useEffect(() => {
   );
 }
 function dbgGroupEnd() {
-  throw new Error("Function not implemented.");
+  // noop – mantido só para não quebrar os finally
+  // se quiser, pode usar console.groupEnd() aqui em modo debug
 }
