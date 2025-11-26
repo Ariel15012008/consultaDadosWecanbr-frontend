@@ -646,6 +646,7 @@ const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
         const payload = {
           cpf: onlyDigits(meCpf),
           matricula: trimStr(matriculaEfetiva),
+          empresa: selectedEmpresaId,
         };
 
         const res = await api.request<{
@@ -874,10 +875,12 @@ useEffect(() => {
 
       const cpfNorm = onlyDigits(meCpf);
       const matriculaNorm = trimStr(matriculaEfetivaGen);
+      const empresaId = selectedEmpresaIdGen;
 
       const payload = {
         cpf: cpfNorm,
         matricula: matriculaNorm,
+        empresa: empresaId,
       };
 
       const res = await api.post<{
@@ -1102,7 +1105,9 @@ useEffect(() => {
         uuid: String(uuid),
         lote_holerite: String(lote),
         lote: String(lote),
+        empresa: String(selectedEmpresaIdGen),
       };
+
 
       const resMontar = await api.post<{
         pdf_base64?: string;
@@ -1320,6 +1325,8 @@ useEffect(() => {
 
         const competenciaYYYYMM = normalizeYYYYMM(docHolerite.anomes);
 
+        const empresaValue = user?.gestor ? undefined : selectedEmpresaId ?? undefined;
+
         const payload: any = {
           cpf: user?.gestor
             ? onlyDigits(getCpfNumbers(cpf) || (user as any)?.cpf || "")
@@ -1327,7 +1334,9 @@ useEffect(() => {
           matricula: trimStr(matForPreview),
           competencia: competenciaYYYYMM,
           lote: docHolerite.id_documento,
+          ...(empresaValue ? { empresa: empresaValue } : {}),
         };
+
 
         const res = await withRetry(
           () =>
@@ -1423,7 +1432,9 @@ useEffect(() => {
           throw new Error("Não foi possível obter lote/uuid para montar.");
         }
 
-        // 2) MONTAR
+        const empresaValueBen =
+  user?.gestor ? undefined : selectedEmpresaIdGen ?? undefined;
+
         const montarPayload = {
           cpf: String(cpfNorm),
           matricula: String(matriculaNorm),
@@ -1431,6 +1442,7 @@ useEffect(() => {
           uuid: String(uuid),
           lote_holerite: String(lote),
           lote: String(lote),
+          ...(empresaValueBen ? { empresa: empresaValueBen } : {}),
         };
 
         const resMontar = await withRetry(
