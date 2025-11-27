@@ -1045,6 +1045,7 @@ useEffect(() => {
         cpf: cpfNorm,
         matricula: matriculaNorm,
         competencia: competenciaYYYYMM,
+        empresa: String(selectedEmpresaIdGen), // <<--- AQUI entra a empresa
       };
 
       const resBuscar = await api.post<{
@@ -1105,10 +1106,8 @@ useEffect(() => {
         matricula: String(matriculaNorm),
         competencia: String(competenciaYYYYMM),
         uuid: String(uuid),
-        lote_holerite: String(lote),
-        lote: String(lote),
-        empresa: String(selectedEmpresaIdGen),
       };
+
 
 
       const resMontar = await api.post<{
@@ -1398,11 +1397,20 @@ useEffect(() => {
         const matriculaNorm = trimStr(matForPreview);
 
         // 1) BUSCAR: obter lote e uuid
-        const buscarPayload = {
+        const buscarPayload: {
+          cpf: string;
+          matricula: string;
+          competencia: string;
+          empresa?: string;
+        } = {
           cpf: cpfNorm,
           matricula: matriculaNorm,
           competencia: competenciaYYYYMM,
         };
+
+        if (!user?.gestor && selectedEmpresaIdGen) {
+          buscarPayload.empresa = String(selectedEmpresaIdGen);
+        }
 
         const resBuscar = await withRetry(
           () =>
@@ -1434,17 +1442,11 @@ useEffect(() => {
           throw new Error("Não foi possível obter lote/uuid para montar.");
         }
 
-        const empresaValueBen =
-  user?.gestor ? undefined : selectedEmpresaIdGen ?? undefined;
-
         const montarPayload = {
           cpf: String(cpfNorm),
           matricula: String(matriculaNorm),
           competencia: String(competenciaYYYYMM),
           uuid: String(uuid),
-          lote_holerite: String(lote),
-          lote: String(lote),
-          ...(empresaValueBen ? { empresa: empresaValueBen } : {}),
         };
 
         const resMontar = await withRetry(
