@@ -746,17 +746,25 @@ const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
         const cpfNorm = onlyDigits(meCpf);
 
         // TRCT + Informe Rendimento usam a mesma rota /documents/search/informetrct
-        const cp = isTrct
-          ? [
-              { nome: "tipodedoc", valor: nomeDocumento }, // "trtc" OU "Informe Rendimento"
-              { nome: "cpf", valor: cpfNorm },
-            ]
-          : [
-              { nome: "tipodedoc", valor: nomeDocumento },
-              { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
-              { nome: "colaborador", valor: cpfNorm },
-            ];
+        let cp: { nome: string; valor: string }[];
 
+        if (isTrct) {
+          cp = [
+            { nome: "tipodedoc", valor: nomeDocumento }, // "trtc" OU "Informe Rendimento"
+            { nome: "cpf", valor: cpfNorm },
+          ];
+        } else {
+          cp = [
+            { nome: "tipodedoc", valor: nomeDocumento },
+            { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
+            { nome: "colaborador", valor: cpfNorm },
+          ];
+
+          // 👉 RECIBO VA/VT: adiciona cliente (mesma lógica de holerite/benefícios)
+          if (isRecibo && selectedEmpresaIdGen) {
+            cp.push({ nome: "cliente", valor: String(selectedEmpresaIdGen) });
+          }
+        }
         const payload: any = {
           id_template: Number(templateId),
           cp,
@@ -1167,6 +1175,11 @@ useEffect(() => {
         { nome: "matricula", valor: trimStr(matriculaEfetivaGen) },
         { nome: "colaborador", valor: onlyDigits(meCpf) },
       ];
+
+      // 👉 RECIBO VA/VT: adiciona cliente com o id da empresa selecionada
+      if (isRecibo && selectedEmpresaIdGen) {
+        cp.push({ nome: "cliente", valor: String(selectedEmpresaIdGen) });
+      }
 
       let campo_anomes = "anomes";
       let anomesValor = `${ano}-${mes}`; // ex: 2025-09
@@ -2867,6 +2880,5 @@ useEffect(() => {
   );
 }
 function dbgGroupEnd() {
-  // noop – mantido só para não quebrar os finally
-  // se quiser, pode usar console.groupEnd() aqui em modo debug
+   console.groupEnd()
 }
