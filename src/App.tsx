@@ -39,7 +39,6 @@ function AppInner() {
         rightOffset={24}
         debug={true}
         identityKey={livechatIdentityKey}
-        onOpen={() => console.log("[Livechat] Callback onOpen disparado")}
       />
 
       <Routes>

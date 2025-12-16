@@ -69,8 +69,7 @@ function deleteCookieEverywhere(name: string) {
   document.cookie = `${base} domain=.${host};`;
 }
 
-function purgeLivechatStorage(debug: boolean) {
-  const log = (...a: any[]) => debug && console.warn("[Livechat]", ...a);
+function purgeLivechatStorage() {
 
   const keyMatches = (k: string) => {
     const kk = k.toLowerCase();
@@ -98,7 +97,6 @@ function purgeLivechatStorage(debug: boolean) {
       if (k === ZION_LIVECHAT_IDENTITY_LS_KEY) return;
       if (keyMatches(k)) {
         localStorage.removeItem(k);
-        log("localStorage removido:", k);
       }
     });
   } catch {}
@@ -112,7 +110,6 @@ function purgeLivechatStorage(debug: boolean) {
     ssKeys.forEach((k) => {
       if (keyMatches(k)) {
         sessionStorage.removeItem(k);
-        log("sessionStorage removido:", k);
       }
     });
   } catch {}
@@ -136,7 +133,6 @@ function purgeLivechatStorage(debug: boolean) {
         nn.includes("visitor")
       ) {
         deleteCookieEverywhere(name);
-        log("cookie removido:", name);
       }
     });
   } catch {}
@@ -154,8 +150,6 @@ export default function OdooLivechatLoader({
   identityKey,
 }: Props) {
   useEffect(() => {
-    const warn = (...a: any[]) => debug && console.warn("[Livechat]", ...a);
-    const err = (...a: any[]) => debug && console.error("[Livechat]", ...a);
 
     const upsertStyle = (id: string, text: string) => {
       let el = document.getElementById(id) as HTMLStyleElement | null;
@@ -301,7 +295,6 @@ export default function OdooLivechatLoader({
 
           makeDraggable(el);
         } catch (e) {
-          warn("Falha ao aplicar estilo em nó do livechat:", e);
         }
       });
     };
@@ -402,7 +395,6 @@ export default function OdooLivechatLoader({
         s.src = `${src}?v=${ts}`;
 
         const to = window.setTimeout(() => {
-          err("Timeout carregando script:", s.src);
           cleanup();
           reject(new Error("timeout"));
         }, timeoutMs);
@@ -470,7 +462,7 @@ export default function OdooLivechatLoader({
       window.__odooLivechatClosedApplied = false;
 
       try {
-        purgeLivechatStorage(debug);
+        purgeLivechatStorage();
       } catch {}
 
       try {
@@ -508,10 +500,6 @@ export default function OdooLivechatLoader({
 
     (async () => {
       if (shouldHardReset) {
-        warn("Resetando sessão do livechat por mudança de identidade/logout.", {
-          previousIdentity,
-          currentIdentity,
-        });
 
         await hardResetSession();
 

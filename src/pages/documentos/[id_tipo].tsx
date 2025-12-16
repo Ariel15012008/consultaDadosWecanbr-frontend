@@ -772,10 +772,6 @@ const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
           anomes: "",
         };
 
-        console.log(
-          "[RECIBOS][DISCOVERY] payload ENVIADO (sem anomes):",
-          payload
-        );
 
         const endpoint = isTrct
           ? "/documents/search/informetrct"

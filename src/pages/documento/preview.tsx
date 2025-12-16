@@ -722,25 +722,7 @@ export default function PreviewDocumento() {
     ) {
       const tipodedocRaw = (state as any).documento_info.tipodedoc;
       const tipodedoc = tipodedocRaw.toLowerCase();
-
-      const isTRTC = tipodedoc.includes("trtc") || tipodedoc.includes("trct");
-      const isInforme =
         tipodedoc.includes("informe") && tipodedoc.includes("rend");
-
-      if (isTRTC || isInforme) {
-        console.log("[STATUS-DOC] INICIO TRTC/Informe:", {
-          tipo: (state as any)?.tipo,
-          tipo_doc,
-          tipodedoc: tipodedocRaw,
-          preliminares: {
-            matricula,
-            competencia,
-            unidade,
-            id_ged,
-            cpfDigitsUser: String((user as any)?.cpf ?? ""),
-          },
-        });
-      }
     }
 
     const cpfDigits = String((user as any)?.cpf ?? "").replace(/\D/g, "") || "";
@@ -750,16 +732,6 @@ export default function PreviewDocumento() {
       (state as any)?.tipo === "beneficios";
 
     if (!matricula && isHolBenef) {
-      console.warn(
-        "[STATUS-DOC] BLOQUEADO: sem matricula (holerite/beneficios)",
-        {
-          tipo: (state as any)?.tipo,
-          tipo_doc,
-          matricula,
-          competencia,
-          cpfDigits,
-        }
-      );
       toast.error("Matrícula não encontrada para confirmar o documento.");
       await handleDownload();
       return;
@@ -768,12 +740,6 @@ export default function PreviewDocumento() {
     // Para holerite/benefícios: exige YYYYMM
     // Para genérico (TRCT, informes etc.): apenas exige que exista algum período
     if (!competencia || (isHolBenef && !/^\d{6}$/.test(competencia))) {
-      console.warn("[STATUS-DOC] BLOQUEADO: competencia inválida", {
-        tipo: (state as any)?.tipo,
-        tipo_doc,
-        isHolBenef,
-        competencia,
-      });
       toast.error(
         isHolBenef
           ? "Competência inválida para confirmar o documento."
@@ -784,11 +750,6 @@ export default function PreviewDocumento() {
     }
 
     if (!cpfDigits || cpfDigits.length !== 11) {
-      console.warn("[STATUS-DOC] BLOQUEADO: cpf inválido", {
-        tipo: (state as any)?.tipo,
-        tipo_doc,
-        cpfDigits,
-      });
       toast.error("CPF do usuário indisponível ou inválido.");
       await handleDownload();
       return;
@@ -819,25 +780,8 @@ if ((state as any)?.tipo === "generico" && id_ged) {
     if ((state as any)?.tipo === "generico") {
       const tipodedocRaw = (state as any)?.documento_info?.tipodedoc;
       const tipodedoc = String(tipodedocRaw || "").toLowerCase();
-
-      const isTRTC = tipodedoc.includes("trtc") || tipodedoc.includes("trct");
-      const isInforme =
         tipodedoc.includes("informe") && tipodedoc.includes("rend");
 
-      console.log("[STATUS-DOC] GEN pronto para enviar:", {
-        tipo_doc,
-        tipodedoc: tipodedocRaw,
-        isTRTC,
-        isInforme,
-        payload,
-        extras: {
-          matricula,
-          competencia,
-          unidade,
-          id_ged,
-          cpfDigits,
-        },
-      });
     }
 
     try {
@@ -847,7 +791,6 @@ if ((state as any)?.tipo === "generico" && id_ged) {
       setAceiteFlag(true);
       await handleDownload();
     } catch (err: any) {
-      console.error("Falha ao confirmar /status-doc:", err);
       const msg =
         err?.response?.data?.message ||
         err?.message ||
@@ -933,11 +876,6 @@ if ((state as any)?.tipo === "generico" && id_ged) {
           <div className="flex justify-center items-center pb-8 pt-4 gap-3">
             <Button
               onClick={() => {
-                console.log("[GEN BUTTON CLICK]", {
-                  isAceito,
-                  tipo: (state as any)?.tipo,
-                  tipodedoc: (state as any)?.documento_info?.tipodedoc,
-                });
                 return isAceito ? handleDownload() : handleAcceptAndDownload();
               }}
               className="bg-green-600 hover:bg-green-500 w-full sm:w-56 h-10"
