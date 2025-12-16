@@ -1,4 +1,3 @@
-// src/components/header.tsx
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,30 +17,27 @@ import { BiLogOut } from "react-icons/bi";
 import { IoPersonCircle } from "react-icons/io5";
 import { RxHamburgerMenu } from "react-icons/rx";
 import { HiMail, HiHome } from "react-icons/hi";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/contexts/UserContext"; // [NOVO]
 
 const FORCE_FULL_RELOAD_ON_LOGIN =
   (import.meta.env.VITE_FORCE_FULL_RELOAD_ON_LOGIN ?? "true") === "true";
 
 export default function Header() {
-  const { user, isAuthenticated, isLoading, logout } = useUser();
+  const { user, isAuthenticated, isLoading, logout } = useUser(); // [NOVO]
   const navigate = useNavigate();
 
-  const handleLogout = async () => {
+   const handleLogout = async () => {
     await logout();
+    navigate("/");          // volta pra home pública
   };
 
-  // 👉 Força RELOAD completo ao ir para /login, garantindo rebootstrap do app
   const handleGoToLogin = () => {
     if (FORCE_FULL_RELOAD_ON_LOGIN) {
       const url = new URL("/login", window.location.origin);
-      // cache-buster para evitar qualquer “stale” de navegação
       url.searchParams.set("t", String(Date.now()));
-      // reload hard (derruba o SPA e re-sincroniza com cookies HttpOnly)
       window.location.href = url.toString();
       return;
     }
-    // fallback: navegação SPA (caso queira desligar via .env)
     navigate("/login");
   };
 
@@ -73,6 +69,7 @@ export default function Header() {
           </span>
         </Link>
 
+        {/* NAV DESKTOP */}
         <nav className="hidden md:flex space-x-4 pl-10">
           <Link
             to="/"
@@ -80,11 +77,24 @@ export default function Header() {
           >
             <HiHome className="mr-1" /> Início
           </Link>
+
+          {/* [NOVO] ChatRH só para RH === true */}
+          {isAuthenticated && user?.rh === true && (
+            <a
+              href="/chat"
+              className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50"
+              title="Console de Atendimento RH"
+            >
+              ChatRH
+            </a>
+          )}
+
           {/* <Link to="/contato" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
             <HiMail className="mr-1" /> Contato
           </Link> */}
         </nav>
 
+        {/* ÁREA DIREITA DESKTOP */}
         <div className="hidden md:flex items-center">
           {isAuthenticated ? (
             <DropdownMenu>
@@ -116,6 +126,7 @@ export default function Header() {
           )}
         </div>
 
+        {/* NAV MOBILE (SHEET) */}
         <Sheet>
           <SheetTrigger asChild className="md:hidden mr-2">
             <Button variant="default" size="icon">
@@ -148,6 +159,18 @@ export default function Header() {
               >
                 <HiHome className="mr-2" /> Início
               </Link>
+
+              {/* [NOVO] ChatRH no menu mobile só para RH */}
+              {isAuthenticated && user?.rh === true && (
+                <a
+                  href="/chat"
+                  className="flex items-center p-2 rounded-lg text-white hover:text-[#31d5db]"
+                  title="Console de Atendimento RH"
+                >
+                  ChatRH
+                </a>
+              )}
+
               <Link
                 to="/contato"
                 className="flex items-center p-2 rounded-lg text-white hover:text-[#31d5db]"
