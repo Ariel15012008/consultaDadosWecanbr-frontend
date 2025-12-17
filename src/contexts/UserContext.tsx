@@ -9,6 +9,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import Cookies from "js-cookie";
 import api from "@/utils/axiosInstance";
+import type { AxiosError } from "axios";
 
 interface EmpresaMatricula {
   id: string;
@@ -48,13 +49,22 @@ const MIN_FOCUS_REVALIDATION_MS = Number(
   import.meta.env.VITE_AUTH_FOCUS_THROTTLE_MS ?? 300_000
 );
 
+// opcional: manutenção periódica do refresh
+const ENABLE_BACKGROUND_REFRESH =
+  (import.meta.env.VITE_AUTH_BACKGROUND_REFRESH ?? "true") === "true";
+const BACKGROUND_REFRESH_MS = Number(
+  import.meta.env.VITE_AUTH_BACKGROUND_REFRESH_MS ?? 10 * 60 * 1000
+);
+
 export function UserProvider({ children }: UserProviderProps) {
   const navigate = useNavigate();
 
   const [user, setUser] = useState<User | null>(null);
   const userRef = useRef<User | null>(null);
-  const [, _setIsAuthenticated] = useState(false);
+
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const isAuthRef = useRef(false);
+
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
@@ -89,17 +99,23 @@ export function UserProvider({ children }: UserProviderProps) {
   const setIsAuthenticatedSafe = (next: boolean) => {
     if (isAuthRef.current !== next) {
       isAuthRef.current = next;
-      _setIsAuthenticated(next);
+      setIsAuthenticated(next);
     }
   };
+
+  const isAuthErrorStatus = (status?: number) => status === 401 || status === 403;
 
   const fetchMe = async (opts?: { background?: boolean }) => {
     const background = !!opts?.background;
 
     if (!background) setIsLoading(true);
+
     try {
       const res = await api.get("/user/me");
-      const is_sapore = res.data.dados[0].id == 5849;
+
+      // evita quebrar caso "dados" venha vazio/undefined
+      const firstEmpresaId = (res.data?.dados?.[0]?.id ?? null) as number | null;
+      const is_sapore = firstEmpresaId === 5849;
 
       Cookies.set("is_sapore", is_sapore ? "true" : "false", {
         sameSite: "lax",
@@ -113,9 +129,19 @@ export function UserProvider({ children }: UserProviderProps) {
         assignUserIfChanged(null);
         setIsAuthenticatedSafe(false);
       }
-    } catch {
-      assignUserIfChanged(null);
-      setIsAuthenticatedSafe(false);
+    } catch (err) {
+      const ax = err as AxiosError;
+      const status = ax.response?.status;
+
+      // Se for erro de auth, derruba.
+      if (isAuthErrorStatus(status)) {
+        assignUserIfChanged(null);
+        setIsAuthenticatedSafe(false);
+      } else {
+        // Se for erro transitório (rede/timeout/cold start), NÃO derruba a sessão.
+        // Mantém o que já estava, e apenas encerra loading.
+        // (opcional) você pode logar/telemetria aqui.
+      }
     } finally {
       if (!background) setIsLoading(false);
       lastSyncRef.current = Date.now();
@@ -142,7 +168,6 @@ export function UserProvider({ children }: UserProviderProps) {
         localStorage.setItem("auth:changed", String(Date.now()));
       } catch {}
 
-      // limpa identidade do livechat e faz reset forte da sessão antes do reload
       try {
         localStorage.removeItem("zion.livechat.identity");
       } catch {}
@@ -200,8 +225,9 @@ export function UserProvider({ children }: UserProviderProps) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // corrigido: agora este intervalo passa a existir quando autentica
   useEffect(() => {
-    if (!isAuthRef.current) return;
+    if (!isAuthenticated) return;
 
     const interval = setInterval(async () => {
       const timestamp = Cookies.get("logged_user");
@@ -220,11 +246,32 @@ export function UserProvider({ children }: UserProviderProps) {
     }, 60 * 1000);
 
     return () => clearInterval(interval);
-  }, []); // eslint-disable-line
+  }, [isAuthenticated]); // <- aqui
+
+  // opcional: “keep alive” do refresh a cada X min enquanto autenticado e visível
+  useEffect(() => {
+    if (!ENABLE_BACKGROUND_REFRESH) return;
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        await api.post("/user/refresh");
+        // depois do refresh, faz um /me em background para garantir sincronismo
+        if (!inflightRef.current) {
+          inflightRef.current = fetchMe({ background: true });
+        }
+      } catch {
+        // se refresh falhar, não derruba aqui; deixa o fluxo natural tratar no próximo /me
+      }
+    }, BACKGROUND_REFRESH_MS);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
 
   const value: UserContextType = {
     user,
-    isAuthenticated: isAuthRef.current,
+    isAuthenticated,
     isLoading,
     logout,
     refreshUser,
