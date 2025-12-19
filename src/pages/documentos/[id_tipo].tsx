@@ -247,9 +247,9 @@ export default function DocumentList() {
   })();
 
   const isRecibo = (() => {
-  const d = docParam; // já normalizado (sem acento e minúsculo)
-  return d.includes("recibo va") || d.includes("recibo vt");
-})();
+    const d = docParam; // já normalizado (sem acento e minúsculo)
+    return d.includes("recibo va") || d.includes("recibo vt");
+  })();
 
   // ================================================
   // ESTADOS GERAIS
@@ -406,11 +406,11 @@ export default function DocumentList() {
   // ================================================
   // Benefícios (não gestor): discovery por empresa/matrícula
   // ================================================
-const [isLoadingCompetenciasBen, setIsLoadingCompetenciasBen] =
-  useState(false);
-const [competenciasBen, setCompetenciasBen] = useState<CompetenciaItem[]>([]);
-const [selectedYearBen, setSelectedYearBen] = useState<number | null>(null);
-const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
+  const [isLoadingCompetenciasBen, setIsLoadingCompetenciasBen] =
+    useState(false);
+  const [competenciasBen, setCompetenciasBen] = useState<CompetenciaItem[]>([]);
+  const [selectedYearBen, setSelectedYearBen] = useState<number | null>(null);
+  const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
 
   const anosDisponiveisBen = useMemo(() => {
     const setAnos = new Set<number>();
@@ -772,7 +772,6 @@ const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
           anomes: "",
         };
 
-
         const endpoint = isTrct
           ? "/documents/search/informetrct"
           : isRecibo
@@ -819,12 +818,18 @@ const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
         ) {
           return;
         }
-        toast.error("Erro ao carregar períodos", {
-          description: extractErrorMessage(
-            err,
-            "Falha ao consultar períodos disponíveis."
-          ),
-        });
+
+        const status = err?.response?.status as number | undefined;
+        const description = extractErrorMessage(
+          err,
+          "Falha ao consultar períodos disponíveis."
+        );
+
+        if (status === 404) {
+          toast.warning("Nenhum período encontrado", { description });
+        } else {
+          toast.error("Erro ao carregar períodos", { description });
+        }
       } finally {
         if (!controller.signal.aborted) {
           setIsLoadingCompetenciasGen(false);
@@ -852,100 +857,99 @@ const [competenciasBenLoaded, setCompetenciasBenLoaded] = useState(false);
   // Benefícios: carregar competências (empresa + matrícula)
   // ================================================
   // ================================================
-// Benefícios: carregar competências (empresa + matrícula)
-// → usa /documents/beneficios/competencias
-// ================================================
-useEffect(() => {
-  const deveRodarDiscoveryBen =
-    !userLoading && user && !user.gestor && tipoDocumento === "beneficios";
-  if (!deveRodarDiscoveryBen) return;
+  // Benefícios: carregar competências (empresa + matrícula)
+  // → usa /documents/beneficios/competencias
+  // ================================================
+  useEffect(() => {
+    const deveRodarDiscoveryBen =
+      !userLoading && user && !user.gestor && tipoDocumento === "beneficios";
+    if (!deveRodarDiscoveryBen) return;
 
-  if (!selectedEmpresaIdGen) return;
+    if (!selectedEmpresaIdGen) return;
 
-  const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
-  const matriculaEfetivaGen = requerEscolherMatriculaGen
-    ? selectedMatriculaGen
-    : arr[0];
-  if (!matriculaEfetivaGen) return;
+    const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
+    const matriculaEfetivaGen = requerEscolherMatriculaGen
+      ? selectedMatriculaGen
+      : arr[0];
+    if (!matriculaEfetivaGen) return;
 
-  const controller = new AbortController();
+    const controller = new AbortController();
 
-  const run = async () => {
-    try {
-      setIsLoadingCompetenciasBen(true);
-      setDocuments([]);
-      setPaginaAtual(1);
-      setCompetenciasBenLoaded(false);
+    const run = async () => {
+      try {
+        setIsLoadingCompetenciasBen(true);
+        setDocuments([]);
+        setPaginaAtual(1);
+        setCompetenciasBenLoaded(false);
 
-      const cpfNorm = onlyDigits(meCpf);
-      const matriculaNorm = trimStr(matriculaEfetivaGen);
-      const empresaId = selectedEmpresaIdGen;
+        const cpfNorm = onlyDigits(meCpf);
+        const matriculaNorm = trimStr(matriculaEfetivaGen);
+        const empresaId = selectedEmpresaIdGen;
 
-      const payload = {
-        cpf: cpfNorm,
-        matricula: matriculaNorm,
-        empresa: empresaId,
-      };
+        const payload = {
+          cpf: cpfNorm,
+          matricula: matriculaNorm,
+          empresa: empresaId,
+        };
 
-      const res = await api.post<{
-        competencias: { ano: number; mes: number }[];
-      }>("/documents/beneficios/competencias", payload, {
-        signal: controller.signal,
-      });
+        const res = await api.post<{
+          competencias: { ano: number; mes: number }[];
+        }>("/documents/beneficios/competencias", payload, {
+          signal: controller.signal,
+        });
 
-      if (controller.signal.aborted) return;
+        if (controller.signal.aborted) return;
 
-      const lista: CompetenciaItem[] = (res.data?.competencias ?? []).map(
-        (x) => ({
-          ano: x.ano,
-          mes: String(x.mes).padStart(2, "0"),
-        })
-      );
-
-      setCompetenciasBen(lista);
-
-      if (!lista.length) {
-        toast.warning(
-          "Nenhum período de benefícios encontrado para a seleção atual."
+        const lista: CompetenciaItem[] = (res.data?.competencias ?? []).map(
+          (x) => ({
+            ano: x.ano,
+            mes: String(x.mes).padStart(2, "0"),
+          })
         );
-      } else {
-        toast.success("Períodos de benefícios carregados com sucesso.");
-      }
-    } catch (err: any) {
-      if (
-        controller.signal.aborted ||
-        err?.code === "ERR_CANCELED" ||
-        err?.name === "CanceledError"
-      ) {
-        return;
-      }
-      toast.error("Erro ao carregar períodos de benefícios", {
-        description: extractErrorMessage(
-          err,
-          "Falha ao consultar benefícios disponíveis."
-        ),
-      });
-    } finally {
-      if (!controller.signal.aborted) {
-        setIsLoadingCompetenciasBen(false);
-        setCompetenciasBenLoaded(true);
-      }
-    }
-  };
 
-  run();
-  return () => controller.abort();
-}, [
-  userLoading,
-  user,
-  tipoDocumento,
-  selectedEmpresaIdGen,
-  selectedMatriculaGen,
-  requerEscolherMatriculaGen,
-  empresasMap,
-  meCpf,
-]);
+        setCompetenciasBen(lista);
 
+        if (!lista.length) {
+          toast.warning(
+            "Nenhum período de benefícios encontrado para a seleção atual."
+          );
+        } else {
+          toast.success("Períodos de benefícios carregados com sucesso.");
+        }
+      } catch (err: any) {
+        if (
+          controller.signal.aborted ||
+          err?.code === "ERR_CANCELED" ||
+          err?.name === "CanceledError"
+        ) {
+          return;
+        }
+        toast.error("Erro ao carregar períodos de benefícios", {
+          description: extractErrorMessage(
+            err,
+            "Falha ao consultar benefícios disponíveis."
+          ),
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingCompetenciasBen(false);
+          setCompetenciasBenLoaded(true);
+        }
+      }
+    };
+
+    run();
+    return () => controller.abort();
+  }, [
+    userLoading,
+    user,
+    tipoDocumento,
+    selectedEmpresaIdGen,
+    selectedMatriculaGen,
+    requerEscolherMatriculaGen,
+    empresasMap,
+    meCpf,
+  ]);
 
   // ==========================================
   // Holerite: buscar mês -> prévia
@@ -971,22 +975,21 @@ useEffect(() => {
     setPaginaAtual(1);
 
     try {
-    const payload = {
-      cpf: onlyDigits(meCpf),
-      matricula: trimStr(matriculaEfetiva),
-      competencia: normalizeYYYYMM(competenciaYYYYMM),
-      empresa: selectedEmpresaId, // <<--- AQUI entra a empresa selecionada
-    };
+      const payload = {
+        cpf: onlyDigits(meCpf),
+        matricula: trimStr(matriculaEfetiva),
+        competencia: normalizeYYYYMM(competenciaYYYYMM),
+        empresa: selectedEmpresaId, // <<--- AQUI entra a empresa selecionada
+      };
 
-    const res = await api.post<{
-      tipo: "holerite";
-      cabecalho: CabecalhoHolerite;
-      eventos: EventoHolerite[];
-      rodape: RodapeHolerite;
-      pdf_base64?: string;
-      uuid?: string;
-    }>("/documents/holerite/buscar", payload);
-
+      const res = await api.post<{
+        tipo: "holerite";
+        cabecalho: CabecalhoHolerite;
+        eventos: EventoHolerite[];
+        rodape: RodapeHolerite;
+        pdf_base64?: string;
+        uuid?: string;
+      }>("/documents/holerite/buscar", payload);
 
       if (res.data && res.data.cabecalho) {
         const documento: DocumentoHolerite = {
@@ -1005,12 +1008,22 @@ useEffect(() => {
         toast.warning("Nenhum holerite encontrado para o mês selecionado.");
       }
     } catch (err: any) {
-      toast.error("Erro ao buscar holerite", {
-        description: extractErrorMessage(
-          err,
-          "Falha ao consultar o período escolhido."
-        ),
-      });
+      const status = err?.response?.status as number | undefined;
+      const title =
+        status === 404
+          ? "Nenhum holerite encontrado"
+          : "Erro ao buscar holerite";
+
+      const description = extractErrorMessage(
+        err,
+        "Falha ao consultar o período escolhido."
+      );
+
+      if (status === 404) {
+        toast.warning(title, { description }); // <<-- amarelo
+      } else {
+        toast.error(title, { description });
+      }
     } finally {
       dbgGroupEnd();
       setIsLoading(false);
@@ -1112,8 +1125,6 @@ useEffect(() => {
         uuid: String(uuid),
       };
 
-
-
       const resMontar = await api.post<{
         pdf_base64?: string;
         cabecalho?: any;
@@ -1132,12 +1143,22 @@ useEffect(() => {
       toast.success("Documento de benefícios aberto!");
       return;
     } catch (err: any) {
-      toast.error("Erro ao buscar/montar benefícios", {
-        description: extractErrorMessage(
-          err,
-          "Falha ao processar o período escolhido."
-        ),
-      });
+      const status = err?.response?.status as number | undefined;
+      const title =
+        status === 404
+          ? "Nenhum benefício encontrado"
+          : "Erro ao buscar/montar benefícios";
+
+      const description = extractErrorMessage(
+        err,
+        "Falha ao processar o período escolhido."
+      );
+
+      if (status === 404) {
+        toast.warning(title, { description }); // <<-- amarelo
+      } else {
+        toast.error(title, { description });
+      }
     } finally {
       dbgGroupEnd();
       setIsLoading(false);
@@ -1195,7 +1216,6 @@ useEffect(() => {
         campo_anomes,
         anomes: anomesValor,
       };
-
 
       const endpoint = isTrct
         ? "/documents/search/informetrct"
@@ -1268,7 +1288,7 @@ useEffect(() => {
           description = "Você não tem permissão para executar esta busca.";
           break;
         case 404:
-          title = "Documento não encontrado";
+          title = "Nenhum documento encontrado";
           description = "Não localizamos documentos para os dados informados.";
           break;
         case 413:
@@ -1301,7 +1321,11 @@ useEffect(() => {
           break;
       }
 
-      toast.error(title, { description });
+      if (status === 404) {
+        toast.warning(title, { description }); // <<-- amarelo
+      } else {
+        toast.error(title, { description });
+      }
     } finally {
       dbgGroupEnd();
       setIsLoading(false);
@@ -1335,7 +1359,9 @@ useEffect(() => {
 
         const competenciaYYYYMM = normalizeYYYYMM(docHolerite.anomes);
 
-        const empresaValue = user?.gestor ? undefined : selectedEmpresaId ?? undefined;
+        const empresaValue = user?.gestor
+          ? undefined
+          : selectedEmpresaId ?? undefined;
 
         const payload: any = {
           cpf: user?.gestor
@@ -1346,7 +1372,6 @@ useEffect(() => {
           lote: docHolerite.id_documento,
           ...(empresaValue ? { empresa: empresaValue } : {}),
         };
-
 
         const res = await withRetry(
           () =>
@@ -2876,5 +2901,5 @@ useEffect(() => {
   );
 }
 function dbgGroupEnd() {
-   console.groupEnd()
+  console.groupEnd();
 }

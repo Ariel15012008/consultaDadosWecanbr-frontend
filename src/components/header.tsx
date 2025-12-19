@@ -26,9 +26,9 @@ export default function Header() {
   const { user, isAuthenticated, isLoading, logout } = useUser(); // [NOVO]
   const navigate = useNavigate();
 
-   const handleLogout = async () => {
+  const handleLogout = async () => {
     await logout();
-    navigate("/");          // volta pra home pública
+    navigate("/"); // volta pra home pública
   };
 
   const handleGoToLogin = () => {
@@ -62,9 +62,10 @@ export default function Header() {
       <div className="container mx-auto flex items-center justify-between pt-4 pb-4 pl-1">
         <Link
           to="/"
-          className="flex items-center text-xl font-bold whitespace-nowrap gap-2 cursor-default"
+          className="ml-4 inline-flex items-center focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          aria-label="Ir para início"
         >
-          <span className="bg-white ml-4 text-blue-600 px-2 py-1 rounded">
+          <span className="bg-white text-blue-600 px-3 py-1 rounded font-bold text-xl whitespace-nowrap">
             SuperRH
           </span>
         </Link>

@@ -130,7 +130,7 @@ export default function Home() {
     const total = documentos.length;
     if (total <= 2) return "grid-cols-1 sm:grid-cols-2";
     if (total === 3) return "grid-cols-1 sm:grid-cols-3";
-    if (total === 4) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-4";
+    if (total === 4) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
     if (total === 5) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
     return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
   }, [documentos]);
