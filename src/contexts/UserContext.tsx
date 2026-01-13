@@ -27,14 +27,26 @@ interface User {
   centro_de_custo?: string;
   dados?: EmpresaMatricula[];
   rh?: boolean;
+
+  // NOVO: vem do /me
+  senha_trocada?: boolean;
 }
 
 interface UserContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+
+  // NOVO: gate de troca obrigatória
+  mustChangePassword: boolean;
+
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+
+  // NOVO: senha atual capturada no login (somente memória)
+  setLoginPassword: (senhaAtual: string) => void;
+  getLoginPassword: () => string | null;
+  clearLoginPassword: () => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -49,7 +61,6 @@ const MIN_FOCUS_REVALIDATION_MS = Number(
   import.meta.env.VITE_AUTH_FOCUS_THROTTLE_MS ?? 300_000
 );
 
-// opcional: manutenção periódica do refresh
 const ENABLE_BACKGROUND_REFRESH =
   (import.meta.env.VITE_AUTH_BACKGROUND_REFRESH ?? "true") === "true";
 const BACKGROUND_REFRESH_MS = Number(
@@ -70,6 +81,9 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const inflightRef = useRef<Promise<void> | null>(null);
   const lastSyncRef = useRef<number>(0);
+
+  // NOVO: senha atual capturada no login (somente em memória)
+  const loginPasswordRef = useRef<string | null>(null);
 
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
@@ -113,7 +127,6 @@ export function UserProvider({ children }: UserProviderProps) {
     try {
       const res = await api.get("/user/me");
 
-      // evita quebrar caso "dados" venha vazio/undefined
       const firstEmpresaId = (res.data?.dados?.[0]?.id ?? null) as number | null;
       const is_sapore = firstEmpresaId === 5849;
 
@@ -133,14 +146,12 @@ export function UserProvider({ children }: UserProviderProps) {
       const ax = err as AxiosError;
       const status = ax.response?.status;
 
-      // Se for erro de auth, derruba.
       if (isAuthErrorStatus(status)) {
         assignUserIfChanged(null);
         setIsAuthenticatedSafe(false);
+        loginPasswordRef.current = null; // NOVO: limpa senha em caso de queda de auth
       } else {
-        // Se for erro transitório (rede/timeout/cold start), NÃO derruba a sessão.
-        // Mantém o que já estava, e apenas encerra loading.
-        // (opcional) você pode logar/telemetria aqui.
+        // erro transitório: não derruba sessão
       }
     } finally {
       if (!background) setIsLoading(false);
@@ -163,6 +174,7 @@ export function UserProvider({ children }: UserProviderProps) {
       setIsAuthenticatedSafe(false);
       assignUserIfChanged(null);
       didLogout.current = true;
+      loginPasswordRef.current = null; // NOVO
 
       try {
         localStorage.setItem("auth:changed", String(Date.now()));
@@ -211,7 +223,7 @@ export function UserProvider({ children }: UserProviderProps) {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, []); // eslint-disable-line
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -225,7 +237,6 @@ export function UserProvider({ children }: UserProviderProps) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // corrigido: agora este intervalo passa a existir quando autentica
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -246,9 +257,8 @@ export function UserProvider({ children }: UserProviderProps) {
     }, 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated]); // <- aqui
+  }, [isAuthenticated]); // eslint-disable-line
 
-  // opcional: “keep alive” do refresh a cada X min enquanto autenticado e visível
   useEffect(() => {
     if (!ENABLE_BACKGROUND_REFRESH) return;
     if (!isAuthenticated) return;
@@ -257,24 +267,36 @@ export function UserProvider({ children }: UserProviderProps) {
       if (document.visibilityState !== "visible") return;
       try {
         await api.post("/user/refresh");
-        // depois do refresh, faz um /me em background para garantir sincronismo
         if (!inflightRef.current) {
           inflightRef.current = fetchMe({ background: true });
         }
       } catch {
-        // se refresh falhar, não derruba aqui; deixa o fluxo natural tratar no próximo /me
+        // não derruba aqui
       }
     }, BACKGROUND_REFRESH_MS);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated]); // eslint-disable-line
+
+  // NOVO: regra global
+  const mustChangePassword =
+    !!isAuthenticated && user?.senha_trocada === false;
 
   const value: UserContextType = {
     user,
     isAuthenticated,
     isLoading,
+    mustChangePassword,
     logout,
     refreshUser,
+
+    setLoginPassword: (senhaAtual: string) => {
+      loginPasswordRef.current = senhaAtual;
+    },
+    getLoginPassword: () => loginPasswordRef.current,
+    clearLoginPassword: () => {
+      loginPasswordRef.current = null;
+    },
   };
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

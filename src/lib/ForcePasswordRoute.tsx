@@ -2,7 +2,7 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
 import LoadingScreen from "@/components/ui/loadingScreen";
 
-export function ProtectedRoute() {
+export function ForcePasswordRoute() {
   const { isAuthenticated, isLoading, mustChangePassword } = useUser();
 
   if (isLoading) {
@@ -10,12 +10,12 @@ export function ProtectedRoute() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
-  // NOVO: se precisa trocar senha, não deixa acessar área protegida
-  if (mustChangePassword) {
-    return <Navigate to="/trocar-senha" replace />;
+  // Se já trocou, não deixa ficar nessa rota
+  if (!mustChangePassword) {
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;

@@ -27,7 +27,8 @@ export default function LoginPage() {
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const navigate = useNavigate();
-  const { refreshUser } = useUser(); // contexto
+  const { refreshUser, setLoginPassword } = useUser();
+
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -37,16 +38,19 @@ export default function LoginPage() {
     setLoginError("");
 
     try {
+      // Guarda a senha atual SOMENTE EM MEMÓRIA para ser usada na troca obrigatória
+      setLoginPassword(data.senha);
+
       // 1) Faz login (rápido)
       await api.post("/user/login", data, { withCredentials: true });
 
-      // 2) Já manda o usuário pra Home
-      navigate("/");
+      // 2) Busca /me para saber senha_trocada e decidir rota
+      await refreshUser();
 
-      // 3) Atualiza dados do usuário em background (sem travar a navegação)
-      refreshUser().catch((err) => {
-        console.error("Erro ao atualizar usuário após login:", err);
-      });
+      // 3) Decisão de navegação baseada no /me (senha_trocada)
+      // A decisão final acontece via guards (HomeGate/ProtectedRoute),
+      // mas aqui já direciona para evitar "flash".
+      navigate("/", { replace: true });
     } catch (err: any) {
       console.error("Erro ao fazer login:", err);
       if (err?.message === "Network Error") {

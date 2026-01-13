@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { UserProvider } from "@/contexts/UserContext";
 
-import Home from "@/pages/home/Home";
 import Login from "@/pages/login/Login";
 import Cadastro from "@/pages/register/Cadastro";
 import ForgotPasswordPage from "@/pages/password/ForgotPasswordPage";
@@ -10,10 +9,14 @@ import IdTemplate from "@/pages/documentos/[id_tipo]";
 import PreviewPDF from "@/pages/documento/preview";
 import Chat from "@/pages/chat/Chat";
 
+import ForceChangePasswordPage from "@/pages/password/ForgotPasswordPage";
+import HomeGate from "@/pages/home/HomeGate";
+
 import { PublicRoute } from "./lib/PublicRoute";
 import { ProtectedRoute } from "./lib/ProtectedRoute";
-import OdooLivechatLoader from "@/components/OdooLivechatLoader";
+import { ForcePasswordRoute } from "./lib/ForcePasswordRoute";
 
+import OdooLivechatLoader from "@/components/OdooLivechatLoader";
 import { useUser } from "@/contexts/UserContext";
 
 function AppInner() {
@@ -42,13 +45,18 @@ function AppInner() {
       />
 
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<HomeGate />} />
 
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Cadastro />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+        </Route>
+
+        {/* NOVO: rota exclusiva quando senha_trocada=false */}
+        <Route element={<ForcePasswordRoute />}>
+          <Route path="/trocar-senha" element={<ForceChangePasswordPage />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>
