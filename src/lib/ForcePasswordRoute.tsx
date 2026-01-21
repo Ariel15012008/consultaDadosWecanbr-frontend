@@ -13,7 +13,6 @@ export function ForcePasswordRoute() {
     return <Navigate to="/login" replace />;
   }
 
-  // Se já trocou, não deixa ficar nessa rota
   if (!mustChangePassword) {
     return <Navigate to="/" replace />;
   }

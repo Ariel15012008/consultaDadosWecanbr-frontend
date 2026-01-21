@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,8 +12,44 @@ import { Eye, EyeOff } from "lucide-react";
 import api from "@/utils/axiosInstance";
 import { useUser } from "@/contexts/UserContext";
 
+function onlyDigits(v: string) {
+  return (v ?? "").replace(/\D/g, "");
+}
+
+// Validação básica de CPF (dígitos verificadores)
+function isValidCPF(raw: string) {
+  const cpf = onlyDigits(raw);
+  if (cpf.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(cpf)) return false;
+
+  const calc = (base: string, factor: number) => {
+    let sum = 0;
+    for (let i = 0; i < base.length; i++) {
+      sum += parseInt(base[i], 10) * (factor - i);
+    }
+    const mod = sum % 11;
+    return mod < 2 ? 0 : 11 - mod;
+  };
+
+  const d1 = calc(cpf.slice(0, 9), 10);
+  const d2 = calc(cpf.slice(0, 10), 11);
+
+  return d1 === parseInt(cpf[9], 10) && d2 === parseInt(cpf[10], 10);
+}
+
+function isEmail(v: string) {
+  // validação simples (suficiente para gate client-side)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v ?? "").trim().toLowerCase());
+}
+
 const schema = z.object({
-  usuario: z.string().min(9, "Usuário inválido"),
+  usuario: z
+    .string()
+    .min(1, "Informe seu Usuário")
+    .transform((v) => v.trim())
+    .refine((v) => isEmail(v) || isValidCPF(v), {
+      message: "Informe um CPF válido ou um e-mail válido",
+    }),
   senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
 });
 
@@ -23,6 +59,7 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
@@ -32,31 +69,45 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [loginSuccess, setLoginSuccess] = useState("");
+
+  // Mensagem e prefill após troca de senha obrigatória
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("postPasswordChange");
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as { usuario?: string; cpf?: string; email?: string; message?: string };
+
+      const msg = (parsed?.message ?? "").trim();
+      const u = (parsed?.usuario ?? parsed?.email ?? parsed?.cpf ?? "").trim();
+
+      if (msg) setLoginSuccess(msg);
+      if (u) setValue("usuario", u);
+
+      sessionStorage.removeItem("postPasswordChange");
+    } catch {
+      // ignore
+    }
+  }, [setValue]);
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     setLoginError("");
 
     try {
-      // Guarda a senha atual SOMENTE EM MEMÓRIA para ser usada na troca obrigatória
+      // guarda a senha SOMENTE EM MEMÓRIA para o fluxo de troca obrigatória
       setLoginPassword(data.senha);
 
-      // 1) Faz login (rápido)
+      // mantém payload {usuario, senha} pois seu backend aceita cpf ou email nesse campo
       await api.post("/user/login", data, { withCredentials: true });
 
-      // 2) Busca /me para saber senha_trocada e decidir rota
       await refreshUser();
-
-      // 3) Decisão de navegação baseada no /me (senha_trocada)
-      // A decisão final acontece via guards (HomeGate/ProtectedRoute),
-      // mas aqui já direciona para evitar "flash".
       navigate("/", { replace: true });
     } catch (err: any) {
       console.error("Erro ao fazer login:", err);
       if (err?.message === "Network Error") {
-        setLoginError(
-          "Não foi possível conectar ao servidor. Verifique sua conexão."
-        );
+        setLoginError("Não foi possível conectar ao servidor. Verifique sua conexão.");
       } else {
         setLoginError(
           err?.response?.data?.detail ||
@@ -81,6 +132,12 @@ export default function LoginPage() {
           Acesso ao Sistema
         </h2>
 
+        {loginSuccess && (
+          <div className="text-sm text-green-200 bg-green-900/20 border border-green-700 rounded-lg p-3">
+            {loginSuccess}
+          </div>
+        )}
+
         <div>
           <Label className="text-gray-200">Usuário</Label>
           <Input
@@ -88,6 +145,7 @@ export default function LoginPage() {
             type="text"
             {...register("usuario")}
             className="mt-1 bg-[#2a2a3d] text-white"
+            autoComplete="username"
           />
           {errors.usuario && (
             <p className="text-red-400 text-sm mt-1">
@@ -106,10 +164,14 @@ export default function LoginPage() {
               type={showPassword ? "text" : "password"}
               {...register("senha")}
               className="mt-1 pr-10 bg-[#2a2a3d] text-white"
+              autoComplete="current-password"
             />
             <div
               className="absolute right-2 top-2 text-white cursor-pointer hover:text-blue-400"
               onClick={() => setShowPassword((prev) => !prev)}
+              role="button"
+              aria-label="Alternar visualização da senha"
+              tabIndex={0}
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </div>

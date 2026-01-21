@@ -4,8 +4,6 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
-
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -30,13 +28,11 @@ const schema = z
 type FormData = z.infer<typeof schema>;
 
 export default function ForceChangePasswordPage() {
-  const navigate = useNavigate();
   const {
     user,
     mustChangePassword,
     getLoginPassword,
     clearLoginPassword,
-    refreshUser,
     logout,
   } = useUser();
 
@@ -88,14 +84,19 @@ export default function ForceChangePasswordPage() {
 
       clearLoginPassword();
 
-      await refreshUser();
+      setPageSuccess("Senha atualizada. Faça login com a nova senha...");
 
-      setPageSuccess("Senha atualizada com sucesso. Redirecionando...");
+      try {
+        sessionStorage.setItem(
+          "postPasswordChange",
+          JSON.stringify({
+            cpf,
+            message: "Senha alterada com sucesso. Entre com a nova senha.",
+          })
+        );
+      } catch {}
 
-      // Se o /me voltar com senha_trocada=true, o gate libera a Home
-      setTimeout(() => {
-        navigate("/", { replace: true });
-      }, 800);
+      await logout({ redirectTo: "/login", reload: true });
     } catch (err: any) {
       if (err?.message === "Network Error") {
         setPageError("Não foi possível conectar ao servidor. Verifique sua conexão.");
@@ -215,7 +216,7 @@ export default function ForceChangePasswordPage() {
             className="w-full bg-[#2a2a3d] hover:bg-[#34344a] text-white border border-gray-600"
             disabled={loading}
             onClick={async () => {
-              await logout();
+              await logout({ redirectTo: "/login", reload: true });
             }}
           >
             Sair

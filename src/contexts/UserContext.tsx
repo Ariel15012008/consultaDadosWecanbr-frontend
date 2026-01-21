@@ -28,7 +28,7 @@ interface User {
   dados?: EmpresaMatricula[];
   rh?: boolean;
 
-  // NOVO: vem do /me
+  // vem do /me
   senha_trocada?: boolean;
 }
 
@@ -37,13 +37,11 @@ interface UserContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
 
-  // NOVO: gate de troca obrigatória
   mustChangePassword: boolean;
 
-  logout: () => Promise<void>;
+  logout: (opts?: { redirectTo?: string; reload?: boolean }) => Promise<void>;
   refreshUser: () => Promise<void>;
 
-  // NOVO: senha atual capturada no login (somente memória)
   setLoginPassword: (senhaAtual: string) => void;
   getLoginPassword: () => string | null;
   clearLoginPassword: () => void;
@@ -82,7 +80,7 @@ export function UserProvider({ children }: UserProviderProps) {
   const inflightRef = useRef<Promise<void> | null>(null);
   const lastSyncRef = useRef<number>(0);
 
-  // NOVO: senha atual capturada no login (somente em memória)
+  // senha atual capturada no login (somente em memória)
   const loginPasswordRef = useRef<string | null>(null);
 
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
@@ -149,7 +147,7 @@ export function UserProvider({ children }: UserProviderProps) {
       if (isAuthErrorStatus(status)) {
         assignUserIfChanged(null);
         setIsAuthenticatedSafe(false);
-        loginPasswordRef.current = null; // NOVO: limpa senha em caso de queda de auth
+        loginPasswordRef.current = null;
       } else {
         // erro transitório: não derruba sessão
       }
@@ -164,7 +162,10 @@ export function UserProvider({ children }: UserProviderProps) {
     await fetchMe({ background: false });
   };
 
-  const logout = async () => {
+  const logout = async (opts?: { redirectTo?: string; reload?: boolean }) => {
+    const redirectTo = opts?.redirectTo ?? "/";
+    const reload = opts?.reload ?? true;
+
     try {
       Cookies.remove("access_token");
       Cookies.remove("logged_user");
@@ -174,7 +175,7 @@ export function UserProvider({ children }: UserProviderProps) {
       setIsAuthenticatedSafe(false);
       assignUserIfChanged(null);
       didLogout.current = true;
-      loginPasswordRef.current = null; // NOVO
+      loginPasswordRef.current = null;
 
       try {
         localStorage.setItem("auth:changed", String(Date.now()));
@@ -188,8 +189,11 @@ export function UserProvider({ children }: UserProviderProps) {
         await (window as any).resetOdooLivechatSession?.();
       } catch {}
 
-      navigate("/", { replace: true });
-      window.location.reload();
+      navigate(redirectTo, { replace: true });
+
+      if (reload) {
+        window.location.reload();
+      }
     }
   };
 
@@ -278,9 +282,7 @@ export function UserProvider({ children }: UserProviderProps) {
     return () => clearInterval(interval);
   }, [isAuthenticated]); // eslint-disable-line
 
-  // NOVO: regra global
-  const mustChangePassword =
-    !!isAuthenticated && user?.senha_trocada === false;
+  const mustChangePassword = !!isAuthenticated && user?.senha_trocada === false;
 
   const value: UserContextType = {
     user,
@@ -289,7 +291,6 @@ export function UserProvider({ children }: UserProviderProps) {
     mustChangePassword,
     logout,
     refreshUser,
-
     setLoginPassword: (senhaAtual: string) => {
       loginPasswordRef.current = senhaAtual;
     },
