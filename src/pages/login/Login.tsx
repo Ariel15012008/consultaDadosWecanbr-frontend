@@ -38,7 +38,6 @@ function isValidCPF(raw: string) {
 }
 
 function isEmail(v: string) {
-  // validação simples (suficiente para gate client-side)
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v ?? "").trim().toLowerCase());
 }
 
@@ -55,6 +54,14 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function getStatus(err: any): number | undefined {
+  return err?.response?.status;
+}
+
 export default function LoginPage() {
   const {
     register,
@@ -64,20 +71,29 @@ export default function LoginPage() {
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const navigate = useNavigate();
-  const { refreshUser, setLoginPassword } = useUser();
+  const {
+    refreshUser,
+    setLoginPassword,
+    beginLogin,
+    endLogin,
+  } = useUser();
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginSuccess, setLoginSuccess] = useState("");
 
-  // Mensagem e prefill após troca de senha obrigatória
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("postPasswordChange");
       if (!raw) return;
 
-      const parsed = JSON.parse(raw) as { usuario?: string; cpf?: string; email?: string; message?: string };
+      const parsed = JSON.parse(raw) as {
+        usuario?: string;
+        cpf?: string;
+        email?: string;
+        message?: string;
+      };
 
       const msg = (parsed?.message ?? "").trim();
       const u = (parsed?.usuario ?? parsed?.email ?? parsed?.cpf ?? "").trim();
@@ -91,21 +107,43 @@ export default function LoginPage() {
     }
   }, [setValue]);
 
+  const doLoginWithOneRetry = async (data: FormData) => {
+    try {
+      await api.post("/user/login", data, { withCredentials: true });
+      return;
+    } catch (err: any) {
+      const status = getStatus(err);
+      const is5xx = typeof status === "number" && status >= 500 && status <= 599;
+
+      if (is5xx) {
+        await sleep(350);
+        await api.post("/user/login", data, { withCredentials: true });
+        return;
+      }
+
+      throw err;
+    }
+  };
+
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     setLoginError("");
+
+    beginLogin();
 
     try {
       // guarda a senha SOMENTE EM MEMÓRIA para o fluxo de troca obrigatória
       setLoginPassword(data.senha);
 
-      // mantém payload {usuario, senha} pois seu backend aceita cpf ou email nesse campo
-      await api.post("/user/login", data, { withCredentials: true });
+      // login (com retry 5xx)
+      await doLoginWithOneRetry(data);
 
+      // agora sim, consulta /me (sem corrida)
       await refreshUser();
       navigate("/", { replace: true });
     } catch (err: any) {
       console.error("Erro ao fazer login:", err);
+
       if (err?.message === "Network Error") {
         setLoginError("Não foi possível conectar ao servidor. Verifique sua conexão.");
       } else {
@@ -116,6 +154,7 @@ export default function LoginPage() {
         );
       }
     } finally {
+      endLogin();
       setLoading(false);
     }
   };

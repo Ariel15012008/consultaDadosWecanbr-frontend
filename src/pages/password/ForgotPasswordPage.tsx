@@ -86,17 +86,7 @@ export default function ForceChangePasswordPage() {
 
       setPageSuccess("Senha atualizada. Faça login com a nova senha...");
 
-      try {
-        sessionStorage.setItem(
-          "postPasswordChange",
-          JSON.stringify({
-            cpf,
-            message: "Senha alterada com sucesso. Entre com a nova senha.",
-          })
-        );
-      } catch {}
-
-      await logout({ redirectTo: "/login", reload: true });
+      await logout({ redirectTo: "/login" });
     } catch (err: any) {
       if (err?.message === "Network Error") {
         setPageError("Não foi possível conectar ao servidor. Verifique sua conexão.");

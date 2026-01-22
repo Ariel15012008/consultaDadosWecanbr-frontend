@@ -39,6 +39,11 @@ interface UserContextType {
 
   mustChangePassword: boolean;
 
+  // novo
+  isLoggingIn: boolean;
+  beginLogin: () => void;
+  endLogin: () => void;
+
   logout: (opts?: { redirectTo?: string; reload?: boolean }) => Promise<void>;
   refreshUser: () => Promise<void>;
 
@@ -83,6 +88,10 @@ export function UserProvider({ children }: UserProviderProps) {
   // senha atual capturada no login (somente em memória)
   const loginPasswordRef = useRef<string | null>(null);
 
+  // novo: trava para evitar corrida durante login
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const isLoggingInRef = useRef(false);
+
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
   const stable = (obj: any): any => {
@@ -119,6 +128,13 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const fetchMe = async (opts?: { background?: boolean }) => {
     const background = !!opts?.background;
+
+    // novo: durante login, evita chamadas ao /me (corrida clássica)
+    if (isLoggingInRef.current) {
+      inflightRef.current = null;
+      lastSyncRef.current = Date.now();
+      return;
+    }
 
     if (!background) setIsLoading(true);
 
@@ -207,6 +223,8 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!REVALIDATE_ON_FOCUS) return;
 
     const tryBackgroundSync = () => {
+      if (isLoggingInRef.current) return;
+
       const now = Date.now();
       const elapsed = now - lastSyncRef.current;
 
@@ -232,6 +250,7 @@ export function UserProvider({ children }: UserProviderProps) {
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === "auth:changed") {
+        if (isLoggingInRef.current) return;
         if (!inflightRef.current) {
           inflightRef.current = fetchMe({ background: true });
         }
@@ -245,6 +264,8 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!isAuthenticated) return;
 
     const interval = setInterval(async () => {
+      if (isLoggingInRef.current) return;
+
       const timestamp = Cookies.get("logged_user");
       if (!timestamp) return;
 
@@ -268,7 +289,9 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!isAuthenticated) return;
 
     const interval = setInterval(async () => {
+      if (isLoggingInRef.current) return;
       if (document.visibilityState !== "visible") return;
+
       try {
         await api.post("/user/refresh");
         if (!inflightRef.current) {
@@ -284,11 +307,26 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const mustChangePassword = !!isAuthenticated && user?.senha_trocada === false;
 
+  const beginLogin = () => {
+    isLoggingInRef.current = true;
+    setIsLoggingIn(true);
+  };
+
+  const endLogin = () => {
+    isLoggingInRef.current = false;
+    setIsLoggingIn(false);
+  };
+
   const value: UserContextType = {
     user,
     isAuthenticated,
     isLoading,
     mustChangePassword,
+
+    isLoggingIn,
+    beginLogin,
+    endLogin,
+
     logout,
     refreshUser,
     setLoginPassword: (senhaAtual: string) => {
