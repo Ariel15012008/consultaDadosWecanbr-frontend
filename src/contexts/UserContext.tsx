@@ -27,8 +27,6 @@ interface User {
   centro_de_custo?: string;
   dados?: EmpresaMatricula[];
   rh?: boolean;
-
-  // vem do /me
   senha_trocada?: boolean;
 }
 
@@ -39,7 +37,6 @@ interface UserContextType {
 
   mustChangePassword: boolean;
 
-  // novo
   isLoggingIn: boolean;
   beginLogin: () => void;
   endLogin: () => void;
@@ -85,10 +82,8 @@ export function UserProvider({ children }: UserProviderProps) {
   const inflightRef = useRef<Promise<void> | null>(null);
   const lastSyncRef = useRef<number>(0);
 
-  // senha atual capturada no login (somente em memória)
   const loginPasswordRef = useRef<string | null>(null);
 
-  // novo: trava para evitar corrida durante login
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const isLoggingInRef = useRef(false);
 
@@ -126,11 +121,13 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const isAuthErrorStatus = (status?: number) => status === 401 || status === 403;
 
-  const fetchMe = async (opts?: { background?: boolean }) => {
+  // ✅ Ajuste: allow force para o /me pós-login
+  const fetchMe = async (opts?: { background?: boolean; force?: boolean }) => {
     const background = !!opts?.background;
+    const force = !!opts?.force;
 
-    // novo: durante login, evita chamadas ao /me (corrida clássica)
-    if (isLoggingInRef.current) {
+    // lock só bloqueia revalidações automáticas; não bloqueia fetch "forçado"
+    if (!force && isLoggingInRef.current) {
       inflightRef.current = null;
       lastSyncRef.current = Date.now();
       return;
@@ -174,8 +171,9 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
+  // ✅ Ajuste: refreshUser é "forçado"
   const refreshUser = async () => {
-    await fetchMe({ background: false });
+    await fetchMe({ background: false, force: true });
   };
 
   const logout = async (opts?: { redirectTo?: string; reload?: boolean }) => {
@@ -213,6 +211,16 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
+  const beginLogin = () => {
+    isLoggingInRef.current = true;
+    setIsLoggingIn(true);
+  };
+
+  const endLogin = () => {
+    isLoggingInRef.current = false;
+    setIsLoggingIn(false);
+  };
+
   useEffect(() => {
     if (!didLogout.current) {
       fetchMe({ background: false });
@@ -223,8 +231,6 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!REVALIDATE_ON_FOCUS) return;
 
     const tryBackgroundSync = () => {
-      if (isLoggingInRef.current) return;
-
       const now = Date.now();
       const elapsed = now - lastSyncRef.current;
 
@@ -250,7 +256,6 @@ export function UserProvider({ children }: UserProviderProps) {
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === "auth:changed") {
-        if (isLoggingInRef.current) return;
         if (!inflightRef.current) {
           inflightRef.current = fetchMe({ background: true });
         }
@@ -264,8 +269,6 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!isAuthenticated) return;
 
     const interval = setInterval(async () => {
-      if (isLoggingInRef.current) return;
-
       const timestamp = Cookies.get("logged_user");
       if (!timestamp) return;
 
@@ -289,9 +292,7 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!isAuthenticated) return;
 
     const interval = setInterval(async () => {
-      if (isLoggingInRef.current) return;
       if (document.visibilityState !== "visible") return;
-
       try {
         await api.post("/user/refresh");
         if (!inflightRef.current) {
@@ -306,16 +307,6 @@ export function UserProvider({ children }: UserProviderProps) {
   }, [isAuthenticated]); // eslint-disable-line
 
   const mustChangePassword = !!isAuthenticated && user?.senha_trocada === false;
-
-  const beginLogin = () => {
-    isLoggingInRef.current = true;
-    setIsLoggingIn(true);
-  };
-
-  const endLogin = () => {
-    isLoggingInRef.current = false;
-    setIsLoggingIn(false);
-  };
 
   const value: UserContextType = {
     user,

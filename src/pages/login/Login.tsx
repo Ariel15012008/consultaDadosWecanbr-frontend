@@ -16,7 +16,6 @@ function onlyDigits(v: string) {
   return (v ?? "").replace(/\D/g, "");
 }
 
-// Validação básica de CPF (dígitos verificadores)
 function isValidCPF(raw: string) {
   const cpf = onlyDigits(raw);
   if (cpf.length !== 11) return false;
@@ -71,12 +70,7 @@ export default function LoginPage() {
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const navigate = useNavigate();
-  const {
-    refreshUser,
-    setLoginPassword,
-    beginLogin,
-    endLogin,
-  } = useUser();
+  const { refreshUser, setLoginPassword, beginLogin, endLogin } = useUser();
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -132,25 +126,21 @@ export default function LoginPage() {
     beginLogin();
 
     try {
-      // guarda a senha SOMENTE EM MEMÓRIA para o fluxo de troca obrigatória
       setLoginPassword(data.senha);
 
-      // login (com retry 5xx)
       await doLoginWithOneRetry(data);
 
-      // agora sim, consulta /me (sem corrida)
+      // ✅ agora refreshUser NÃO é bloqueado
       await refreshUser();
+
       navigate("/", { replace: true });
     } catch (err: any) {
       console.error("Erro ao fazer login:", err);
-
       if (err?.message === "Network Error") {
         setLoginError("Não foi possível conectar ao servidor. Verifique sua conexão.");
       } else {
         setLoginError(
-          err?.response?.data?.detail ||
-            err?.message ||
-            "Erro ao conectar com o servidor"
+          err?.response?.data?.detail || err?.message || "Erro ao conectar com o servidor"
         );
       }
     } finally {
