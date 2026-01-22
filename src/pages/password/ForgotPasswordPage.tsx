@@ -39,10 +39,6 @@ export default function ForceChangePasswordPage() {
   const cpf = user?.cpf ?? "";
   const senhaAtual = getLoginPassword();
 
-  const canSubmit = useMemo(() => {
-    return Boolean(cpf && senhaAtual && mustChangePassword);
-  }, [cpf, senhaAtual, mustChangePassword]);
-
   const {
     register,
     handleSubmit,
@@ -57,6 +53,15 @@ export default function ForceChangePasswordPage() {
 
   const [pageError, setPageError] = useState("");
   const [pageSuccess, setPageSuccess] = useState("");
+
+  // ✅ Novo: travar a tela após sucesso para evitar flicker/estado intermediário
+  const [done, setDone] = useState(false);
+
+  const canSubmit = useMemo(() => {
+    // ✅ Se já concluiu, não permite submit nem mostra avisos
+    if (done) return false;
+    return Boolean(cpf && senhaAtual && mustChangePassword);
+  }, [cpf, senhaAtual, mustChangePassword, done]);
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
@@ -82,11 +87,14 @@ export default function ForceChangePasswordPage() {
         senha_nova: data.novaSenha,
       });
 
+      // ✅ Após sucesso: limpa a senha em memória e trava a UI
       clearLoginPassword();
+      setDone(true);
 
       setPageSuccess("Senha atualizada. Faça login com a nova senha...");
 
-      await logout({ redirectTo: "/login" });
+      // ✅ Sem reload para evitar render intermediário
+      await logout({ redirectTo: "/login", reload: false });
     } catch (err: any) {
       if (err?.message === "Network Error") {
         setPageError("Não foi possível conectar ao servidor. Verifique sua conexão.");
@@ -99,6 +107,9 @@ export default function ForceChangePasswordPage() {
       setLoading(false);
     }
   };
+
+  // ✅ Regra: não mostrar o amarelo depois que já deu sucesso/concluiu
+  const showYellowWarning = !done && !pageSuccess && !senhaAtual;
 
   return (
     <div className="h-screen w-screen relative overflow-hidden flex items-center justify-center p-4 bg-[#0f172a] bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300">
@@ -117,7 +128,7 @@ export default function ForceChangePasswordPage() {
           </p>
         </div>
 
-        {!senhaAtual && (
+        {showYellowWarning && (
           <div className="text-sm text-yellow-200 bg-yellow-900/20 border border-yellow-700 rounded-lg p-3">
             Sua sessão está autenticada, mas a senha atual não está disponível na memória.
             Para continuar, faça login novamente.
@@ -135,7 +146,7 @@ export default function ForceChangePasswordPage() {
               {...register("novaSenha")}
               className="mt-1 pr-10 bg-[#2a2a3d] text-white"
               autoComplete="new-password"
-              disabled={!mustChangePassword}
+              disabled={!mustChangePassword || loading || done}
             />
             <div
               className="absolute right-2 top-2 text-white cursor-pointer hover:text-blue-400"
@@ -163,7 +174,7 @@ export default function ForceChangePasswordPage() {
               {...register("confirmarSenha")}
               className="mt-1 pr-10 bg-[#2a2a3d] text-white"
               autoComplete="new-password"
-              disabled={!mustChangePassword}
+              disabled={!mustChangePassword || loading || done}
             />
             <div
               className="absolute right-2 top-2 text-white cursor-pointer hover:text-blue-400"
@@ -206,7 +217,8 @@ export default function ForceChangePasswordPage() {
             className="w-full bg-[#2a2a3d] hover:bg-[#34344a] text-white border border-gray-600"
             disabled={loading}
             onClick={async () => {
-              await logout({ redirectTo: "/login", reload: true });
+              // ✅ Evita reload para não re-renderizar a página e disparar avisos
+              await logout({ redirectTo: "/login", reload: false });
             }}
           >
             Sair
