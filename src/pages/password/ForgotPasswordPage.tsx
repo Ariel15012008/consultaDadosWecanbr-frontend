@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
 
+import { toast, Toaster } from "sonner";
 import api from "@/utils/axiosInstance";
 import { useUser } from "@/contexts/UserContext";
 
@@ -54,11 +55,9 @@ export default function ForceChangePasswordPage() {
   const [pageError, setPageError] = useState("");
   const [pageSuccess, setPageSuccess] = useState("");
 
-  // ✅ Novo: travar a tela após sucesso para evitar flicker/estado intermediário
   const [done, setDone] = useState(false);
 
   const canSubmit = useMemo(() => {
-    // ✅ Se já concluiu, não permite submit nem mostra avisos
     if (done) return false;
     return Boolean(cpf && senhaAtual && mustChangePassword);
   }, [cpf, senhaAtual, mustChangePassword, done]);
@@ -87,13 +86,16 @@ export default function ForceChangePasswordPage() {
         senha_nova: data.novaSenha,
       });
 
-      // ✅ Após sucesso: limpa a senha em memória e trava a UI
       clearLoginPassword();
       setDone(true);
 
+      // ✅ Toast apenas quando deu certo
+      toast.success("Senha atualizada com sucesso. Faça login com a nova senha.", {
+        duration: 3500,
+      });
+
       setPageSuccess("Senha atualizada. Faça login com a nova senha...");
 
-      // ✅ Sem reload para evitar render intermediário
       await logout({ redirectTo: "/login", reload: false });
     } catch (err: any) {
       if (err?.message === "Network Error") {
@@ -108,12 +110,14 @@ export default function ForceChangePasswordPage() {
     }
   };
 
-  // ✅ Regra: não mostrar o amarelo depois que já deu sucesso/concluiu
   const showYellowWarning = !done && !pageSuccess && !senhaAtual;
 
   return (
     <div className="h-screen w-screen relative overflow-hidden flex items-center justify-center p-4 bg-[#0f172a] bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300">
       <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-[#1F52FF] via-[#7048e8] to-[#C263FF] opacity-30 blur-3xl -z-10" />
+
+      {/* Se você já tem um Toaster global, pode remover este daqui */}
+      <Toaster richColors position="top-center" />
 
       <form
         onSubmit={handleSubmit(onSubmit)}
@@ -217,7 +221,6 @@ export default function ForceChangePasswordPage() {
             className="w-full bg-[#2a2a3d] hover:bg-[#34344a] text-white border border-gray-600"
             disabled={loading}
             onClick={async () => {
-              // ✅ Evita reload para não re-renderizar a página e disparar avisos
               await logout({ redirectTo: "/login", reload: false });
             }}
           >
