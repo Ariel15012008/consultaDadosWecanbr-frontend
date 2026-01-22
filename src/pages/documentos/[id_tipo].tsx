@@ -30,14 +30,27 @@ interface EmpresaMatricula {
   matricula: string; // matrícula naquela empresa
 }
 
-interface DocumentoHolerite {
-  id_documento: string;
-  anomes: string;
-}
+type DocumentoHolerite = {
+  id_documento: string; // lote
+  anomes: string; // "YYYYMM"
+
+  // novos (para escolher / montar corretamente)
+  uuid?: string;
+  descricao?: string;
+  tipo_calculo?: string;
+};
 
 interface DocumentoBeneficio {
   id_documento: string;
   anomes: string;
+
+  // extras usados no preview
+  cpf?: string;
+  matricula?: string;
+  competencia?: string;
+  uuid?: string;
+  cabecalho?: any;
+  beneficios?: any[];
 }
 
 interface CabecalhoHolerite {
@@ -112,6 +125,32 @@ interface CompetenciaItem {
   mes: string; // "01".."12"
 }
 
+type HoleriteBuscarItem = {
+  uuid: string;
+  aceito: boolean;
+  tipo_calculo: string; // "P" | "A" | etc
+  descricao: string; // "Pagamento" | "Adiantamento" | etc
+
+  cabecalho: CabecalhoHolerite;
+  rodape: RodapeHolerite;
+
+  documentos: Array<{
+    tipo_calculo: string;
+    descricao: string;
+    eventos: EventoHolerite[];
+  }>;
+};
+
+type HoleriteBuscarResponseV2 = {
+  tipo: "holerite";
+  competencia_utilizada: string; // "202511"
+  empresa_utilizada?: string; // "5238"
+  cpf: string;
+  matricula: string;
+  total: number;
+  holerites: HoleriteBuscarItem[];
+};
+
 // ================================================
 // helpers
 // ================================================
@@ -177,7 +216,7 @@ const trimStr = (s: string) => String(s || "").trim();
 async function withRetry<T>(
   fn: () => Promise<T>,
   retries = 2,
-  baseDelayMs = 600
+  baseDelayMs = 600,
 ): Promise<T> {
   let lastErr: any;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -262,12 +301,15 @@ export default function DocumentList() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
+  const [holeritesOpcoes, setHoleritesOpcoes] = useState<DocumentoHolerite[]>(
+    [],
+  );
   const porPagina = 10;
 
   const totalPaginas = Math.ceil(documents.length / porPagina);
   const documentosVisiveis = documents.slice(
     (paginaAtual - 1) * porPagina,
-    paginaAtual * porPagina
+    paginaAtual * porPagina,
   );
 
   // Controller para cancelar visualização anterior (só usado na visualização)
@@ -286,13 +328,13 @@ export default function DocumentList() {
     EmpresaMatricula[]
   >([]);
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string | null>(
-    null
+    null,
   );
   const [selectedEmpresaNome, setSelectedEmpresaNome] = useState<string | null>(
-    null
+    null,
   );
   const [selectedMatricula, setSelectedMatricula] = useState<string | null>(
-    null
+    null,
   );
 
   // === genéricos/benefícios (não holerite) ===
@@ -669,13 +711,13 @@ export default function DocumentList() {
 
         if (!lista.length) {
           toast.warning(
-            "Nenhum período de holerite encontrado para esta seleção."
+            "Nenhum período de holerite encontrado para esta seleção.",
           );
         } else {
           toast.success(
             `Períodos disponíveis carregados para ${
               selectedEmpresaNome ?? "a empresa selecionada"
-            }.`
+            }.`,
           );
         }
       } catch (err: any) {
@@ -689,7 +731,7 @@ export default function DocumentList() {
         toast.error("Erro ao carregar períodos do holerite", {
           description: extractErrorMessage(
             err,
-            "Falha ao consultar competências."
+            "Falha ao consultar competências.",
           ),
         });
       } finally {
@@ -775,8 +817,8 @@ export default function DocumentList() {
         const endpoint = isTrct
           ? "/documents/search/informetrct"
           : isRecibo
-          ? "/documents/search/recibos"
-          : "/documents/search";
+            ? "/documents/search/recibos"
+            : "/documents/search";
 
         const res = await api.post<{
           anomes?: { ano: number; mes: number }[];
@@ -822,7 +864,7 @@ export default function DocumentList() {
         const status = err?.response?.status as number | undefined;
         const description = extractErrorMessage(
           err,
-          "Falha ao consultar períodos disponíveis."
+          "Falha ao consultar períodos disponíveis.",
         );
 
         if (status === 404) {
@@ -904,14 +946,14 @@ export default function DocumentList() {
           (x) => ({
             ano: x.ano,
             mes: String(x.mes).padStart(2, "0"),
-          })
+          }),
         );
 
         setCompetenciasBen(lista);
 
         if (!lista.length) {
           toast.warning(
-            "Nenhum período de benefícios encontrado para a seleção atual."
+            "Nenhum período de benefícios encontrado para a seleção atual.",
           );
         } else {
           toast.success("Períodos de benefícios carregados com sucesso.");
@@ -927,7 +969,7 @@ export default function DocumentList() {
         toast.error("Erro ao carregar períodos de benefícios", {
           description: extractErrorMessage(
             err,
-            "Falha ao consultar benefícios disponíveis."
+            "Falha ao consultar benefícios disponíveis.",
           ),
         });
       } finally {
@@ -981,32 +1023,67 @@ export default function DocumentList() {
         competencia: normalizeYYYYMM(competenciaYYYYMM),
         empresa: selectedEmpresaId, // <<--- AQUI entra a empresa selecionada
       };
+      setHoleritesOpcoes([]); // <<< zera opções antes de buscar
 
-      const res = await api.post<{
-        tipo: "holerite";
-        cabecalho: CabecalhoHolerite;
-        eventos: EventoHolerite[];
-        rodape: RodapeHolerite;
-        pdf_base64?: string;
-        uuid?: string;
-      }>("/documents/holerite/buscar", payload);
+      const res = await api.post<HoleriteBuscarResponseV2>(
+        "/documents/holerite/buscar",
+        payload,
+      );
 
-      if (res.data && res.data.cabecalho) {
+      const competenciaUsada = normalizeYYYYMM(
+        res.data?.competencia_utilizada || competenciaYYYYMM,
+      );
+
+      const itens = Array.isArray(res.data?.holerites)
+        ? res.data.holerites
+        : [];
+
+      if (itens.length === 0) {
+        setHoleritesOpcoes([]);
+        toast.warning("Nenhum holerite encontrado para o mês selecionado.");
+        return;
+      }
+
+      if (itens.length === 1) {
+        const h = itens[0];
+
         const documento: DocumentoHolerite = {
-          id_documento: String(res.data.cabecalho.lote || "1"),
-          anomes: normalizeYYYYMM(competenciaYYYYMM),
+          id_documento: String(h.cabecalho?.lote || "1"),
+          anomes: competenciaUsada,
+          uuid: h.uuid,
+          descricao: h.descricao,
+          tipo_calculo: h.tipo_calculo,
         };
+
         setDocuments([documento]);
+        setHoleritesOpcoes([]);
         sessionStorage.setItem("holeriteData", JSON.stringify(res.data));
+
         toast.success("Holerite encontrado!", {
           description: `Período ${toYYYYDashMM(documento.anomes)} localizado.`,
         });
 
         await visualizarDocumento(documento);
         return;
-      } else {
-        toast.warning("Nenhum holerite encontrado para o mês selecionado.");
       }
+
+      // >>> MULTI: cria opções e pede escolha
+      const opcoes: DocumentoHolerite[] = itens.map((h) => ({
+        id_documento: String(h.cabecalho?.lote || ""),
+        anomes: competenciaUsada,
+        uuid: h.uuid,
+        descricao: h.descricao,
+        tipo_calculo: h.tipo_calculo,
+      }));
+
+      setDocuments(opcoes); // opcional (se você quiser)
+      setHoleritesOpcoes(opcoes); // <<< renderiza botões
+      sessionStorage.setItem("holeriteData", JSON.stringify(res.data));
+
+      toast.warning("Mais de um holerite encontrado", {
+        description: "Selecione qual documento deseja abrir.",
+      });
+      return;
     } catch (err: any) {
       const status = err?.response?.status as number | undefined;
       const title =
@@ -1016,7 +1093,7 @@ export default function DocumentList() {
 
       const description = extractErrorMessage(
         err,
-        "Falha ao consultar o período escolhido."
+        "Falha ao consultar o período escolhido.",
       );
 
       if (status === 404) {
@@ -1151,7 +1228,7 @@ export default function DocumentList() {
 
       const description = extractErrorMessage(
         err,
-        "Falha ao processar o período escolhido."
+        "Falha ao processar o período escolhido.",
       );
 
       if (status === 404) {
@@ -1220,8 +1297,8 @@ export default function DocumentList() {
       const endpoint = isTrct
         ? "/documents/search/informetrct"
         : isRecibo
-        ? "/documents/search/recibos"
-        : "/documents/search";
+          ? "/documents/search/recibos"
+          : "/documents/search";
 
       const res = await api.post<{
         total_bruto: number;
@@ -1237,7 +1314,7 @@ export default function DocumentList() {
         const anoDoc = d.ano ?? d.ANO ?? null;
 
         const idDocumentoNorm = String(
-          d.id_documento ?? d.id_ged ?? d.id ?? d.ID ?? "" // último fallback
+          d.id_documento ?? d.id_ged ?? d.id ?? d.ID ?? "", // último fallback
         );
 
         const normAnoMes =
@@ -1267,7 +1344,7 @@ export default function DocumentList() {
         toast.warning(
           isTrct
             ? "Nenhum documento encontrado para o ano selecionado."
-            : "Nenhum documento encontrado para o mês selecionado."
+            : "Nenhum documento encontrado para o mês selecionado.",
         );
       }
     } catch (err: any) {
@@ -1275,7 +1352,7 @@ export default function DocumentList() {
       let title = "Erro ao buscar documentos";
       let description = extractErrorMessage(
         err,
-        "Falha ao consultar o período escolhido."
+        "Falha ao consultar o período escolhido.",
       );
 
       switch (status) {
@@ -1353,15 +1430,15 @@ export default function DocumentList() {
         } else if (selectedEmpresaId) {
           const arr = empresasMap.get(selectedEmpresaId)?.matriculas ?? [];
           matForPreview = requerEscolherMatricula
-            ? selectedMatricula ?? ""
-            : arr[0] ?? "";
+            ? (selectedMatricula ?? "")
+            : (arr[0] ?? "");
         }
 
         const competenciaYYYYMM = normalizeYYYYMM(docHolerite.anomes);
 
         const empresaValue = user?.gestor
           ? undefined
-          : selectedEmpresaId ?? undefined;
+          : (selectedEmpresaId ?? undefined);
 
         const payload: any = {
           cpf: user?.gestor
@@ -1370,6 +1447,10 @@ export default function DocumentList() {
           matricula: trimStr(matForPreview),
           competencia: competenciaYYYYMM,
           lote: docHolerite.id_documento,
+          ...(docHolerite.uuid ? { uuid: docHolerite.uuid } : {}),
+          ...(docHolerite.tipo_calculo
+            ? { tipo_calculo: docHolerite.tipo_calculo }
+            : {}),
           ...(empresaValue ? { empresa: empresaValue } : {}),
         };
 
@@ -1386,14 +1467,15 @@ export default function DocumentList() {
               signal: controller.signal,
             }),
           2,
-          700
+          700,
         );
 
         if (res.data && res.data.pdf_base64) {
           setLoadingPreviewId(null);
           previewAbortRef.current = null;
 
-          const uuid = res.data.uuid || res.data.cabecalho?.uuid;
+          const uuid =
+            docHolerite.uuid || res.data.uuid || res.data.cabecalho?.uuid;
 
           navigate("/documento/preview", {
             state: {
@@ -1408,74 +1490,99 @@ export default function DocumentList() {
           throw new Error("Não foi possível gerar o PDF do holerite");
         }
       } else if (tipoDocumento === "beneficios") {
-        const docBen = doc as DocumentoBeneficio;
+        const docBen: any = doc; // aceita doc “enriquecido” do passo 1
 
-        // matricula efetiva
+        // matrícula efetiva
         let matForPreview = "";
         if (user?.gestor) {
-          matForPreview = matricula;
+          matForPreview = trimStr(matricula);
         } else if (selectedEmpresaIdGen) {
           const arr = empresasMap.get(selectedEmpresaIdGen)?.matriculas ?? [];
-          matForPreview = requerEscolherMatriculaGen
-            ? selectedMatriculaGen ?? ""
-            : arr[0] ?? "";
+          matForPreview = trimStr(
+            requerEscolherMatriculaGen
+              ? (selectedMatriculaGen ?? "")
+              : (arr[0] ?? ""),
+          );
         }
 
-        const competenciaYYYYMM = normalizeYYYYMM(docBen.anomes);
-
-        const cpfToUse = user?.gestor
-          ? getCpfNumbers(cpf) || onlyDigits((user as any)?.cpf || "")
-          : meCpf;
-
-        const cpfNorm = onlyDigits(cpfToUse);
-        const matriculaNorm = trimStr(matForPreview);
-
-        // 1) BUSCAR: obter lote e uuid
-        const buscarPayload: {
-          cpf: string;
-          matricula: string;
-          competencia: string;
-          empresa?: string;
-        } = {
-          cpf: cpfNorm,
-          matricula: matriculaNorm,
-          competencia: competenciaYYYYMM,
-        };
-
-        if (!user?.gestor && selectedEmpresaIdGen) {
-          buscarPayload.empresa = String(selectedEmpresaIdGen);
-        }
-
-        const resBuscar = await withRetry(
-          () =>
-            api.post<{
-              cabecalho?: { lote?: number; uuid?: string; [k: string]: any };
-              beneficios?: any[];
-            }>("/documents/beneficios/buscar", buscarPayload, {
-              timeout: 45000,
-              signal: controller.signal,
-            }),
-          2,
-          700
+        const competenciaYYYYMM = normalizeYYYYMM(
+          docBen?.competencia || docBen?.anomes,
         );
 
-        const cab = getCabecalhoNormalized(resBuscar.data);
+        const cpfToUse = user?.gestor
+          ? onlyDigits(getCpfNumbers(cpf) || (user as any)?.cpf || "")
+          : onlyDigits(meCpf);
 
-        // Fallbacks uuid/lote
-        const uuidTop = (resBuscar.data as any)?.uuid;
-        const loteFromItem =
-          Array.isArray((resBuscar.data as any)?.beneficios) &&
-          (resBuscar.data as any).beneficios.length > 0
-            ? (resBuscar.data as any).beneficios[0]?.lote
-            : undefined;
+        const cpfNorm = onlyDigits(docBen?.cpf || cpfToUse);
+        const matriculaNorm = trimStr(docBen?.matricula || matForPreview);
 
-        const lote = cab?.lote ?? loteFromItem;
-        const uuid = cab?.uuid ?? uuidTop;
+        // 0) tenta pegar cabecalho/beneficios do doc ou do sessionStorage
+        const fromSession = (() => {
+          try {
+            const raw = sessionStorage.getItem("beneficiosData");
+            return raw ? JSON.parse(raw) : null;
+          } catch {
+            return null;
+          }
+        })();
 
-        if (!lote || !uuid) {
-          throw new Error("Não foi possível obter lote/uuid para montar.");
+        const cabLocal =
+          docBen?.cabecalho ?? getCabecalhoNormalized(fromSession);
+        const listaLocal = Array.isArray(docBen?.beneficios)
+          ? docBen.beneficios
+          : Array.isArray(fromSession?.beneficios)
+            ? fromSession.beneficios
+            : [];
+
+        // 1) garantir UUID: primeiro tenta do doc/cabecalho/session; se não tiver, chama BUSCAR
+        let uuid =
+          docBen?.uuid ??
+          cabLocal?.uuid ??
+          fromSession?.uuid ??
+          getCabecalhoNormalized(fromSession)?.uuid;
+
+        let cab = cabLocal;
+        let beneficios = listaLocal;
+
+        if (!uuid) {
+          const buscarPayload: any = {
+            cpf: cpfNorm,
+            matricula: matriculaNorm,
+            competencia: competenciaYYYYMM,
+            ...(user?.gestor
+              ? {}
+              : { empresa: String(selectedEmpresaIdGen || "") }),
+          };
+
+          const resBuscar = await withRetry(
+            () =>
+              api.post<{
+                cabecalho?: { uuid?: string; [k: string]: any };
+                beneficios?: any[];
+                uuid?: string;
+              }>("/documents/beneficios/buscar", buscarPayload, {
+                timeout: 45000,
+                signal: controller.signal,
+              }),
+            2,
+            700,
+          );
+
+          cab = getCabecalhoNormalized(resBuscar.data) ?? cab;
+          beneficios =
+            Array.isArray((resBuscar.data as any)?.beneficios) &&
+            (resBuscar.data as any).beneficios.length
+              ? (resBuscar.data as any).beneficios
+              : beneficios;
+
+          uuid = cab?.uuid ?? (resBuscar.data as any)?.uuid;
         }
 
+        if (!uuid) {
+          throw new Error("Não foi possível obter uuid para montar.");
+        }
+
+        // 2) MONTAR
         const montarPayload = {
           cpf: String(cpfNorm),
           matricula: String(matriculaNorm),
@@ -1491,10 +1598,10 @@ export default function DocumentList() {
               {
                 timeout: 45000,
                 signal: controller.signal,
-              }
+              },
             ),
           2,
-          700
+          700,
         );
 
         setLoadingPreviewId(null);
@@ -1506,9 +1613,16 @@ export default function DocumentList() {
             competencia_forced: competenciaYYYYMM,
             pdf_base64: resMontar.data?.pdf_base64 || "",
             cabecalho: resMontar.data?.cabecalho ?? cab,
-            beneficios: (resBuscar.data as any)?.beneficios ?? [],
+            beneficios: beneficios ?? [],
+
+            // >>> GARANTIR no preview (muito útil se lá você usa isso)
+            cpf: cpfNorm,
+            matricula: matriculaNorm,
+            competencia: competenciaYYYYMM,
+            uuid,
           },
         });
+
         toast.success("Documento de benefícios aberto!");
       } else {
         const docGenerico = doc as DocumentoGenerico;
@@ -1529,12 +1643,12 @@ export default function DocumentList() {
               signal: controller.signal,
             }),
           2,
-          700
+          700,
         );
 
         if (res.data.erro) {
           throw new Error(
-            "O servidor retornou um erro ao processar o documento"
+            "O servidor retornou um erro ao processar o documento",
           );
         }
 
@@ -1565,7 +1679,7 @@ export default function DocumentList() {
       let title = "Erro ao abrir documento";
       let description = extractErrorMessage(
         err,
-        "Erro ao processar o documento"
+        "Erro ao processar o documento",
       );
       let action: { label: string; onClick: () => void } | undefined = {
         label: "Tentar novamente",
@@ -1777,8 +1891,8 @@ export default function DocumentList() {
             {tipoDocumento === "holerite"
               ? "Holerite"
               : tipoDocumento === "beneficios"
-              ? "Benefícios"
-              : `Buscar ${nomeDocumento}`}
+                ? "Benefícios"
+                : `Buscar ${nomeDocumento}`}
           </h2>
 
           {/* ===================== DISCOVERY (NÃO GESTOR / HOLERITE) ===================== */}
@@ -1937,6 +2051,7 @@ export default function DocumentList() {
                   <h3 className="text-sm font-semibold text-gray-200 mb-3 text-center">
                     Períodos (anos e meses)
                   </h3>
+
                   {!selectedEmpresaId ? (
                     <p className="text-center text-gray-400">
                       Selecione uma empresa para carregar os períodos.
@@ -1987,7 +2102,9 @@ export default function DocumentList() {
                           </Button>
                         ))}
                       </div>
-                      <div className="flex justify-center">
+
+                      {/* ✅ BOTÃO SEMPRE VISÍVEL QUANDO ESTIVER NOS MESES */}
+                      <div className="flex justify-center mt-2">
                         <Button
                           variant="default"
                           className="border border-gray-600 hover:bg-gray-800 disabled:bg-gray-600 disabled:cursor-not-allowed"
@@ -1995,12 +2112,39 @@ export default function DocumentList() {
                             setSelectedYear(null);
                             setDocuments([]);
                             setPaginaAtual(1);
+                            setHoleritesOpcoes([]);
                           }}
                           disabled={isAnyLoading}
                         >
                           Escolher outro ano
                         </Button>
                       </div>
+
+                      {/* ✅ AQUI: seleção do documento quando vier 2+ holerites */}
+                      {holeritesOpcoes.length > 0 && (
+                        <div className="mt-4 border-t border-gray-700 pt-4">
+                          <h4 className="text-sm font-semibold text-gray-200 mb-3 text-center">
+                            Selecione o documento
+                          </h4>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                            {holeritesOpcoes.map((h) => (
+                              <Button
+                                key={
+                                  h.uuid || `${h.id_documento}-${h.descricao}`
+                                }
+                                variant="default"
+                                className="w-full h-11 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                                onClick={() => visualizarDocumento(h)}
+                                disabled={isAnyLoading}
+                                title={h.descricao}
+                              >
+                                {h.descricao || "Documento"}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </section>
@@ -2571,11 +2715,13 @@ export default function DocumentList() {
                               onlyDigits((user as any)?.cpf || ""),
                             matricula: trimStr(matricula),
                             competencia: normalizeYYYYMM(
-                              formatCompetencia(anomes)
+                              formatCompetencia(anomes),
                             ),
                           };
 
                           const res = await api.post<{
+                            competencia_utilizada: string;
+                            holerites: never[];
                             cabecalho: CabecalhoHolerite;
                             eventos: EventoHolerite[];
                             rodape: RodapeHolerite;
@@ -2584,23 +2730,36 @@ export default function DocumentList() {
                           if (res.data && res.data.cabecalho) {
                             const competenciaYYYYMM = normalizeYYYYMM(
                               res.data.cabecalho.competencia ||
-                                formatCompetencia(anomes)
+                                formatCompetencia(anomes),
                             );
 
-                            const documento: DocumentoHolerite = {
+                            const docs: DocumentoHolerite[] = (
+                              res.data?.holerites ?? []
+                            ).map((h: any) => ({
                               id_documento: String(
-                                res.data.cabecalho.lote || "1"
+                                h?.cabecalho?.lote ?? h?.rodape?.lote ?? "1",
                               ),
-                              anomes: competenciaYYYYMM,
-                            };
-                            setDocuments([documento]);
+                              anomes: normalizeYYYYMM(
+                                res.data?.competencia_utilizada ??
+                                  competenciaYYYYMM,
+                              ),
+
+                              uuid: h?.uuid ?? h?.cabecalho?.uuid,
+                              pagamento: h?.cabecalho?.pagamento,
+                              tipo_calculo:
+                                h?.tipo_calculo ?? h?.cabecalho?.tipo_calculo,
+                              descricao: h?.descricao,
+                            }));
+
+                            setDocuments(docs);
+
                             sessionStorage.setItem(
                               "holeriteData",
-                              JSON.stringify(res.data)
+                              JSON.stringify(res.data),
                             );
                             toast.success("Holerite encontrado!", {
                               description: `Documento do período ${toYYYYDashMM(
-                                documento.anomes
+                                documents[0]?.anomes,
                               )} localizado.`,
                             });
                           } else {
@@ -2615,7 +2774,7 @@ export default function DocumentList() {
                             cpf: onlyDigits(cpfNumbers),
                             matricula: trimStr(matricula),
                             competencia: normalizeYYYYMM(
-                              formatCompetencia(anomes)
+                              formatCompetencia(anomes),
                             ),
                           };
 
@@ -2623,47 +2782,65 @@ export default function DocumentList() {
                             cpf?: string;
                             matricula?: string | number;
                             competencia?: string;
-                            cabecalho?: { lote?: number; [k: string]: any };
+                            cabecalho?: {
+                              lote?: number;
+                              uuid?: string;
+                              [k: string]: any;
+                            };
                             beneficios?: any[];
+                            uuid?: string; // fallback
                           }>("/documents/beneficios/buscar", payload);
 
-                          const hasCabecalho =
-                            !!res.data?.cabecalho &&
-                            Object.keys(res.data.cabecalho || {}).length > 0;
+                          const cab = getCabecalhoNormalized(res.data);
 
-                          const hasBeneficios =
-                            Array.isArray(res.data?.beneficios) &&
-                            (res.data.beneficios as any[]).length > 0;
+                          const lista = Array.isArray(
+                            (res.data as any)?.beneficios,
+                          )
+                            ? (res.data as any).beneficios
+                            : [];
+
+                          const hasCabecalho =
+                            !!cab && Object.keys(cab || {}).length > 0;
+                          const hasBeneficios = lista.length > 0;
 
                           if (hasCabecalho || hasBeneficios) {
                             const competenciaYYYYMM = normalizeYYYYMM(
-                              res.data.competencia || formatCompetencia(anomes)
+                              res.data.competencia || payload.competencia,
                             );
 
-                            // fallback de lote
                             const loteDoc =
-                              (getCabecalhoNormalized(res.data)?.lote as
-                                | number
-                                | undefined) ??
-                              (Array.isArray(res.data?.beneficios) &&
-                              res.data.beneficios.length > 0
-                                ? (res.data.beneficios[0]?.lote as
-                                    | number
-                                    | undefined)
-                                : undefined);
+                              (cab?.lote as number | undefined) ??
+                              (lista.length
+                                ? (lista[0]?.lote as number | undefined)
+                                : undefined) ??
+                              1;
 
-                            const documento: DocumentoBeneficio = {
-                              id_documento: String(loteDoc ?? "1"),
+                            const documento = {
+                              id_documento: String(loteDoc),
                               anomes: competenciaYYYYMM,
+
+                              // >>> ADIÇÕES IMPORTANTES para preview:
+                              cpf: String(payload.cpf),
+                              matricula: String(payload.matricula),
+                              competencia: String(competenciaYYYYMM),
+
+                              // >>> armazenar dados para evitar nova busca no preview
+                              cabecalho: cab,
+                              beneficios: lista,
+
+                              // >>> opcional: manter uuid no doc (ajuda no montar)
+                              uuid: cab?.uuid ?? (res.data as any)?.uuid,
                             };
-                            setDocuments([documento]);
+
+                            setDocuments([documento as any]);
                             sessionStorage.setItem(
                               "beneficiosData",
-                              JSON.stringify(res.data)
+                              JSON.stringify(res.data),
                             );
+
                             toast.success("Benefícios encontrados!", {
                               description: `Documento do período ${toYYYYDashMM(
-                                documento.anomes
+                                competenciaYYYYMM,
                               )} localizado.`,
                             });
                           } else {
@@ -2692,8 +2869,8 @@ export default function DocumentList() {
                                   .split("/")[0]
                                   .padStart(2, "0")}`
                               : anomes.length === 6
-                              ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
-                              : anomes,
+                                ? `${anomes.slice(0, 4)}-${anomes.slice(4, 6)}`
+                                : anomes,
                             cpf: onlyDigits(cpfNumbers),
                           };
 
@@ -2701,8 +2878,8 @@ export default function DocumentList() {
                           const endpoint = isTrct
                             ? "/documents/search/informetrct"
                             : isRecibo
-                            ? "/documents/search/recibos"
-                            : "/documents/search";
+                              ? "/documents/search/recibos"
+                              : "/documents/search";
 
                           const res = await api.post<{
                             total_bruto: number;
@@ -2725,11 +2902,12 @@ export default function DocumentList() {
                               `${qtd} documento(s) encontrado(s)!`,
                               {
                                 description: `Foram localizados ${qtd} documentos do tipo ${nomeDocumento}.`,
-                              }
+                              },
                             );
                           } else {
                             toast.warning("Nenhum documento encontrado", {
-                              description: `Não foram localizados documentos do tipo ${nomeDocumento} para os critérios informados.`,
+                              description:
+                                "Não foram localizados documentos do tipo ${nomeDocumento} para os critérios informados.",
                             });
                           }
                         }
@@ -2740,7 +2918,7 @@ export default function DocumentList() {
 
                         const description = extractErrorMessage(
                           err,
-                          "Erro ao buscar documentos."
+                          "Erro ao buscar documentos.",
                         );
                         const status = err?.response?.status;
 
@@ -2876,7 +3054,7 @@ export default function DocumentList() {
                           {p}
                         </PaginationLink>
                       </PaginationItem>
-                    )
+                    ),
                   )}
                   <PaginationItem>
                     <PaginationNext
