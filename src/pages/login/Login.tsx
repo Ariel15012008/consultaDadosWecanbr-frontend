@@ -16,6 +16,7 @@ function onlyDigits(v: string) {
   return (v ?? "").replace(/\D/g, "");
 }
 
+// Validação básica de CPF (dígitos verificadores)
 function isValidCPF(raw: string) {
   const cpf = onlyDigits(raw);
   if (cpf.length !== 11) return false;
@@ -61,6 +62,10 @@ function getStatus(err: any): number | undefined {
   return err?.response?.status;
 }
 
+function is5xx(status?: number) {
+  return typeof status === "number" && status >= 500 && status <= 599;
+}
+
 export default function LoginPage() {
   const {
     register,
@@ -101,21 +106,25 @@ export default function LoginPage() {
     }
   }, [setValue]);
 
-  const doLoginWithOneRetry = async (data: FormData) => {
+  // ✅ Login com retry automático SOMENTE para erro 5xx
+  const loginWithRetryOn5xx = async (data: FormData) => {
     try {
       await api.post("/user/login", data, { withCredentials: true });
       return;
-    } catch (err: any) {
-      const status = getStatus(err);
-      const is5xx = typeof status === "number" && status >= 500 && status <= 599;
+    } catch (err1: any) {
+      const status1 = getStatus(err1);
 
-      if (is5xx) {
-        await sleep(350);
-        await api.post("/user/login", data, { withCredentials: true });
-        return;
-      }
+      // Não tenta retry para Network Error (geralmente conexão/CORS/DNS)
+      if (err1?.message === "Network Error") throw err1;
 
-      throw err;
+      // Retry somente para 5xx
+      if (!is5xx(status1)) throw err1;
+
+      // pequeno delay antes do retry
+      await sleep(350);
+
+      // segunda tentativa
+      await api.post("/user/login", data, { withCredentials: true });
     }
   };
 
@@ -128,19 +137,20 @@ export default function LoginPage() {
     try {
       setLoginPassword(data.senha);
 
-      await doLoginWithOneRetry(data);
+      await loginWithRetryOn5xx(data);
 
-      // ✅ agora refreshUser NÃO é bloqueado
       await refreshUser();
-
       navigate("/", { replace: true });
     } catch (err: any) {
       console.error("Erro ao fazer login:", err);
+
       if (err?.message === "Network Error") {
         setLoginError("Não foi possível conectar ao servidor. Verifique sua conexão.");
       } else {
         setLoginError(
-          err?.response?.data?.detail || err?.message || "Erro ao conectar com o servidor"
+          err?.response?.data?.detail ||
+            err?.message ||
+            "Erro ao conectar com o servidor"
         );
       }
     } finally {
