@@ -27,7 +27,9 @@ interface User {
   centro_de_custo?: string;
   dados?: EmpresaMatricula[];
   rh?: boolean;
-  senha_trocada?: boolean;
+
+  // ✅ normalizado: boolean | null (evita undefined)
+  senha_trocada?: boolean | null;
 }
 
 interface UserContextType {
@@ -42,7 +44,7 @@ interface UserContextType {
   endLogin: () => void;
 
   logout: (opts?: { redirectTo?: string; reload?: boolean }) => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<User | null>;
 
   setLoginPassword: (senhaAtual: string) => void;
   getLoginPassword: () => string | null;
@@ -79,7 +81,7 @@ export function UserProvider({ children }: UserProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const didLogout = useRef(false);
 
-  const inflightRef = useRef<Promise<void> | null>(null);
+  const inflightRef = useRef<Promise<User | null> | null>(null);
   const lastSyncRef = useRef<number>(0);
 
   const loginPasswordRef = useRef<string | null>(null);
@@ -121,16 +123,15 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const isAuthErrorStatus = (status?: number) => status === 401 || status === 403;
 
-  // ✅ Ajuste: allow force para o /me pós-login
+  // ✅ retorna o user obtido (ou null) para o caller decidir navegação
   const fetchMe = async (opts?: { background?: boolean; force?: boolean }) => {
     const background = !!opts?.background;
     const force = !!opts?.force;
 
-    // lock só bloqueia revalidações automáticas; não bloqueia fetch "forçado"
     if (!force && isLoggingInRef.current) {
       inflightRef.current = null;
       lastSyncRef.current = Date.now();
-      return;
+      return null;
     }
 
     if (!background) setIsLoading(true);
@@ -146,13 +147,23 @@ export function UserProvider({ children }: UserProviderProps) {
       });
 
       if (res.status === 200) {
-        const data = res.data as User;
-        assignUserIfChanged(data);
+        const raw = res.data as User;
+
+        // ✅ normaliza: se não veio, fica null (não undefined)
+        const normalized: User = {
+          ...raw,
+          senha_trocada:
+            typeof raw?.senha_trocada === "boolean" ? raw.senha_trocada : null,
+        };
+
+        assignUserIfChanged(normalized);
         setIsAuthenticatedSafe(true);
-      } else {
-        assignUserIfChanged(null);
-        setIsAuthenticatedSafe(false);
+        return normalized;
       }
+
+      assignUserIfChanged(null);
+      setIsAuthenticatedSafe(false);
+      return null;
     } catch (err) {
       const ax = err as AxiosError;
       const status = ax.response?.status;
@@ -161,9 +172,11 @@ export function UserProvider({ children }: UserProviderProps) {
         assignUserIfChanged(null);
         setIsAuthenticatedSafe(false);
         loginPasswordRef.current = null;
-      } else {
-        // erro transitório: não derruba sessão
+        return null;
       }
+
+      // erro transitório: não derruba sessão
+      return userRef.current;
     } finally {
       if (!background) setIsLoading(false);
       lastSyncRef.current = Date.now();
@@ -171,9 +184,10 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
-  // ✅ Ajuste: refreshUser é "forçado"
+  // ✅ refreshUser agora devolve o user atual (já atualizado)
   const refreshUser = async () => {
-    await fetchMe({ background: false, force: true });
+    const u = await fetchMe({ background: false, force: true });
+    return u ?? userRef.current;
   };
 
   const logout = async (opts?: { redirectTo?: string; reload?: boolean }) => {
@@ -205,9 +219,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
       navigate(redirectTo, { replace: true });
 
-      if (reload) {
-        window.location.reload();
-      }
+      if (reload) window.location.reload();
     }
   };
 
@@ -306,7 +318,13 @@ export function UserProvider({ children }: UserProviderProps) {
     return () => clearInterval(interval);
   }, [isAuthenticated]); // eslint-disable-line
 
-  const mustChangePassword = !!isAuthenticated && user?.senha_trocada === false;
+  // ✅ flag se o backend realmente trouxe o campo
+  const hasSenhaTrocadaFlag =
+    isAuthenticated && user?.senha_trocada !== null && user?.senha_trocada !== undefined;
+
+  // ✅ modo seguro: se autenticou e ainda não sabe, assume que precisa trocar
+  const mustChangePassword =
+    !!isAuthenticated && (user?.senha_trocada === false || !hasSenhaTrocadaFlag);
 
   const value: UserContextType = {
     user,
@@ -320,6 +338,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
     logout,
     refreshUser,
+
     setLoginPassword: (senhaAtual: string) => {
       loginPasswordRef.current = senhaAtual;
     },

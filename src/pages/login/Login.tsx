@@ -116,12 +116,13 @@ export default function LoginPage() {
 
       // Não tenta retry para Network Error (geralmente conexão/CORS/DNS)
       if (err1?.message === "Network Error") throw err1;
+      console.warn("Primeira tentativa de login falhou com status:", status1);
 
       // Retry somente para 5xx
       if (!is5xx(status1)) throw err1;
 
       // pequeno delay antes do retry
-      await sleep(350);
+      await sleep(500);
 
       // segunda tentativa
       await api.post("/user/login", data, { withCredentials: true });
@@ -129,35 +130,42 @@ export default function LoginPage() {
   };
 
   const onSubmit = async (data: FormData) => {
-    setLoading(true);
-    setLoginError("");
+  setLoading(true);
+  setLoginError("");
 
-    beginLogin();
+  beginLogin();
 
-    try {
-      setLoginPassword(data.senha);
+  try {
+    setLoginPassword(data.senha);
 
-      await loginWithRetryOn5xx(data);
+    await loginWithRetryOn5xx(data);
 
-      await refreshUser();
+    const u = await refreshUser();
+
+    // ✅ decide com base no user recém obtido
+    const senhaTrocada = u?.senha_trocada;
+
+    if (senhaTrocada === false || senhaTrocada === null || senhaTrocada === undefined) {
+      navigate("/trocar-senha", { replace: true });
+    } else {
       navigate("/", { replace: true });
-    } catch (err: any) {
-      console.error("Erro ao fazer login:", err);
-
-      if (err?.message === "Network Error") {
-        setLoginError("Não foi possível conectar ao servidor. Verifique sua conexão.");
-      } else {
-        setLoginError(
-          err?.response?.data?.detail ||
-            err?.message ||
-            "Erro ao conectar com o servidor"
-        );
-      }
-    } finally {
-      endLogin();
-      setLoading(false);
     }
-  };
+  } catch (err: any) {
+    if (err?.message === "Network Error") {
+      setLoginError("Não foi possível conectar ao servidor. Verifique sua conexão.");
+    } else {
+      setLoginError(
+        err?.response?.data?.detail ||
+          err?.message ||
+          "Erro ao conectar com o servidor"
+      );
+    }
+  } finally {
+    endLogin();
+    setLoading(false);
+  }
+};
+
 
   return (
     <div className="h-screen w-screen relative overflow-hidden flex items-center justify-center p-4 bg-[#0f172a] bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300">

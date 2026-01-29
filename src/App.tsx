@@ -5,6 +5,7 @@ import Login from "@/pages/login/Login";
 import Cadastro from "@/pages/register/Cadastro";
 import ForgotPasswordPage from "@/pages/password/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/resetPassword/ResetPasswordPage";
+import TokenPage from "@/pages/token/page";
 import IdTemplate from "@/pages/documentos/[id_tipo]";
 import PreviewPDF from "@/pages/documento/preview";
 import Chat from "@/pages/chat/Chat";
@@ -52,6 +53,7 @@ function AppInner() {
           <Route path="/register" element={<Cadastro />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/token" element={<TokenPage />} />
         </Route>
 
         {/* NOVO: rota exclusiva quando senha_trocada=false */}
