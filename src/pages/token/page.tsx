@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,19 +17,19 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
-
-function onlyDigits(v: string) {
-  return (v ?? "").replace(/\D/g, "");
-}
-
 type Step = "send" | "validate";
 
 export default function TokenPage() {
   const navigate = useNavigate();
-  const { user, setInternalTokenValidated, setInternalTokenBlockedInSession } =
-    useUser();
 
-  const cpf = onlyDigits(user?.cpf ?? "");
+  const {
+    user,
+    isAuthenticated,
+    internalTokenValidated,
+    internalTokenBlockedInSession,
+    setInternalTokenValidated,
+    setInternalTokenBlockedInSession,
+  } = useUser();
 
   const {
     register,
@@ -47,22 +47,63 @@ export default function TokenPage() {
   const [tokenError, setTokenError] = useState("");
   const [sendMsg, setSendMsg] = useState("");
 
-  const canSend = useMemo(() => Boolean(cpf) && !sending, [cpf, sending]);
+  // cooldown de reenviar token
+  const [lastSendAt, setLastSendAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  // ============================================
+  // 1) Bloqueia acesso ao /token se já validou nessa sessão
+  // ============================================
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    if (internalTokenValidated || internalTokenBlockedInSession) {
+      navigate("/", { replace: true });
+      return;
+    }
+  }, [
+    isAuthenticated,
+    internalTokenValidated,
+    internalTokenBlockedInSession,
+    navigate,
+  ]);
+
+  // tick pra atualizar o contador do cooldown
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 500);
+    return () => clearInterval(t);
+  }, []);
+
+  const canSend = useMemo(() => Boolean(user?.cpf) && !sending, [user?.cpf, sending]);
+
+  const resendCooldownSec = 30;
+  const resendRemaining = useMemo(() => {
+    if (!lastSendAt) return 0;
+    const diffSec = Math.ceil((lastSendAt + resendCooldownSec * 1000 - nowTick) / 1000);
+    return Math.max(0, diffSec);
+  }, [lastSendAt, nowTick]);
+
+  const canResend = useMemo(() => {
+    return step === "validate" && !sending && resendRemaining === 0;
+  }, [step, sending, resendRemaining]);
 
   const sendToken = async () => {
+    // trava anti-duplo clique / spam
+    if (sending) return;
+
     setSending(true);
     setTokenError("");
     setSendMsg("");
 
     try {
-      if (!cpf) {
-        setTokenError("Não foi possível identificar o CPF do usuário.");
-        return;
-      }
-
-      await api.post("/user/internal/send-token", { cpf });
+      // backend usa cookies; não precisa mandar cpf no body
+      await api.post("/user/internal/send-token");
 
       setSendMsg("Token enviado para o seu e-mail. Verifique sua caixa de entrada.");
+      setLastSendAt(Date.now());
       setStep("validate");
 
       // foca no input automaticamente após mostrar a etapa 2
@@ -87,13 +128,7 @@ export default function TokenPage() {
     setTokenError("");
 
     try {
-      if (!cpf) {
-        setTokenError("Não foi possível identificar o CPF do usuário.");
-        return;
-      }
-
       const res = await api.post("/user/internal/validate-token", {
-        cpf,
         token: data.token,
       });
 
@@ -171,6 +206,7 @@ export default function TokenPage() {
               <Label htmlFor="token" className="text-gray-200">
                 Token de Acesso
               </Label>
+
               <div className="relative">
                 <Input
                   id="token"
@@ -206,17 +242,27 @@ export default function TokenPage() {
                 {validating ? "Validando..." : "Validar Token"}
               </Button>
 
-              
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={sendToken}
+                  disabled={!canResend}
+                  className={[
+                    "text-sm underline underline-offset-4",
+                    canResend ? "text-blue-300 hover:text-blue-200" : "text-gray-500 cursor-not-allowed",
+                  ].join(" ")}
+                >
+                  {sending
+                    ? "Reenviando..."
+                    : resendRemaining > 0
+                    ? `Reenviar token (aguarde ${resendRemaining}s)`
+                    : "Reenviar token"}
+                </button>
 
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full bg-[#2a2a3d] hover:bg-[#34344a] text-white border border-gray-600"
-                disabled={sending}
-                onClick={sendToken}
-              >
-                {sending ? "Reenviando..." : "Reenviar token"}
-              </Button>
+                <div className="text-xs text-gray-400 mt-2">
+                  Ao reenviar, o token anterior pode ser invalidado. Use sempre o último e-mail.
+                </div>
+              </div>
             </div>
           </>
         )}
