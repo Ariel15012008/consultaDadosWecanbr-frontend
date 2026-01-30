@@ -2,12 +2,14 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
 import LoadingScreen from "@/components/ui/loadingScreen";
 
-export function ProtectedRoute() {
+export function InternalTokenRoute() {
   const {
     isAuthenticated,
     isLoading,
     mustChangePassword,
     mustValidateInternalToken,
+    user,
+    internalTokenBlockedInSession,
   } = useUser();
 
   if (isLoading) return <LoadingScreen />;
@@ -18,8 +20,17 @@ export function ProtectedRoute() {
     return <Navigate to="/trocar-senha" replace />;
   }
 
-  if (mustValidateInternalToken) {
-    return <Navigate to="/token" replace />;
+  if (user?.interno !== true) {
+    return <Navigate to="/" replace />;
+  }
+
+  // ✅ NOVO: se já validou nesta sessão, não deixa acessar /token
+  if (internalTokenBlockedInSession) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (!mustValidateInternalToken) {
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;

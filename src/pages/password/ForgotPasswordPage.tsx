@@ -12,6 +12,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import api from "@/utils/axiosInstance";
 import { useUser } from "@/contexts/UserContext";
+import { useNavigate } from "react-router-dom";
 
 const schema = z
   .object({
@@ -29,11 +30,14 @@ const schema = z
 type FormData = z.infer<typeof schema>;
 
 export default function ForceChangePasswordPage() {
+  const navigate = useNavigate();
+
   const {
     user,
     mustChangePassword,
     getLoginPassword,
     clearLoginPassword,
+    refreshUser,
     logout,
   } = useUser();
 
@@ -90,13 +94,20 @@ export default function ForceChangePasswordPage() {
       setDone(true);
 
       // ✅ Toast apenas quando deu certo
-      toast.success("Senha atualizada com sucesso. Faça login com a nova senha.", {
-        duration: 3500,
+      toast.success("Senha atualizada com sucesso.", {
+        duration: 2500,
       });
 
-      setPageSuccess("Senha atualizada. Faça login com a nova senha...");
+      setPageSuccess("Senha atualizada. Redirecionando...");
 
-      await logout({ redirectTo: "/login", reload: false });
+      // ✅ NOVO: decide destino com base no user atualizado
+      const u = await refreshUser();
+
+      if ((u as any)?.interno === true) {
+        navigate("/token", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
     } catch (err: any) {
       if (err?.message === "Network Error") {
         setPageError("Não foi possível conectar ao servidor. Verifique sua conexão.");
@@ -116,7 +127,6 @@ export default function ForceChangePasswordPage() {
     <div className="h-screen w-screen relative overflow-hidden flex items-center justify-center p-4 bg-[#0f172a] bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300">
       <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-[#1F52FF] via-[#7048e8] to-[#C263FF] opacity-30 blur-3xl -z-10" />
 
-      {/* Se você já tem um Toaster global, pode remover este daqui */}
       <Toaster richColors position="top-center" />
 
       <form
@@ -134,8 +144,8 @@ export default function ForceChangePasswordPage() {
 
         {showYellowWarning && (
           <div className="text-sm text-yellow-200 bg-yellow-900/20 border border-yellow-700 rounded-lg p-3">
-            Sua sessão está autenticada, mas a senha atual não está disponível na memória.
-            Para continuar, faça login novamente.
+            Sua sessão está autenticada, mas a senha atual não está disponível na
+            memória. Para continuar, faça login novamente.
           </div>
         )}
 
@@ -197,9 +207,7 @@ export default function ForceChangePasswordPage() {
           )}
         </div>
 
-        {pageError && (
-          <p className="text-red-400 text-sm text-center">{pageError}</p>
-        )}
+        {pageError && <p className="text-red-400 text-sm text-center">{pageError}</p>}
 
         {pageSuccess && (
           <p className="text-green-300 text-sm text-center">{pageSuccess}</p>

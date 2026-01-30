@@ -16,7 +16,6 @@ function onlyDigits(v: string) {
   return (v ?? "").replace(/\D/g, "");
 }
 
-// Validação básica de CPF (dígitos verificadores)
 function isValidCPF(raw: string) {
   const cpf = onlyDigits(raw);
   if (cpf.length !== 11) return false;
@@ -114,58 +113,53 @@ export default function LoginPage() {
     } catch (err1: any) {
       const status1 = getStatus(err1);
 
-      // Não tenta retry para Network Error (geralmente conexão/CORS/DNS)
       if (err1?.message === "Network Error") throw err1;
-      console.warn("Primeira tentativa de login falhou com status:", status1);
 
-      // Retry somente para 5xx
       if (!is5xx(status1)) throw err1;
 
-      // pequeno delay antes do retry
       await sleep(500);
 
-      // segunda tentativa
       await api.post("/user/login", data, { withCredentials: true });
     }
   };
 
   const onSubmit = async (data: FormData) => {
-  setLoading(true);
-  setLoginError("");
+    setLoading(true);
+    setLoginError("");
+    beginLogin();
 
-  beginLogin();
+    try {
+      setLoginPassword(data.senha);
 
-  try {
-    setLoginPassword(data.senha);
+      await loginWithRetryOn5xx(data);
 
-    await loginWithRetryOn5xx(data);
+      const u = await refreshUser();
 
-    const u = await refreshUser();
+      // ✅ regra de navegação (sempre determinística)
+      if (u?.senha_trocada !== true) {
+        navigate("/trocar-senha", { replace: true });
+        return;
+      }
 
-    // ✅ decide com base no user recém obtido
-    const senhaTrocada = u?.senha_trocada;
+      if (u?.interno === true) {
+        console.log("é interno")
+        console.log("navegando para token interno");
+        navigate("/token", { replace: true });
+        return;
+      }
 
-    if (senhaTrocada === false || senhaTrocada === null || senhaTrocada === undefined) {
-      navigate("/trocar-senha", { replace: true });
-    } else {
       navigate("/", { replace: true });
+    } catch (err: any) {
+      if (err?.message === "Network Error") {
+        setLoginError("Não foi possível conectar ao servidor. Verifique sua conexão.");
+      } else {
+        setLoginError(err?.response?.data?.detail || "Erro ao realizar login");
+      }
+    } finally {
+      endLogin();
+      setLoading(false);
     }
-  } catch (err: any) {
-    if (err?.message === "Network Error") {
-      setLoginError("Não foi possível conectar ao servidor. Verifique sua conexão.");
-    } else {
-      setLoginError(
-        err?.response?.data?.detail ||
-          err?.message ||
-          "Erro ao conectar com o servidor"
-      );
-    }
-  } finally {
-    endLogin();
-    setLoading(false);
-  }
-};
-
+  };
 
   return (
     <div className="h-screen w-screen relative overflow-hidden flex items-center justify-center p-4 bg-[#0f172a] bg-gradient-to-br from-indigo-500 via-purple-600 to-green-300">

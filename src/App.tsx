@@ -16,6 +16,7 @@ import HomeGate from "@/pages/home/HomeGate";
 import { PublicRoute } from "./lib/PublicRoute";
 import { ProtectedRoute } from "./lib/ProtectedRoute";
 import { ForcePasswordRoute } from "./lib/ForcePasswordRoute";
+import { InternalTokenRoute } from "./lib/InternalTokenRoute";
 
 import OdooLivechatLoader from "@/components/OdooLivechatLoader";
 import { useUser } from "@/contexts/UserContext";
@@ -48,19 +49,25 @@ function AppInner() {
       <Routes>
         <Route path="/" element={<HomeGate />} />
 
+        {/* Rotas públicas */}
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Cadastro />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/token" element={<TokenPage />} />
         </Route>
 
-        {/* NOVO: rota exclusiva quando senha_trocada=false */}
+        {/* Troca de senha obrigatória */}
         <Route element={<ForcePasswordRoute />}>
           <Route path="/trocar-senha" element={<ForceChangePasswordPage />} />
         </Route>
 
+        {/* Token interno (após troca de senha) */}
+        <Route element={<InternalTokenRoute />}>
+          <Route path="/token" element={<TokenPage />} />
+        </Route>
+
+        {/* Rotas protegidas */}
         <Route element={<ProtectedRoute />}>
           <Route path="/documentos" element={<IdTemplate />} />
           <Route path="/documento/preview" element={<PreviewPDF />} />

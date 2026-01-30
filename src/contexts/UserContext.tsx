@@ -28,7 +28,7 @@ interface User {
   dados?: EmpresaMatricula[];
   rh?: boolean;
 
-  // ✅ normalizado: boolean | null (evita undefined)
+  interno?: boolean;
   senha_trocada?: boolean | null;
 }
 
@@ -38,6 +38,16 @@ interface UserContextType {
   isLoading: boolean;
 
   mustChangePassword: boolean;
+
+  mustValidateInternalToken: boolean;
+
+  internalTokenValidated: boolean;
+  setInternalTokenValidated: (v: boolean) => void;
+
+  // ✅ NOVO: bloqueio de /token após validação, até novo login
+  internalTokenBlockedInSession: boolean;
+  setInternalTokenBlockedInSession: (v: boolean) => void;
+  clearInternalTokenSession: () => void;
 
   isLoggingIn: boolean;
   beginLogin: () => void;
@@ -69,6 +79,32 @@ const BACKGROUND_REFRESH_MS = Number(
   import.meta.env.VITE_AUTH_BACKGROUND_REFRESH_MS ?? 10 * 60 * 1000
 );
 
+const INTERNAL_TOKEN_SESSION_KEY = "auth:internal_token_validated";
+
+function readInternalTokenSession(): boolean {
+  try {
+    return sessionStorage.getItem(INTERNAL_TOKEN_SESSION_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeInternalTokenSession(v: boolean) {
+  try {
+    sessionStorage.setItem(INTERNAL_TOKEN_SESSION_KEY, v ? "true" : "false");
+  } catch {
+    // ignore
+  }
+}
+
+function clearInternalTokenSessionStorage() {
+  try {
+    sessionStorage.removeItem(INTERNAL_TOKEN_SESSION_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function UserProvider({ children }: UserProviderProps) {
   const navigate = useNavigate();
 
@@ -88,6 +124,14 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const isLoggingInRef = useRef(false);
+
+  // ✅ token interno validado (memória)
+  const [internalTokenValidated, setInternalTokenValidatedState] =
+    useState(false);
+
+  // ✅ NOVO: bloqueio por sessão (sessionStorage)
+  const [internalTokenBlockedInSession, setInternalTokenBlockedInSessionState] =
+    useState(readInternalTokenSession());
 
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
@@ -123,7 +167,23 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const isAuthErrorStatus = (status?: number) => status === 401 || status === 403;
 
-  // ✅ retorna o user obtido (ou null) para o caller decidir navegação
+  // ✅ Setter público usado pela tela /token quando validar com sucesso
+  const setInternalTokenValidated = (v: boolean) => {
+    setInternalTokenValidatedState(v);
+  };
+
+  // ✅ NOVO: controla bloqueio em sessionStorage
+  const setInternalTokenBlockedInSession = (v: boolean) => {
+    setInternalTokenBlockedInSessionState(v);
+    writeInternalTokenSession(v);
+  };
+
+  const clearInternalTokenSession = () => {
+    setInternalTokenValidatedState(false);
+    setInternalTokenBlockedInSessionState(false);
+    clearInternalTokenSessionStorage();
+  };
+
   const fetchMe = async (opts?: { background?: boolean; force?: boolean }) => {
     const background = !!opts?.background;
     const force = !!opts?.force;
@@ -149,20 +209,29 @@ export function UserProvider({ children }: UserProviderProps) {
       if (res.status === 200) {
         const raw = res.data as User;
 
-        // ✅ normaliza: se não veio, fica null (não undefined)
         const normalized: User = {
           ...raw,
+          interno: raw?.interno === true,
           senha_trocada:
             typeof raw?.senha_trocada === "boolean" ? raw.senha_trocada : null,
         };
 
         assignUserIfChanged(normalized);
         setIsAuthenticatedSafe(true);
+
+        // ✅ mantém o bloqueio por sessão, mas zera o "validado em memória"
+        // quando o usuário muda (ou reloga)
+        if (!userRef.current) {
+          setInternalTokenValidatedState(false);
+        }
+
         return normalized;
       }
 
       assignUserIfChanged(null);
       setIsAuthenticatedSafe(false);
+      setInternalTokenValidatedState(false);
+      setInternalTokenBlockedInSession(false);
       return null;
     } catch (err) {
       const ax = err as AxiosError;
@@ -172,10 +241,11 @@ export function UserProvider({ children }: UserProviderProps) {
         assignUserIfChanged(null);
         setIsAuthenticatedSafe(false);
         loginPasswordRef.current = null;
+        setInternalTokenValidatedState(false);
+        setInternalTokenBlockedInSession(false);
         return null;
       }
 
-      // erro transitório: não derruba sessão
       return userRef.current;
     } finally {
       if (!background) setIsLoading(false);
@@ -184,7 +254,6 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
-  // ✅ refreshUser agora devolve o user atual (já atualizado)
   const refreshUser = async () => {
     const u = await fetchMe({ background: false, force: true });
     return u ?? userRef.current;
@@ -199,7 +268,10 @@ export function UserProvider({ children }: UserProviderProps) {
       Cookies.remove("logged_user");
       await api.post("/user/logout");
     } catch {
+      // ignore
     } finally {
+      clearInternalTokenSession();
+
       setIsAuthenticatedSafe(false);
       assignUserIfChanged(null);
       didLogout.current = true;
@@ -224,6 +296,8 @@ export function UserProvider({ children }: UserProviderProps) {
   };
 
   const beginLogin = () => {
+    // ✅ NOVO: novo login => libera /token de novo
+    clearInternalTokenSession();
     isLoggingInRef.current = true;
     setIsLoggingIn(true);
   };
@@ -311,26 +385,44 @@ export function UserProvider({ children }: UserProviderProps) {
           inflightRef.current = fetchMe({ background: true });
         }
       } catch {
-        // não derruba aqui
+        // ignore
       }
     }, BACKGROUND_REFRESH_MS);
 
     return () => clearInterval(interval);
   }, [isAuthenticated]); // eslint-disable-line
 
-  // ✅ flag se o backend realmente trouxe o campo
   const hasSenhaTrocadaFlag =
-    isAuthenticated && user?.senha_trocada !== null && user?.senha_trocada !== undefined;
+    isAuthenticated &&
+    user?.senha_trocada !== null &&
+    user?.senha_trocada !== undefined;
 
-  // ✅ modo seguro: se autenticou e ainda não sabe, assume que precisa trocar
   const mustChangePassword =
     !!isAuthenticated && (user?.senha_trocada === false || !hasSenhaTrocadaFlag);
+
+  // ✅ Regra: se já validou token nesta sessão, não exige novamente
+  const mustValidateInternalToken =
+    !!isAuthenticated &&
+    !mustChangePassword &&
+    user?.interno === true &&
+    internalTokenBlockedInSession === false &&
+    internalTokenValidated === false;
 
   const value: UserContextType = {
     user,
     isAuthenticated,
     isLoading,
+
     mustChangePassword,
+
+    mustValidateInternalToken,
+
+    internalTokenValidated,
+    setInternalTokenValidated,
+
+    internalTokenBlockedInSession,
+    setInternalTokenBlockedInSession,
+    clearInternalTokenSession,
 
     isLoggingIn,
     beginLogin,
