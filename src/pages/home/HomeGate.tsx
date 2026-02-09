@@ -9,6 +9,7 @@ export default function HomeGate() {
     isAuthenticated,
     mustChangePassword,
     mustValidateInternalToken,
+    internalTokenPromptedInSession,
   } = useUser();
 
   if (isLoading) return <LoadingScreen />;
@@ -19,7 +20,8 @@ export default function HomeGate() {
     return <Navigate to="/trocar-senha" replace />;
   }
 
-  if (mustValidateInternalToken) {
+  // ✅ Só redireciona para /token se ainda não "promptou" nesta sessão
+  if (mustValidateInternalToken && !internalTokenPromptedInSession) {
     return <Navigate to="/token" replace />;
   }
 

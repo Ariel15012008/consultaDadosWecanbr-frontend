@@ -29,6 +29,9 @@ export default function TokenPage() {
     internalTokenBlockedInSession,
     setInternalTokenValidated,
     setInternalTokenBlockedInSession,
+
+    // ✅ NOVO
+    setInternalTokenPromptedInSession,
   } = useUser();
 
   const {
@@ -47,13 +50,17 @@ export default function TokenPage() {
   const [tokenError, setTokenError] = useState("");
   const [sendMsg, setSendMsg] = useState("");
 
-  // cooldown de reenviar token
   const [lastSendAt, setLastSendAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(Date.now());
 
-  // ============================================
-  // 1) Bloqueia acesso ao /token se já validou nessa sessão
-  // ============================================
+  // ✅ Ao entrar em /token, marca como "já foi direcionado"
+  useEffect(() => {
+    if (isAuthenticated) {
+      setInternalTokenPromptedInSession(true);
+    }
+  }, [isAuthenticated, setInternalTokenPromptedInSession]);
+
+  // Bloqueia acesso ao /token se já validou nessa sessão
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/login", { replace: true });
@@ -71,18 +78,22 @@ export default function TokenPage() {
     navigate,
   ]);
 
-  // tick pra atualizar o contador do cooldown
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 500);
     return () => clearInterval(t);
   }, []);
 
-  const canSend = useMemo(() => Boolean(user?.cpf) && !sending, [user?.cpf, sending]);
+  const canSend = useMemo(
+    () => Boolean(user?.cpf) && !sending,
+    [user?.cpf, sending]
+  );
 
   const resendCooldownSec = 30;
   const resendRemaining = useMemo(() => {
     if (!lastSendAt) return 0;
-    const diffSec = Math.ceil((lastSendAt + resendCooldownSec * 1000 - nowTick) / 1000);
+    const diffSec = Math.ceil(
+      (lastSendAt + resendCooldownSec * 1000 - nowTick) / 1000
+    );
     return Math.max(0, diffSec);
   }, [lastSendAt, nowTick]);
 
@@ -91,7 +102,6 @@ export default function TokenPage() {
   }, [step, sending, resendRemaining]);
 
   const sendToken = async () => {
-    // trava anti-duplo clique / spam
     if (sending) return;
 
     setSending(true);
@@ -99,14 +109,12 @@ export default function TokenPage() {
     setSendMsg("");
 
     try {
-      // backend usa cookies; não precisa mandar cpf no body
       await api.post("/user/internal/send-token");
 
       setSendMsg("Token enviado para o seu e-mail. Verifique sua caixa de entrada.");
       setLastSendAt(Date.now());
       setStep("validate");
 
-      // foca no input automaticamente após mostrar a etapa 2
       setTimeout(() => {
         try {
           setFocus("token");
@@ -115,9 +123,7 @@ export default function TokenPage() {
         }
       }, 0);
     } catch (err: any) {
-      setTokenError(
-        err?.response?.data?.detail || err?.message || "Erro ao enviar o token"
-      );
+      setTokenError(err?.response?.data?.detail || err?.message || "Erro ao enviar o token");
     } finally {
       setSending(false);
     }
@@ -140,15 +146,12 @@ export default function TokenPage() {
         return;
       }
 
-      // Marca como validado e BLOQUEIA /token até novo login
       setInternalTokenValidated(true);
       setInternalTokenBlockedInSession(true);
 
       navigate("/", { replace: true });
     } catch (err: any) {
-      setTokenError(
-        err?.response?.data?.detail || err?.message || "Erro ao validar o token"
-      );
+      setTokenError(err?.response?.data?.detail || err?.message || "Erro ao validar o token");
     } finally {
       setValidating(false);
     }
@@ -249,7 +252,9 @@ export default function TokenPage() {
                   disabled={!canResend}
                   className={[
                     "text-sm underline underline-offset-4",
-                    canResend ? "text-blue-300 hover:text-blue-200" : "text-gray-500 cursor-not-allowed",
+                    canResend
+                      ? "text-blue-300 hover:text-blue-200"
+                      : "text-gray-500 cursor-not-allowed",
                   ].join(" ")}
                 >
                   {sending

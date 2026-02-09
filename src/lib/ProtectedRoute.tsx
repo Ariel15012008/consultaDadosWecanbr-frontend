@@ -8,6 +8,7 @@ export function ProtectedRoute() {
     isLoading,
     mustChangePassword,
     mustValidateInternalToken,
+    internalTokenPromptedInSession,
   } = useUser();
 
   if (isLoading) return <LoadingScreen />;
@@ -18,7 +19,8 @@ export function ProtectedRoute() {
     return <Navigate to="/trocar-senha" replace />;
   }
 
-  if (mustValidateInternalToken) {
+  // ✅ Só "empurra" para /token UMA VEZ por sessão
+  if (mustValidateInternalToken && !internalTokenPromptedInSession) {
     return <Navigate to="/token" replace />;
   }
 

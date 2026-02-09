@@ -24,7 +24,6 @@ export function InternalTokenRoute() {
     return <Navigate to="/" replace />;
   }
 
-  // ✅ NOVO: se já validou nesta sessão, não deixa acessar /token
   if (internalTokenBlockedInSession) {
     return <Navigate to="/" replace />;
   }

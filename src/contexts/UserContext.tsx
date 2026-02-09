@@ -38,15 +38,18 @@ interface UserContextType {
   isLoading: boolean;
 
   mustChangePassword: boolean;
-
   mustValidateInternalToken: boolean;
 
   internalTokenValidated: boolean;
   setInternalTokenValidated: (v: boolean) => void;
 
-  // ✅ NOVO: bloqueio de /token após validação, até novo login
   internalTokenBlockedInSession: boolean;
   setInternalTokenBlockedInSession: (v: boolean) => void;
+
+  // ✅ NOVO: marca que o usuário já foi "direcionado/avisado" do token nesta sessão
+  internalTokenPromptedInSession: boolean;
+  setInternalTokenPromptedInSession: (v: boolean) => void;
+
   clearInternalTokenSession: () => void;
 
   isLoggingIn: boolean;
@@ -79,27 +82,28 @@ const BACKGROUND_REFRESH_MS = Number(
   import.meta.env.VITE_AUTH_BACKGROUND_REFRESH_MS ?? 10 * 60 * 1000
 );
 
-const INTERNAL_TOKEN_SESSION_KEY = "auth:internal_token_validated";
+const INTERNAL_TOKEN_VALIDATED_SESSION_KEY = "auth:internal_token_validated";
+const INTERNAL_TOKEN_PROMPTED_SESSION_KEY = "auth:internal_token_prompted";
 
-function readInternalTokenSession(): boolean {
+function readSessionBool(key: string): boolean {
   try {
-    return sessionStorage.getItem(INTERNAL_TOKEN_SESSION_KEY) === "true";
+    return sessionStorage.getItem(key) === "true";
   } catch {
     return false;
   }
 }
 
-function writeInternalTokenSession(v: boolean) {
+function writeSessionBool(key: string, v: boolean) {
   try {
-    sessionStorage.setItem(INTERNAL_TOKEN_SESSION_KEY, v ? "true" : "false");
+    sessionStorage.setItem(key, v ? "true" : "false");
   } catch {
     // ignore
   }
 }
 
-function clearInternalTokenSessionStorage() {
+function clearSessionKey(key: string) {
   try {
-    sessionStorage.removeItem(INTERNAL_TOKEN_SESSION_KEY);
+    sessionStorage.removeItem(key);
   } catch {
     // ignore
   }
@@ -129,9 +133,13 @@ export function UserProvider({ children }: UserProviderProps) {
   const [internalTokenValidated, setInternalTokenValidatedState] =
     useState(false);
 
-  // ✅ NOVO: bloqueio por sessão (sessionStorage)
+  // ✅ bloqueio por sessão (sessionStorage) para não permitir acessar /token após validar
   const [internalTokenBlockedInSession, setInternalTokenBlockedInSessionState] =
-    useState(readInternalTokenSession());
+    useState(readSessionBool(INTERNAL_TOKEN_VALIDATED_SESSION_KEY));
+
+  // ✅ NOVO: marca que já mostramos/encaminhamos para /token nesta sessão
+  const [internalTokenPromptedInSession, setInternalTokenPromptedInSessionState] =
+    useState(readSessionBool(INTERNAL_TOKEN_PROMPTED_SESSION_KEY));
 
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
@@ -167,21 +175,28 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const isAuthErrorStatus = (status?: number) => status === 401 || status === 403;
 
-  // ✅ Setter público usado pela tela /token quando validar com sucesso
   const setInternalTokenValidated = (v: boolean) => {
     setInternalTokenValidatedState(v);
   };
 
-  // ✅ NOVO: controla bloqueio em sessionStorage
   const setInternalTokenBlockedInSession = (v: boolean) => {
     setInternalTokenBlockedInSessionState(v);
-    writeInternalTokenSession(v);
+    writeSessionBool(INTERNAL_TOKEN_VALIDATED_SESSION_KEY, v);
+  };
+
+  const setInternalTokenPromptedInSession = (v: boolean) => {
+    setInternalTokenPromptedInSessionState(v);
+    writeSessionBool(INTERNAL_TOKEN_PROMPTED_SESSION_KEY, v);
   };
 
   const clearInternalTokenSession = () => {
     setInternalTokenValidatedState(false);
+
     setInternalTokenBlockedInSessionState(false);
-    clearInternalTokenSessionStorage();
+    clearSessionKey(INTERNAL_TOKEN_VALIDATED_SESSION_KEY);
+
+    setInternalTokenPromptedInSessionState(false);
+    clearSessionKey(INTERNAL_TOKEN_PROMPTED_SESSION_KEY);
   };
 
   const fetchMe = async (opts?: { background?: boolean; force?: boolean }) => {
@@ -219,8 +234,6 @@ export function UserProvider({ children }: UserProviderProps) {
         assignUserIfChanged(normalized);
         setIsAuthenticatedSafe(true);
 
-        // ✅ mantém o bloqueio por sessão, mas zera o "validado em memória"
-        // quando o usuário muda (ou reloga)
         if (!userRef.current) {
           setInternalTokenValidatedState(false);
         }
@@ -232,6 +245,7 @@ export function UserProvider({ children }: UserProviderProps) {
       setIsAuthenticatedSafe(false);
       setInternalTokenValidatedState(false);
       setInternalTokenBlockedInSession(false);
+      setInternalTokenPromptedInSession(false);
       return null;
     } catch (err) {
       const ax = err as AxiosError;
@@ -243,6 +257,7 @@ export function UserProvider({ children }: UserProviderProps) {
         loginPasswordRef.current = null;
         setInternalTokenValidatedState(false);
         setInternalTokenBlockedInSession(false);
+        setInternalTokenPromptedInSession(false);
         return null;
       }
 
@@ -296,7 +311,6 @@ export function UserProvider({ children }: UserProviderProps) {
   };
 
   const beginLogin = () => {
-    // ✅ NOVO: novo login => libera /token de novo
     clearInternalTokenSession();
     isLoggingInRef.current = true;
     setIsLoggingIn(true);
@@ -400,7 +414,7 @@ export function UserProvider({ children }: UserProviderProps) {
   const mustChangePassword =
     !!isAuthenticated && (user?.senha_trocada === false || !hasSenhaTrocadaFlag);
 
-  // ✅ Regra: se já validou token nesta sessão, não exige novamente
+  // ✅ Continua sendo o "deveria validar"
   const mustValidateInternalToken =
     !!isAuthenticated &&
     !mustChangePassword &&
@@ -414,7 +428,6 @@ export function UserProvider({ children }: UserProviderProps) {
     isLoading,
 
     mustChangePassword,
-
     mustValidateInternalToken,
 
     internalTokenValidated,
@@ -422,6 +435,10 @@ export function UserProvider({ children }: UserProviderProps) {
 
     internalTokenBlockedInSession,
     setInternalTokenBlockedInSession,
+
+    internalTokenPromptedInSession,
+    setInternalTokenPromptedInSession,
+
     clearInternalTokenSession,
 
     isLoggingIn,
