@@ -17,13 +17,10 @@ import { BiLogOut } from "react-icons/bi";
 import { IoPersonCircle } from "react-icons/io5";
 import { RxHamburgerMenu } from "react-icons/rx";
 import { HiMail, HiHome } from "react-icons/hi";
-import { useUser } from "@/contexts/UserContext"; // [NOVO]
-
-const FORCE_FULL_RELOAD_ON_LOGIN =
-  (import.meta.env.VITE_FORCE_FULL_RELOAD_ON_LOGIN ?? "true") === "true";
+import { useUser } from "@/contexts/UserContext";
 
 export default function Header() {
-  const { user, isAuthenticated, isLoading, logout } = useUser(); // [NOVO]
+  const { user, isAuthenticated, isLoading, logout } = useUser();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -32,16 +29,10 @@ export default function Header() {
   };
 
   const handleGoToLogin = () => {
-    if (FORCE_FULL_RELOAD_ON_LOGIN) {
-      const url = new URL("/login", window.location.origin);
-      url.searchParams.set("t", String(Date.now()));
-      window.location.href = url.toString();
-      return;
-    }
-    navigate("/login");
+    // HashRouter precisa SEMPRE navegar pelo router (sem window.location)
+    navigate("/login", { replace: false });
   };
 
-  // Enquanto a sessão inicial é verificada, evita piscar mostrando skeleton
   if (isLoading) {
     return (
       <header className="fixed top-0 w-full bg-gradient-to-r from-blue-800 to-blue-400 text-white shadow-md z-50">
@@ -79,20 +70,16 @@ export default function Header() {
             <HiHome className="mr-1" /> Início
           </Link>
 
-          {/* [NOVO] ChatRH só para RH === true */}
+          {/* ChatRH só para RH === true */}
           {isAuthenticated && user?.rh === true && (
-            <a
-              href="/chat"
+            <Link
+              to="/chat"
               className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50"
               title="Console de Atendimento RH"
             >
               ChatRH
-            </a>
+            </Link>
           )}
-
-          {/* <Link to="/contato" className="flex items-center hover:text-[#31d5db] transition-colors text-cyan-50">
-            <HiMail className="mr-1" /> Contato
-          </Link> */}
         </nav>
 
         {/* ÁREA DIREITA DESKTOP */}
@@ -161,15 +148,14 @@ export default function Header() {
                 <HiHome className="mr-2" /> Início
               </Link>
 
-              {/* [NOVO] ChatRH no menu mobile só para RH */}
               {isAuthenticated && user?.rh === true && (
-                <a
-                  href="/chat"
+                <Link
+                  to="/chat"
                   className="flex items-center p-2 rounded-lg text-white hover:text-[#31d5db]"
                   title="Console de Atendimento RH"
                 >
                   ChatRH
-                </a>
+                </Link>
               )}
 
               <Link
