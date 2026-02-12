@@ -5,13 +5,42 @@ import axios, {
   type AxiosRequestConfig,
 } from "axios";
 
-const url =
-  import.meta.env.VITE_API_ENVIRONMENT === "prod"
-    ? import.meta.env.VITE_API_URL_PROD
-    : import.meta.env.VITE_API_URL_DEV;
+type RuntimeConfig = {
+  VITE_API_URL_PROD?: string;
+  VITE_API_URL_DEV?: string;
+  VITE_API_ENVIRONMENT?: "dev" | "prod";
+};
+
+declare global {
+  interface Window {
+    __APP_CONFIG__?: RuntimeConfig;
+  }
+}
+
+function resolveBaseUrl() {
+  const cfg = (typeof window !== "undefined" ? window.__APP_CONFIG__ : undefined) || {};
+
+  const env =
+    cfg.VITE_API_ENVIRONMENT ||
+    (import.meta.env.VITE_API_ENVIRONMENT as "dev" | "prod") ||
+    "dev";
+
+  const prod =
+    cfg.VITE_API_URL_PROD ||
+    (import.meta.env.VITE_API_URL_PROD as string) ||
+    "https://rh.ziondocs.com.br/";
+
+  const dev =
+    cfg.VITE_API_URL_DEV ||
+    (import.meta.env.VITE_API_URL_DEV as string) ||
+    "http://localhost:8000/";
+
+  return env === "prod" ? prod : dev;
+}
+
+const url = resolveBaseUrl();
 
 declare module "axios" {
-  // flag interna para evitar loop de refresh
   export interface AxiosRequestConfig {
     _retry?: boolean;
   }
@@ -36,7 +65,6 @@ function shouldSkipRefresh(requestUrl?: string) {
   );
 }
 
-// garante apenas UM refresh em andamento
 let refreshPromise: Promise<AxiosResponse<any>> | null = null;
 
 api.interceptors.response.use(
@@ -49,7 +77,6 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // tenta refresh somente em 401 e se ainda não tentou
     if (
       status === 401 &&
       !originalRequest._retry &&
