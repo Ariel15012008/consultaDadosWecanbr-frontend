@@ -109,6 +109,7 @@ export default function LoginPage() {
   const loginWithRetryOn5xx = async (data: FormData) => {
     try {
       await api.post("/user/login", data, { withCredentials: true });
+      console.log("login bem-sucedido")
       return;
     } catch (err1: any) {
       const status1 = getStatus(err1);
