@@ -46,7 +46,6 @@ interface UserContextType {
   internalTokenBlockedInSession: boolean;
   setInternalTokenBlockedInSession: (v: boolean) => void;
 
-  // ✅ NOVO: marca que o usuário já foi "direcionado/avisado" do token nesta sessão
   internalTokenPromptedInSession: boolean;
   setInternalTokenPromptedInSession: (v: boolean) => void;
 
@@ -129,15 +128,12 @@ export function UserProvider({ children }: UserProviderProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const isLoggingInRef = useRef(false);
 
-  // ✅ token interno validado (memória)
   const [internalTokenValidated, setInternalTokenValidatedState] =
     useState(false);
 
-  // ✅ bloqueio por sessão (sessionStorage) para não permitir acessar /token após validar
   const [internalTokenBlockedInSession, setInternalTokenBlockedInSessionState] =
     useState(readSessionBool(INTERNAL_TOKEN_VALIDATED_SESSION_KEY));
 
-  // ✅ NOVO: marca que já mostramos/encaminhamos para /token nesta sessão
   const [internalTokenPromptedInSession, setInternalTokenPromptedInSessionState] =
     useState(readSessionBool(INTERNAL_TOKEN_PROMPTED_SESSION_KEY));
 
@@ -211,6 +207,8 @@ export function UserProvider({ children }: UserProviderProps) {
 
     if (!background) setIsLoading(true);
 
+    const prevUser = userRef.current;
+
     try {
       const res = await api.get("/user/me");
 
@@ -234,7 +232,7 @@ export function UserProvider({ children }: UserProviderProps) {
         assignUserIfChanged(normalized);
         setIsAuthenticatedSafe(true);
 
-        if (!userRef.current) {
+        if (!prevUser) {
           setInternalTokenValidatedState(false);
         }
 
@@ -406,6 +404,15 @@ export function UserProvider({ children }: UserProviderProps) {
     return () => clearInterval(interval);
   }, [isAuthenticated]); // eslint-disable-line
 
+  const prevAuthForTokenResetRef = useRef<boolean>(false);
+  useEffect(() => {
+    const prev = prevAuthForTokenResetRef.current;
+    if (!prev && isAuthenticated) {
+      clearInternalTokenSession();
+    }
+    prevAuthForTokenResetRef.current = isAuthenticated;
+  }, [isAuthenticated]);
+
   const hasSenhaTrocadaFlag =
     isAuthenticated &&
     user?.senha_trocada !== null &&
@@ -414,7 +421,6 @@ export function UserProvider({ children }: UserProviderProps) {
   const mustChangePassword =
     !!isAuthenticated && (user?.senha_trocada === false || !hasSenhaTrocadaFlag);
 
-  // ✅ Continua sendo o "deveria validar"
   const mustValidateInternalToken =
     !!isAuthenticated &&
     !mustChangePassword &&
