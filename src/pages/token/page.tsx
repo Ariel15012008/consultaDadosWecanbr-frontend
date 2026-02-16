@@ -29,8 +29,6 @@ export default function TokenPage() {
     internalTokenBlockedInSession,
     setInternalTokenValidated,
     setInternalTokenBlockedInSession,
-
-    // ✅ NOVO
     setInternalTokenPromptedInSession,
   } = useUser();
 
@@ -42,7 +40,6 @@ export default function TokenPage() {
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const [step, setStep] = useState<Step>("send");
-
   const [showToken, setShowToken] = useState(false);
   const [sending, setSending] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -60,14 +57,22 @@ export default function TokenPage() {
     }
   }, [isAuthenticated, setInternalTokenPromptedInSession]);
 
-  // Bloqueia acesso ao /token se já validou nessa sessão
+  // ✅ Regra de acesso:
+  // - se não autenticado: vai login
+  // - se já validou: vai home
+  // - se estiver "blocked": vai home (se você realmente usa esse bloqueio)
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/login", { replace: true });
       return;
     }
 
-    if (internalTokenValidated || internalTokenBlockedInSession) {
+    if (internalTokenValidated) {
+      navigate("/", { replace: true });
+      return;
+    }
+
+    if (internalTokenBlockedInSession) {
       navigate("/", { replace: true });
       return;
     }
@@ -123,7 +128,9 @@ export default function TokenPage() {
         }
       }, 0);
     } catch (err: any) {
-      setTokenError(err?.response?.data?.detail || err?.message || "Erro ao enviar o token");
+      setTokenError(
+        err?.response?.data?.detail || err?.message || "Erro ao enviar o token"
+      );
     } finally {
       setSending(false);
     }
@@ -146,12 +153,17 @@ export default function TokenPage() {
         return;
       }
 
+      // ✅ SUCESSO:
+      // - validated = true
+      // - blocked NÃO deve ser true (senão você nunca mais acessa /token)
       setInternalTokenValidated(true);
-      setInternalTokenBlockedInSession(true);
+      setInternalTokenBlockedInSession(false);
 
       navigate("/", { replace: true });
     } catch (err: any) {
-      setTokenError(err?.response?.data?.detail || err?.message || "Erro ao validar o token");
+      setTokenError(
+        err?.response?.data?.detail || err?.message || "Erro ao validar o token"
+      );
     } finally {
       setValidating(false);
     }
@@ -231,7 +243,9 @@ export default function TokenPage() {
               </div>
 
               {errors.token && (
-                <p className="text-red-400 text-sm mt-1">{errors.token.message}</p>
+                <p className="text-red-400 text-sm mt-1">
+                  {errors.token.message}
+                </p>
               )}
             </div>
 

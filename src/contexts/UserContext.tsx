@@ -72,16 +72,18 @@ interface UserProviderProps {
 const REVALIDATE_ON_FOCUS =
   (import.meta.env.VITE_AUTH_REVALIDATE_ON_FOCUS ?? "true") === "true";
 const MIN_FOCUS_REVALIDATION_MS = Number(
-  import.meta.env.VITE_AUTH_FOCUS_THROTTLE_MS ?? 300_000
+  import.meta.env.VITE_AUTH_FOCUS_THROTTLE_MS ?? 300_000,
 );
 
 const ENABLE_BACKGROUND_REFRESH =
   (import.meta.env.VITE_AUTH_BACKGROUND_REFRESH ?? "true") === "true";
 const BACKGROUND_REFRESH_MS = Number(
-  import.meta.env.VITE_AUTH_BACKGROUND_REFRESH_MS ?? 10 * 60 * 1000
+  import.meta.env.VITE_AUTH_BACKGROUND_REFRESH_MS ?? 10 * 60 * 1000,
 );
 
+// ✅ chaves separadas corretamente
 const INTERNAL_TOKEN_VALIDATED_SESSION_KEY = "auth:internal_token_validated";
+const INTERNAL_TOKEN_BLOCKED_SESSION_KEY = "auth:internal_token_blocked";
 const INTERNAL_TOKEN_PROMPTED_SESSION_KEY = "auth:internal_token_prompted";
 
 function readSessionBool(key: string): boolean {
@@ -131,11 +133,14 @@ export function UserProvider({ children }: UserProviderProps) {
   const [internalTokenValidated, setInternalTokenValidatedState] =
     useState(false);
 
+  // ✅ agora lê da chave correta (blocked)
   const [internalTokenBlockedInSession, setInternalTokenBlockedInSessionState] =
-    useState(readSessionBool(INTERNAL_TOKEN_VALIDATED_SESSION_KEY));
+    useState(readSessionBool(INTERNAL_TOKEN_BLOCKED_SESSION_KEY));
 
-  const [internalTokenPromptedInSession, setInternalTokenPromptedInSessionState] =
-    useState(readSessionBool(INTERNAL_TOKEN_PROMPTED_SESSION_KEY));
+  const [
+    internalTokenPromptedInSession,
+    setInternalTokenPromptedInSessionState,
+  ] = useState(readSessionBool(INTERNAL_TOKEN_PROMPTED_SESSION_KEY));
 
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
@@ -169,15 +174,18 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   };
 
-  const isAuthErrorStatus = (status?: number) => status === 401 || status === 403;
+  const isAuthErrorStatus = (status?: number) =>
+    status === 401 || status === 403;
 
   const setInternalTokenValidated = (v: boolean) => {
     setInternalTokenValidatedState(v);
+    // opcional: persistir validated (se você quiser)
+    writeSessionBool(INTERNAL_TOKEN_VALIDATED_SESSION_KEY, v);
   };
 
   const setInternalTokenBlockedInSession = (v: boolean) => {
     setInternalTokenBlockedInSessionState(v);
-    writeSessionBool(INTERNAL_TOKEN_VALIDATED_SESSION_KEY, v);
+    writeSessionBool(INTERNAL_TOKEN_BLOCKED_SESSION_KEY, v);
   };
 
   const setInternalTokenPromptedInSession = (v: boolean) => {
@@ -187,9 +195,10 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const clearInternalTokenSession = () => {
     setInternalTokenValidatedState(false);
+    clearSessionKey(INTERNAL_TOKEN_VALIDATED_SESSION_KEY);
 
     setInternalTokenBlockedInSessionState(false);
-    clearSessionKey(INTERNAL_TOKEN_VALIDATED_SESSION_KEY);
+    clearSessionKey(INTERNAL_TOKEN_BLOCKED_SESSION_KEY);
 
     setInternalTokenPromptedInSessionState(false);
     clearSessionKey(INTERNAL_TOKEN_PROMPTED_SESSION_KEY);
@@ -212,7 +221,9 @@ export function UserProvider({ children }: UserProviderProps) {
     try {
       const res = await api.get("/user/me");
 
-      const firstEmpresaId = (res.data?.dados?.[0]?.id ?? null) as number | null;
+      const firstEmpresaId = (res.data?.dados?.[0]?.id ?? null) as
+        | number
+        | null;
       const is_sapore = firstEmpresaId === 5849;
 
       Cookies.set("is_sapore", is_sapore ? "true" : "false", {
@@ -234,6 +245,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
         if (!prevUser) {
           setInternalTokenValidatedState(false);
+          clearSessionKey(INTERNAL_TOKEN_VALIDATED_SESSION_KEY);
         }
 
         return normalized;
@@ -241,9 +253,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
       assignUserIfChanged(null);
       setIsAuthenticatedSafe(false);
-      setInternalTokenValidatedState(false);
-      setInternalTokenBlockedInSession(false);
-      setInternalTokenPromptedInSession(false);
+      clearInternalTokenSession();
       return null;
     } catch (err) {
       const ax = err as AxiosError;
@@ -253,9 +263,7 @@ export function UserProvider({ children }: UserProviderProps) {
         assignUserIfChanged(null);
         setIsAuthenticatedSafe(false);
         loginPasswordRef.current = null;
-        setInternalTokenValidatedState(false);
-        setInternalTokenBlockedInSession(false);
-        setInternalTokenPromptedInSession(false);
+        clearInternalTokenSession();
         return null;
       }
 
@@ -419,7 +427,8 @@ export function UserProvider({ children }: UserProviderProps) {
     user?.senha_trocada !== undefined;
 
   const mustChangePassword =
-    !!isAuthenticated && (user?.senha_trocada === false || !hasSenhaTrocadaFlag);
+    !!isAuthenticated &&
+    (user?.senha_trocada === false || !hasSenhaTrocadaFlag);
 
   const mustValidateInternalToken =
     !!isAuthenticated &&

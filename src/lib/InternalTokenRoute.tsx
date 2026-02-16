@@ -16,21 +16,15 @@ export function InternalTokenRoute() {
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  if (mustChangePassword) {
-    return <Navigate to="/trocar-senha" replace />;
-  }
+  if (mustChangePassword) return <Navigate to="/trocar-senha" replace />;
 
-  if (user?.interno !== true) {
-    return <Navigate to="/" replace />;
-  }
+  if (user?.interno !== true) return <Navigate to="/" replace />;
 
-  if (internalTokenBlockedInSession) {
-    return <Navigate to="/" replace />;
-  }
+  // ✅ Só bloqueia se você realmente quiser bloquear acesso
+  if (internalTokenBlockedInSession) return <Navigate to="/" replace />;
 
-  if (!mustValidateInternalToken) {
-    return <Navigate to="/" replace />;
-  }
+  // ✅ só entra se realmente precisa validar
+  if (!mustValidateInternalToken) return <Navigate to="/" replace />;
 
   return <Outlet />;
 }
