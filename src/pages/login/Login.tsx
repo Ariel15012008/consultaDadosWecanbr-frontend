@@ -143,8 +143,6 @@ export default function LoginPage() {
       }
 
       if (u?.interno === true) {
-        console.log("é interno")
-        console.log("navegando para token interno");
         navigate("/token", { replace: true });
         return;
       }
